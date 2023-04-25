@@ -7,3 +7,9 @@ fmt:
 lint:
 	command -v pylint || $(PYTHON) -m pip install -r requirements.txt
 	pylint ja3requests
+
+package:
+	if [ -f 'setup.py' ]; then $(PYTHON) setup.py sdist;fi
+
+package_whl:
+	if [ -f 'setup.py' ]; then $(PYTHON) setup.py bdist_wheel;fi
