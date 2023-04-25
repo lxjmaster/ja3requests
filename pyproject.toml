@@ -1,0 +1,25 @@
+[tool.black]
+skip-string-normalization = true
+
+[tool.pylint]
+disable = [
+    "invalid-name",
+    "arguments-differ",
+    "no-name-in-module",
+    "too-many-arguments",
+    "too-few-public-methods",
+    "too-many-public-methods",
+    "too-many-instance-attributes",
+    "attribute-defined-outside-init",
+#    "too-many-return-statements",
+#    "broad-exception-caught",
+#    "no-member",
+#    "wrong-import-order",
+#    "consider-using-f-string",
+]
+#argument-rgx = "[a-z0-9]+(_[a-z]+)*"
+#attr-rgx = "_?_?[a-z0-9]+(_[a-z]+)*_?_?"
+#variable-rgx = "_?_?[a-z0-9]+(_[a-z]+)*_?_?"
+max-line-length = 240
+#ignore = "test"
+#min-similarity-lines = 20
