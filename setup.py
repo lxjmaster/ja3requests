@@ -31,9 +31,8 @@ class PyTest(TestCommand):
 with open("requirements.txt", "r", encoding="utf8") as f:
     requires = f.readlines()
 
-test_requirements = [
-    "pytest>=3",
-]
+with open("requirements-dev.txt", "r", encoding="utf8") as f:
+    test_requirements = f.readlines()
 
 about = {}
 here = os.path.abspath(os.path.dirname(__file__))
