@@ -5,12 +5,13 @@ ja3requests.request
 This module create a request struct and ready request object.
 """
 from .base import BaseRequest
-from .exceptions import NotAllowRequestMethod
+from .exceptions import NotAllowRequestMethod, MissingSchema
+from urllib.parse import urlparse
 from http.cookiejar import CookieJar
 from typing import Any, AnyStr, Dict, List, Union, ByteString, Tuple
 
 
-class Request(BaseRequest):
+class ReadyRequest(BaseRequest):
 
     def __init__(
             self,
@@ -33,10 +34,16 @@ class Request(BaseRequest):
         self.auth = auth
         self.json = json
 
-    def __repr__(self):
-        return f"<Request [{self.method}]>"
+        self.ready_method()
 
-    def check_method(self):
+    def __repr__(self):
+        return f"<ReadyRequest [{self.method}]>"
+
+    def ready_method(self):
+        """
+        Ready request method and check request method whether allow used.
+        :return:
+        """
 
         if self.method == "" or self.method not in [
             "GET",
@@ -48,3 +55,32 @@ class Request(BaseRequest):
             "DELETE",
         ]:
             raise NotAllowRequestMethod(self.method)
+
+        self.method = self.method.upper()
+
+    def ready_url(self):
+        """
+        Ready http url and check url whether valid.
+        :return:
+        """
+
+        if self.url == "":
+            raise ValueError("The request url is required.")
+
+        # Remove whitespaces for url
+        self.url.strip()
+
+        parse = urlparse(self.url)
+
+        # Check HTTP schemes, just allow http or https
+        if parse.scheme == "":
+            raise MissingSchema(f"Invalid URL '{self.url}': No scheme supplied. Perhaps you meant http://{parse.netloc} or https://{parse.netloc}")
+
+
+
+    def ready(self):
+        """
+        Make a ready request to send.
+        :return:
+        """
+
