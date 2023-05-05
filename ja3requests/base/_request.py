@@ -12,6 +12,8 @@ class BaseRequest:
 
         self._method = None
         self._url = None
+        self._scheme = None
+        self._port = None
         self._headers = None
         self._params = None
         self._data = None
@@ -35,6 +37,22 @@ class BaseRequest:
     @url.setter
     def url(self, attr):
         self._url = attr
+
+    @property
+    def scheme(self):
+        return self._scheme
+
+    @scheme.setter
+    def scheme(self, attr):
+        self._scheme = attr
+
+    @property
+    def port(self):
+        return self._port
+
+    @port.setter
+    def port(self, attr):
+        self._port = attr
 
     @property
     def headers(self):

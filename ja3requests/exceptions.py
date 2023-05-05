@@ -23,13 +23,19 @@ class RequestException(IOError):
         super().__init__(*args, **kwargs)
 
 
-class NotAllowRequestMethod(RequestException, ValueError):
+class NotAllowedRequestMethod(RequestException, ValueError):
     """
-    If the request method not allow raise it.
+    If the request method not allowed and raise it.
     """
 
 
-class MissingSchema(RequestException, ValueError):
+class MissingScheme(RequestException, ValueError):
     """
-    The URL scheme (e.g. http or https) is missing.
+    The URL scheme (e.g. http or https) is missing and raise it.
+    """
+
+
+class NotAllowedScheme(RequestException, ValueError):
+    """
+    If the scheme not allowed and raise it.
     """

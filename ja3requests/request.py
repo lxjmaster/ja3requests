@@ -5,7 +5,7 @@ ja3requests.request
 This module create a request struct and ready request object.
 """
 from .base import BaseRequest
-from .exceptions import NotAllowRequestMethod, MissingSchema
+from .exceptions import NotAllowedRequestMethod, MissingScheme, NotAllowedScheme
 from urllib.parse import urlparse
 from http.cookiejar import CookieJar
 from typing import Any, AnyStr, Dict, List, Union, ByteString, Tuple
@@ -17,7 +17,7 @@ class ReadyRequest(BaseRequest):
             self,
             method: AnyStr,
             url: AnyStr,
-            params: Union[Dict[AnyStr, Any], ByteString] = None,
+            params: Union[Dict[AnyStr, Any], List[Tuple[AnyStr, Any]], ByteString] = None,
             data: Union[Dict[AnyStr, Any], List, Tuple, ByteString] = None,
             headers: Dict[AnyStr, AnyStr] = None,
             cookies: Union[Dict[AnyStr, AnyStr], CookieJar] = None,
@@ -54,7 +54,7 @@ class ReadyRequest(BaseRequest):
             "PATCH",
             "DELETE",
         ]:
-            raise NotAllowRequestMethod(self.method)
+            raise NotAllowedRequestMethod(self.method)
 
         self.method = self.method.upper()
 
@@ -72,11 +72,34 @@ class ReadyRequest(BaseRequest):
 
         parse = urlparse(self.url)
 
-        # Check HTTP schemes, just allow http or https
+        # Check HTTP scheme
         if parse.scheme == "":
-            raise MissingSchema(f"Invalid URL '{self.url}': No scheme supplied. Perhaps you meant http://{parse.netloc} or https://{parse.netloc}")
+            raise MissingScheme(
+                f"Invalid URL {self.url!r}: No scheme supplied. "
+                f"Perhaps you meant http://{self.url} or https://{self.url}"
+            )
 
+        # Just allow http or https
+        if parse.scheme.lower() not in ["http", "https"]:
+            raise NotAllowedScheme(
+                f"Schema: {parse.scheme} not allowed."
+            )
 
+        self.scheme = parse.scheme
+        if self.scheme == "https":
+            self.port = 443
+
+        if parse.netloc != "" and ":" in parse.netloc:
+            port = parse.netloc.split(":")[-1]
+            self.port = int(port)
+        else:
+            self.port = 80
+
+    def ready_params(self):
+        """
+        Ready params.
+        :return:
+        """
 
     def ready(self):
         """
