@@ -12,6 +12,7 @@ from typing import AnyStr, Any, Dict, ByteString, Union, List, Tuple
 from .base import BaseSession
 from .utils import default_headers
 from .const import DEFAULT_REDIRECT_LIMIT
+from .request import ReadyRequest, Request
 
 # Preferred clock, based on which one is more accurate on a given system.
 if sys.platform == "win32":
@@ -32,12 +33,35 @@ class Session(BaseSession):
         self.headers = default_headers()
         self.max_redirects = DEFAULT_REDIRECT_LIMIT
 
-    def ready_request(self, request):
+    def ready(
+            self,
+            method,
+            url,
+            params,
+            data,
+            headers,
+            cookies,
+            auth,
+            json
+    ):
         """
         Ready to send request.
-        :param request:
         :return:
         """
+
+        req = ReadyRequest(
+            method=method,
+            url=url,
+            params=params,
+            data=data,
+            headers=headers,
+            cookies=cookies,
+            auth=auth,
+            json=json,
+        )
+        req.ready()
+
+        return req
 
     def request(
         self,
@@ -69,6 +93,21 @@ class Session(BaseSession):
         :param json:
         :return:
         """
+        ready_request = self.ready(
+            method=method,
+            url=url,
+            params=params,
+            data=data,
+            headers=headers,
+            cookies=cookies,
+            auth=auth,
+            json=json
+        )
+
+        req = ready_request.request()
+        response = self.send(req)
+
+        return response
 
     def get(self, url, **kwargs):
         """
@@ -146,8 +185,12 @@ class Session(BaseSession):
 
         return self.request("DELETE", url, **kwargs)
 
-    def send(self):
+    def send(self, request: Request):
         """
-        Send a ready request.
+        Send request.
         :return:
         """
+
+        response = request.send()
+
+        return response

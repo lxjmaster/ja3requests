@@ -39,3 +39,9 @@ class NotAllowedScheme(RequestException, ValueError):
     """
     If the scheme not allowed and raise it.
     """
+
+
+class InvalidParams(RequestException, ValueError):
+    """
+    If request params invalid and raise it.
+    """

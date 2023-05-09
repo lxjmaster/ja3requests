@@ -5,9 +5,9 @@ ja3requests.request
 This module create a request struct and ready request object.
 """
 from .base import BaseRequest
-from .exceptions import NotAllowedRequestMethod, MissingScheme, NotAllowedScheme
-from urllib.parse import urlparse
+from .exceptions import NotAllowedRequestMethod, MissingScheme, NotAllowedScheme, InvalidParams
 from http.cookiejar import CookieJar
+from urllib.parse import urlparse, urlencode
 from typing import Any, AnyStr, Dict, List, Union, ByteString, Tuple
 
 
@@ -17,7 +17,7 @@ class ReadyRequest(BaseRequest):
             self,
             method: AnyStr,
             url: AnyStr,
-            params: Union[Dict[AnyStr, Any], List[Tuple[AnyStr, Any]], ByteString] = None,
+            params: Union[Dict[Any, Any], List[Tuple[Any, Any]], Tuple[Tuple[Any, Any]], ByteString, AnyStr] = None,
             data: Union[Dict[AnyStr, Any], List, Tuple, ByteString] = None,
             headers: Dict[AnyStr, AnyStr] = None,
             cookies: Union[Dict[AnyStr, AnyStr], CookieJar] = None,
@@ -33,8 +33,6 @@ class ReadyRequest(BaseRequest):
         self.cookies = cookies
         self.auth = auth
         self.json = json
-
-        self.ready_method()
 
     def __repr__(self):
         return f"<ReadyRequest [{self.method}]>"
@@ -80,7 +78,7 @@ class ReadyRequest(BaseRequest):
             )
 
         # Just allow http or https
-        if parse.scheme.lower() not in ["http", "https"]:
+        if parse.scheme not in ["http", "https"]:
             raise NotAllowedScheme(
                 f"Schema: {parse.scheme} not allowed."
             )
@@ -100,10 +98,89 @@ class ReadyRequest(BaseRequest):
         Ready params.
         :return:
         """
+        if self.params:
+            parse = urlparse(self.url)
+
+            if isinstance(self.params, str):
+                params = self.params
+            elif isinstance(self.params, bytes):
+                params = self.params.decode()
+            elif isinstance(self.params, (dict, list, tuple)):
+                params = urlencode(self.params)
+            else:
+                raise InvalidParams(f"Invalid params: {self.params!r}")
+
+            if params.startswith("?"):
+                params = params.replace("?", "")
+
+            if parse.query != "":
+                self.url = "&" + params
+            else:
+                self.url = "?" + params
+
+    def ready_data(self):
+        """
+        Todo: Ready form data.
+        :return:
+        """
+
+    def ready_headers(self):
+        """
+        Todo: Ready http headers.
+        :return:
+        """
+
+    def ready_cookies(self):
+        """
+        Todo: Ready http cookies.
+        :return:
+        """
+
+    def ready_auth(self):
+        """
+        Todo: Ready http authenticator
+        :return:
+        """
+
+    def ready_json(self):
+        """
+        Todo: Ready post json.
+        :return:
+        """
 
     def ready(self):
         """
         Make a ready request to send.
         :return:
         """
+        self.ready_method()
+        self.ready_url()
+        self.ready_params()
+        self.ready_data()
+        self.ready_headers()
+        self.ready_cookies()
+        self.ready_auth()
+        self.ready_json()
+
+    def request(self):
+
+        req = Request()
+        req.clone(self)
+
+        return req
+
+
+class Request(BaseRequest):
+
+    def __repr__(self):
+        return f"<Request [{self.method}]>"
+
+    def clone(self, ready_request: ReadyRequest):
+
+        for k, v in ready_request.__dict__.items():
+            setattr(self, k, v)
+
+    def send(self):
+
+        pass
 
