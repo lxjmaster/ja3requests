@@ -5,6 +5,7 @@ ja3requests.request
 This module create a request struct and ready request object.
 """
 from .base import BaseRequest
+from .connections import HTTPConnection
 from .exceptions import NotAllowedRequestMethod, MissingScheme, NotAllowedScheme, InvalidParams
 from http.cookiejar import CookieJar
 from urllib.parse import urlparse, urlencode
@@ -182,5 +183,23 @@ class Request(BaseRequest):
 
     def send(self):
 
-        pass
+        conn = self.create_connect()
+        conn.connect(
+            self.scheme,
+            self.port,
 
+        )
+        # conn.send()
+
+    def create_connect(self):
+
+        if self.is_http():
+            conn = HTTPConnection()
+        elif self.is_https():
+            # TODO: HTTPS
+            # conn = HTTPSConnection()
+            raise NotImplementedError("HTTPSConnection not implemented yet.")
+        else:
+            raise MissingScheme(f"Scheme: {self.scheme}, parse scheme failed, can't create connection.")
+
+        return conn

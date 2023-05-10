@@ -19,6 +19,7 @@ class BaseHttpConnection:
         self._proxy = None
         self._proxy_username = None
         self._proxy_password = None
+        self._connection = None
 
     @property
     def scheme(self):
@@ -83,3 +84,11 @@ class BaseHttpConnection:
     @proxy_password.setter
     def proxy_password(self, attr):
         self._proxy_password = attr
+
+    @property
+    def connection(self):
+        return self._connection
+
+    @connection.setter
+    def connection(self, attr):
+        self._connection = attr

@@ -35,8 +35,32 @@ class HTTPConnection(BaseHttpConnection):
 
         return conn
 
-    def connect(self):
+    def _ready_connect(self, **kwargs):
 
+        pass
+
+    def connect(
+            self,
+            scheme=None,
+            port=None,
+            source_address=None,
+            destination_address=None,
+            timeout=None,
+            proxy=None,
+            proxy_username=None,
+            proxy_password=None,
+    ):
+
+        self._ready_connect(
+            scheme=scheme,
+            port=port,
+            source_address=source_address,
+            destination_address=destination_address,
+            timeout=timeout,
+            proxy=proxy,
+            proxy_username=proxy_username,
+            proxy_password=proxy_password,
+        )
         conn = self._new_conn()
-
+        self.connection = conn
 

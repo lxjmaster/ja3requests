@@ -109,3 +109,9 @@ class BaseRequest:
     @json.setter
     def json(self, attr):
         self._json = attr
+
+    def is_http(self):
+        return self._scheme == "http"
+
+    def is_https(self):
+        return self._scheme == "https"
