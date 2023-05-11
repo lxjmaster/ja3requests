@@ -6,8 +6,16 @@ This module contains HTTP connection and HTTPS connection.
 """
 
 from .base import BaseHttpConnection
+from .exceptions import InvalidHost
 from .protocol.sockets import create_connection
 from .protocol.exceptions import SocketTimeout, ConnectTimeoutError
+
+
+DEFAULT_HTTP_SCHEME = "http"
+DEFAULT_HTTPS_SCHEME = "https"
+
+DEFAULT_HTTP_PORT = 80
+DEFAULT_HTTPS_PORT = 443
 
 
 class HTTPConnection(BaseHttpConnection):
@@ -15,6 +23,8 @@ class HTTPConnection(BaseHttpConnection):
     def __init__(self):
 
         super().__init__()
+        self.scheme = DEFAULT_HTTP_SCHEME
+        self.port = DEFAULT_HTTP_PORT
 
     def __del__(self):
         self.close()
@@ -53,16 +63,19 @@ class HTTPConnection(BaseHttpConnection):
         if kwargs.get("source_address", None):
             self.source_address = kwargs["source_address"]
 
-        if kwargs.get("destination_address", None):
-            self.destination_address = kwargs["destination_address"]
-
-            # Remove scheme
-            if self.destination_address.startswith("http://"):
-                self.destination_address = self.destination_address.replace("http://", "")
-
-            # Remove port
-            if ":" in self.destination_address:
-                self.destination_address = self.destination_address.split(":")[0]
+        if kwargs.get("host", None):
+            host = kwargs["host"].replace("http://", "").split("/")
+            if len(host) > 0:
+                self.host = host[0]
+                self.path = "/" + "/".join(host[1:])
+                if ":" in self.host:
+                    self.destination_address = self.host.split(":")[0]
+                    if self.port is None:
+                        self.port = self.host.split(":")[1]
+                else:
+                    self.destination_address = self.host
+            else:
+                raise InvalidHost(f"Invalid Host: {kwargs['host']!r}, can not parse destination address or path.")
 
         if kwargs.get("timeout", None):
             self.timeout = kwargs["timeout"]
@@ -81,7 +94,7 @@ class HTTPConnection(BaseHttpConnection):
             scheme=None,
             port=None,
             source_address=None,
-            destination_address=None,
+            host=None,
             timeout=None,
             proxy=None,
             proxy_username=None,
@@ -92,7 +105,7 @@ class HTTPConnection(BaseHttpConnection):
             scheme=scheme,
             port=port,
             source_address=source_address,
-            destination_address=destination_address,
+            host=host,
             timeout=timeout,
             proxy=proxy,
             proxy_username=proxy_username,
@@ -101,7 +114,7 @@ class HTTPConnection(BaseHttpConnection):
         conn = self._new_conn()
         self.connection = conn
 
-    def send(self):
+    def send(self, context):
         """
         Send socket.
         :return:
@@ -116,6 +129,7 @@ class HTTPConnection(BaseHttpConnection):
                 break
             response_data += data
 
+        print(response_data)
         return response_data
 
     def close(self):

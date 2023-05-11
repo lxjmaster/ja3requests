@@ -5,6 +5,7 @@ ja3requests.request
 This module create a request struct and ready request object.
 """
 from .base import BaseRequest
+from .context import HTTPContext
 from .connections import HTTPConnection
 from .exceptions import NotAllowedRequestMethod, MissingScheme, NotAllowedScheme, InvalidParams
 from http.cookiejar import CookieJar
@@ -199,7 +200,11 @@ class Request(BaseRequest):
             proxy_username,
             proxy_password
         )
-        response = conn.send()
+        context = HTTPContext(conn)
+        context.set_payload(
+            method=self.method
+        )
+        response = conn.send(context)
 
         return response
 

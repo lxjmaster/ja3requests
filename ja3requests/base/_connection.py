@@ -10,11 +10,12 @@ class BaseHttpConnection:
 
     def __init__(self):
 
-        self._scheme = "http"
-        self._http_version = "HTTP/1.1"
-        self._port = 80
+        self._scheme = None
+        self._host = None
+        self._port = None
         self._source_address = None
         self._destination_address = None
+        self._path = None
         self._timeout = None
         self._proxy = None
         self._proxy_username = None
@@ -30,8 +31,12 @@ class BaseHttpConnection:
         self._scheme = attr
 
     @property
-    def http_version(self):
-        return self._http_version
+    def host(self):
+        return self._host
+
+    @host.setter
+    def host(self, attr):
+        self._host = attr
 
     @property
     def port(self):
@@ -56,6 +61,14 @@ class BaseHttpConnection:
     @destination_address.setter
     def destination_address(self, attr):
         self._destination_address = attr
+
+    @property
+    def path(self):
+        return self._path
+
+    @path.setter
+    def path(self, attr):
+        self._path = attr
 
     @property
     def timeout(self):

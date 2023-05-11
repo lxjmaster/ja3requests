@@ -8,7 +8,7 @@ class TestSession(unittest.TestCase):
 
     def test_get(self):
 
-        self.session.get("http://localhost:8080/")
+        self.session.get("http://www.baidu.com/")
 
 
 if __name__ == '__main__':

@@ -45,3 +45,9 @@ class InvalidParams(RequestException, ValueError):
     """
     If request params invalid and raise it.
     """
+
+
+class InvalidHost(RequestException, ValueError):
+    """
+    Raised it while host can not parse.
+    """
