@@ -45,6 +45,10 @@ class BaseHttpConnection:
     def source_address(self):
         return self._source_address
 
+    @source_address.setter
+    def source_address(self, attr):
+        self._source_address = attr
+
     @property
     def destination_address(self):
         return self._destination_address

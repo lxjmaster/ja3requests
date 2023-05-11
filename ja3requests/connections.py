@@ -16,6 +16,9 @@ class HTTPConnection(BaseHttpConnection):
 
         super().__init__()
 
+    def __del__(self):
+        self.close()
+
     def _new_conn(self):
         """
         Establish a socket connection
@@ -36,8 +39,42 @@ class HTTPConnection(BaseHttpConnection):
         return conn
 
     def _ready_connect(self, **kwargs):
+        """
+        Ready http connection.
+        :param kwargs:
+        :return:
+        """
+        if kwargs.get("scheme", None):
+            self.scheme = kwargs["scheme"]
 
-        pass
+        if kwargs.get("port", None):
+            self.port = kwargs["port"]
+
+        if kwargs.get("source_address", None):
+            self.source_address = kwargs["source_address"]
+
+        if kwargs.get("destination_address", None):
+            self.destination_address = kwargs["destination_address"]
+
+            # Remove scheme
+            if self.destination_address.startswith("http://"):
+                self.destination_address = self.destination_address.replace("http://", "")
+
+            # Remove port
+            if ":" in self.destination_address:
+                self.destination_address = self.destination_address.split(":")[0]
+
+        if kwargs.get("timeout", None):
+            self.timeout = kwargs["timeout"]
+
+        if kwargs.get("proxy", None):
+            self.proxy = kwargs["proxy"]
+
+        if kwargs.get("proxy_username", None):
+            self.proxy_username = kwargs["proxy_username"]
+
+        if kwargs.get("proxy_password", None):
+            self.proxy_password = kwargs["proxy_password"]
 
     def connect(
             self,
@@ -64,3 +101,24 @@ class HTTPConnection(BaseHttpConnection):
         conn = self._new_conn()
         self.connection = conn
 
+    def send(self):
+        """
+        Send socket.
+        :return:
+        """
+        self.connection.sendall(
+            "GET / HTTP/1.1\r\n\r\n".encode()
+        )
+        response_data = b""
+        while True:
+            data = self.connection.recv(1024)
+            if not data:
+                break
+            response_data += data
+
+        return response_data
+
+    def close(self):
+
+        if self.connection:
+            self.connection.close()

@@ -11,6 +11,7 @@ class BaseRequest:
     def __init__(self):
 
         self._method = None
+        self._source = None
         self._url = None
         self._scheme = None
         self._port = None
@@ -21,6 +22,8 @@ class BaseRequest:
         self._files = None
         self._auth = None
         self._json = None
+        self._timeout = None
+        self._proxies = None
 
     @property
     def method(self):
@@ -29,6 +32,14 @@ class BaseRequest:
     @method.setter
     def method(self, attr):
         self._method = attr
+
+    @property
+    def source(self):
+        return self._source
+
+    @source.setter
+    def source(self, attr):
+        self._source = attr
 
     @property
     def url(self):
@@ -109,6 +120,22 @@ class BaseRequest:
     @json.setter
     def json(self, attr):
         self._json = attr
+
+    @property
+    def timeout(self):
+        return self._timeout
+
+    @timeout.setter
+    def timeout(self, attr):
+        self._timeout = attr
+
+    @property
+    def proxies(self):
+        return self._proxies
+
+    @proxies.setter
+    def proxies(self, attr):
+        self._proxies = attr
 
     def is_http(self):
         return self._scheme == "http"
