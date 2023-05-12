@@ -61,8 +61,6 @@ def make_headers(
             accept_encoding = ACCEPT_ENCODING
         headers["Accept-Encoding"] = accept_encoding
 
-    headers["User-Agent"] = user_agent if user_agent else default_user_agent()
-
     if keep_alive:
         headers["Connection"] = "keep-alive"
 
@@ -76,6 +74,8 @@ def make_headers(
 
     if disable_cache:
         headers["Cache-Control"] = "no-cache"
+
+    headers["User-Agent"] = user_agent if user_agent else default_user_agent()
 
     return headers
 

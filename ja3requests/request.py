@@ -5,8 +5,11 @@ ja3requests.request
 This module create a request struct and ready request object.
 """
 from .base import BaseRequest
+from .utils import default_headers
+from .context import HTTPContext
 from .connections import HTTPConnection
 from .exceptions import NotAllowedRequestMethod, MissingScheme, NotAllowedScheme, InvalidParams
+import warnings
 from http.cookiejar import CookieJar
 from urllib.parse import urlparse, urlencode
 from typing import Any, AnyStr, Dict, List, Union, ByteString, Tuple
@@ -127,9 +130,28 @@ class ReadyRequest(BaseRequest):
 
     def ready_headers(self):
         """
-        Todo: Ready http headers.
+        Ready http headers.
         :return:
         """
+
+        # Default headers
+        if self.headers is None:
+            self.headers = default_headers()
+
+        # Check duplicate default item
+        new_headers = {}
+        header_list = []
+        for k, v in self.headers.items():
+            header = k.lower()
+            if header in header_list:
+                warnings.warn(f"Duplicate header: {k}, you should check the request headers.", RuntimeWarning)
+
+            header_list.append(header)
+            new_headers[header] = v
+
+        self.headers = new_headers
+        del new_headers
+        del header_list
 
     def ready_cookies(self):
         """
@@ -199,7 +221,12 @@ class Request(BaseRequest):
             proxy_username,
             proxy_password
         )
-        response = conn.send()
+        context = HTTPContext(conn)
+        context.set_payload(
+            method=self.method,
+            headers=self.headers,
+        )
+        response = conn.send(context)
 
         return response
 
