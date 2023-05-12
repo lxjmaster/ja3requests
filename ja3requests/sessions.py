@@ -10,6 +10,7 @@ import time
 from http.cookiejar import CookieJar
 from typing import AnyStr, Any, Dict, ByteString, Union, List, Tuple
 from .base import BaseSession
+from .response import Response
 from .utils import default_headers
 from .const import DEFAULT_REDIRECT_LIMIT
 from .request import ReadyRequest, Request
@@ -191,6 +192,7 @@ class Session(BaseSession):
         :return:
         """
 
-        response = request.send()
+        rep = request.send()
+        response = Response(rep)
 
         return response

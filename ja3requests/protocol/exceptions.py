@@ -32,3 +32,9 @@ class ConnectTimeoutError(SocketTimeoutError):
     """
     Raised when a socket timeout occurs while connecting to a server
     """
+
+
+class ReadTimeout(SocketTimeoutError):
+    """
+    Raised when socket receive timeout.
+    """

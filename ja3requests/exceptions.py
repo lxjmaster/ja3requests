@@ -45,3 +45,21 @@ class InvalidParams(RequestException, ValueError):
     """
     If request params invalid and raise it.
     """
+
+
+class InvalidHost(RequestException, ValueError):
+    """
+    Raised it while host can not parse.
+    """
+
+
+class InvalidStatusLine(RequestException, ValueError):
+    """
+    Raised it when can't receive streamline.
+    """
+
+
+class InvalidResponseHeaders(RequestException, ValueError):
+    """
+    Raised it when cant receive response headers.
+    """
