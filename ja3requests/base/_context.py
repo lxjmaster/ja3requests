@@ -13,6 +13,7 @@ class BaseContext:
         self._version = None
         self._start_line = None
         self._method = None
+        self._headers = None
         self._body = None
         self._message = None
 
@@ -47,6 +48,14 @@ class BaseContext:
     @method.setter
     def method(self, attr):
         self._method = attr
+
+    @property
+    def headers(self):
+        return self._headers
+
+    @headers.setter
+    def headers(self, attr):
+        self._headers = attr
 
     @property
     def body(self):

@@ -28,7 +28,7 @@ class HTTPContext(BaseContext):
             [self.method, self.connection.path, self.version]
         )
         self._message = "\r\n".join(
-            [self.start_line]
+            [self.start_line, self.put_headers()]
         )
         self._message += "\r\n\r\n"
 
@@ -42,3 +42,14 @@ class HTTPContext(BaseContext):
         for k, v in kwargs.items():
             if hasattr(self, k):
                 setattr(self, k, v)
+
+    def put_headers(self):
+
+        headers = ""
+        if self.headers is not None:
+            if not self.headers.get("host", None):
+                self.headers["host"] = self.connection.host
+
+            headers = "\r\n".join([f"{k}: {v}" for k, v in self.headers.items()])
+
+        return headers

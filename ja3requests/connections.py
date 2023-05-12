@@ -5,10 +5,12 @@ ja3requests.connections
 This module contains HTTP connection and HTTPS connection.
 """
 
-from .base import BaseHttpConnection
+
+from .response import HTTPResponse
 from .exceptions import InvalidHost
+from .base import BaseHttpConnection
 from .protocol.sockets import create_connection
-from .protocol.exceptions import SocketTimeout, ConnectTimeoutError
+from .protocol.exceptions import SocketTimeout, ConnectTimeoutError, ReadTimeout
 
 
 DEFAULT_HTTP_SCHEME = "http"
@@ -25,6 +27,7 @@ class HTTPConnection(BaseHttpConnection):
         super().__init__()
         self.scheme = DEFAULT_HTTP_SCHEME
         self.port = DEFAULT_HTTP_PORT
+        self.is_close = False
 
     def __del__(self):
         self.close()
@@ -120,17 +123,41 @@ class HTTPConnection(BaseHttpConnection):
         :return:
         """
         self.connection.sendall(
-            "GET / HTTP/1.1\r\n\r\n".encode()
+            context.message
         )
-        response_data = b""
-        while True:
-            data = self.connection.recv(1024)
-            if not data:
-                break
-            response_data += data
 
-        print(response_data)
-        return response_data
+        data = self.receive()
+        response = HTTPResponse(data)
+        response.begin()
+
+        return response
+
+        # response_data = b""
+        # #
+        # self.connection.settimeout(3)
+        # try:
+        #     while True:
+        #         data = self.connection.recv(2048)
+        #         if not data:
+        #             break
+        #         response_data += data
+        # except TimeoutError:
+        #     pass
+        #
+        # print(response_data)
+        # return response_data
+
+    def receive(self):
+
+        response_data = bytes()
+        while True:
+            data = self.connection.recv(2048)
+            if not data:
+                self.is_close = True
+                break
+
+            response_data += data
+            yield response_data
 
     def close(self):
 
