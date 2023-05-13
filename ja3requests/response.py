@@ -7,6 +7,7 @@ This module contains response.
 
 
 from .base import BaseResponse
+from .const import DEFAULT_CHUNKED_SIZE
 from .exceptions import InvalidStatusLine, InvalidResponseHeaders
 
 
@@ -22,8 +23,12 @@ class HTTPResponse(BaseResponse):
 
     def _seek(self):
 
-        if self.raw is not None and self.raw.endswith(b"\r\n\r\n"):
-            return self.raw
+        if self.raw is not None:
+            if len(self.raw) <= DEFAULT_CHUNKED_SIZE:
+                return self.raw
+
+            if self.raw.endswith(b"\r\n\r\n"):
+                return self.raw
 
         data = b""
         try:
@@ -54,31 +59,66 @@ class HTTPResponse(BaseResponse):
 
         return headers
 
-    def _get_body(self):
+    def _get_body(self, content_length=None, transfer_encode=None):
 
+        body = b""
         data = self._seek()
-        chunk = data.endswith(b"\r\n\r\n")
-        while not chunk:
-            data = self._seek()
-            chunk = data.endswith(b"\r\n\r\n")
-
-        lines = data.split(b"\r\n\r\n", 1)
-        if len(lines) > 1:
-            if lines[1] == b"":
-                self.body = body = b""
+        if transfer_encode is not None:
+            while not data.endswith(b"\r\n\r\n"):
+                data = self._seek()
+                size = data[data.find(b'\r\n\r\n')+4: data.find(b'\r\n\r\n')+7]
+                # chunk_size = int(size, 32)
+                body = data[data.find(size)+5:data.find(b"\r\n0")]
+                # print(len(body), chunk_size)
+                # if len(body) < chunk_size:
+                #     data = self._seek()
+            # else:
+            #     break
+        else:
+            if content_length == 0:
                 return body
 
-            self.body = body = lines[1].split(b"\r\n", 1)[1]
-        else:
-            raise InvalidResponseHeaders(f"Invalid response headers: {lines!r}")
+            # body = data[len(data)-content_length:]
+            body = data.split(b"\r\n\r\n", 1)[1]
+            while len(body) < content_length:
+                data = self._seek()
+                # body = data[len(data) - content_length:]
+                body = data.split(b"\r\n\r\n", 1)[1]
 
+        # data = self._seek()
+        # chunk = data.endswith(b"\r\n\r\n")
+        # while not chunk:
+        #     data = self._seek()
+        #     chunk = data.endswith(b"\r\n\r\n")
+
+        # lines = data.split(b"\r\n\r\n", 1)
+        # if len(lines) > 1:
+        #     if lines[1] == b"":
+        #         self.body = body = b""
+        #         return body
+        #
+        #     self.body = body = lines[1].split(b"\r\n", 1)[1]
+        # else:
+        #     raise InvalidResponseHeaders(f"Invalid response headers: {lines!r}")
+
+        # print(data)
+        # print(body)
+        # print(len(body))
         return body
 
     def begin(self):
 
         self._get_lines()
-        self._get_headers()
-        self._get_body()
+        headers = self._get_headers()
+        content_length = None
+        transfer_encode = None
+        for header in headers.decode().split("\r\n"):
+            if "Content-Length" in header:
+                content_length = int(header.split(': ')[1])
+            elif 'Transfer-Encoding' in header:
+                transfer_encode = header.split(': ')[1]
+
+        self.body = self._get_body(content_length=content_length, transfer_encode=transfer_encode)
 
 
 class Response(BaseResponse):
@@ -131,8 +171,4 @@ class Response(BaseResponse):
     @property
     def content(self):
 
-        content = self.body.split(b"\r\n\r\n", 1)
-        if len(content) > 0:
-            return content[0]
-
-        return b""
+        return self.body

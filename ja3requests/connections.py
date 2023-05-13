@@ -10,14 +10,9 @@ from .response import HTTPResponse
 from .exceptions import InvalidHost
 from .base import BaseHttpConnection
 from .protocol.sockets import create_connection
+from .const import DEFAULT_HTTP_SCHEME
+from .const import DEFAULT_HTTP_PORT, DEFAULT_CHUNKED_SIZE
 from .protocol.exceptions import SocketTimeout, ConnectTimeoutError, ReadTimeout
-
-
-DEFAULT_HTTP_SCHEME = "http"
-DEFAULT_HTTPS_SCHEME = "https"
-
-DEFAULT_HTTP_PORT = 80
-DEFAULT_HTTPS_PORT = 443
 
 
 class HTTPConnection(BaseHttpConnection):
@@ -151,7 +146,8 @@ class HTTPConnection(BaseHttpConnection):
 
         response_data = bytes()
         while True:
-            data = self.connection.recv(2048)
+            data = self.connection.recv(DEFAULT_CHUNKED_SIZE)
+
             if not data:
                 self.is_close = True
                 break
