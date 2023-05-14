@@ -5,10 +5,11 @@ headers = {
     "connection": "close"
 }
 with Session() as session:
-    response = session.get("http://www.jd.com")
-    print(response)
-    print(response.status_code)
-    print(response.content)
+    response = session.get("http://www.baidu.com")
+    # print(response)
+    # print(response.status_code)
+    # print(response.content)
+    print(response.text)
 
 
 # import socket

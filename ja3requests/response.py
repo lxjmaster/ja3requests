@@ -6,6 +6,7 @@ This module contains response.
 """
 
 
+import json
 from .base import BaseResponse
 from .const import DEFAULT_CHUNKED_SIZE
 from .exceptions import InvalidStatusLine, InvalidResponseHeaders
@@ -24,7 +25,8 @@ class HTTPResponse(BaseResponse):
     def _seek(self):
 
         if self.raw is not None:
-            if len(self.raw) <= DEFAULT_CHUNKED_SIZE:
+            # print(len(self.raw), self.raw)
+            if len(self.raw) <= DEFAULT_CHUNKED_SIZE and self.raw.endswith(b"\r\n"):
                 return self.raw
 
             if self.raw.endswith(b"\r\n\r\n"):
@@ -37,6 +39,7 @@ class HTTPResponse(BaseResponse):
         except StopIteration:
             pass
 
+        print(len(data))
         return data
 
     def _get_lines(self):
@@ -67,7 +70,9 @@ class HTTPResponse(BaseResponse):
             while not data.endswith(b"\r\n\r\n"):
                 data = self._seek()
                 size = data[data.find(b'\r\n\r\n')+4: data.find(b'\r\n\r\n')+7]
-                # chunk_size = int(size, 32)
+                chunk_size = int(size, 16)
+                print('---------')
+                print(chunk_size)
                 body = data[data.find(size)+5:data.find(b"\r\n0")]
                 # print(len(body), chunk_size)
                 # if len(body) < chunk_size:
@@ -172,3 +177,12 @@ class Response(BaseResponse):
     def content(self):
 
         return self.body
+
+    @property
+    def text(self):
+
+        return self.content.decode("utf8")
+
+    def json(self):
+
+        return json.loads(self.text)

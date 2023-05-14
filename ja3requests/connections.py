@@ -144,7 +144,7 @@ class HTTPConnection(BaseHttpConnection):
 
     def receive(self):
 
-        response_data = bytes()
+        response_data = b""
         while True:
             data = self.connection.recv(DEFAULT_CHUNKED_SIZE)
 
