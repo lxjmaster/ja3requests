@@ -2,15 +2,23 @@ from ja3requests.sessions import Session
 
 
 headers = {
-    "connection": "close"
+    "connection": "keep-alive"
+    # "Accept-Encoding": "deflate, br, gzip"
 }
 with Session() as session:
-    response = session.get("http://www.baidu.com")
+    response = session.get("http://127.0.0.1:8080", headers=headers)
+    # print(response.headers)
     # print(response)
     # print(response.status_code)
     # print(response.content)
     print(response.text)
+    # with open("baidu.html", "w+") as f:
+    #     f.write(response.text)
 
+
+# import requests
+#
+# requests.get("http://127.0.0.1:8080", headers=headers)
 
 # import socket
 #

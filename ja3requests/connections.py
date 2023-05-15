@@ -147,7 +147,6 @@ class HTTPConnection(BaseHttpConnection):
         response_data = b""
         while True:
             data = self.connection.recv(DEFAULT_CHUNKED_SIZE)
-
             if not data:
                 self.is_close = True
                 break
