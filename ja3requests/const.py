@@ -31,6 +31,8 @@ class _Const:
 
 const = _Const()
 
+const.MAX_LINE = 65536
+const.MAX_HEADERS = 100
 const.DEFAULT_CHUNKED_SIZE = 2048
 const.DEFAULT_HTTP_SCHEME = "http"
 const.DEFAULT_HTTPS_SCHEME = "https"

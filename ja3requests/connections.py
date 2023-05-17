@@ -121,38 +121,10 @@ class HTTPConnection(BaseHttpConnection):
             context.message
         )
 
-        data = self.receive()
-        response = HTTPResponse(data)
+        response = HTTPResponse(sock=self.connection, method=context.method)
         response.begin()
 
         return response
-
-        # response_data = b""
-        # #
-        # self.connection.settimeout(3)
-        # try:
-        #     while True:
-        #         data = self.connection.recv(2048)
-        #         if not data:
-        #             break
-        #         response_data += data
-        # except TimeoutError:
-        #     pass
-        #
-        # print(response_data)
-        # return response_data
-
-    def receive(self):
-
-        response_data = b""
-        while True:
-            data = self.connection.recv(DEFAULT_CHUNKED_SIZE)
-            if not data:
-                self.is_close = True
-                break
-
-            response_data += data
-            yield response_data
 
     def close(self):
 

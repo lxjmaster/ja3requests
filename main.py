@@ -6,7 +6,8 @@ headers = {
     # "Accept-Encoding": "deflate, br, gzip"
 }
 with Session() as session:
-    response = session.get("http://127.0.0.1:8080", headers=headers)
+    # response = session.get("http://127.0.0.1:8080", headers=headers)
+    response = session.get("http://www.baidu.com")
     # print(response.headers)
     # print(response)
     # print(response.status_code)

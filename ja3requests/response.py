@@ -4,8 +4,7 @@ ja3requests.response
 
 This module contains response.
 """
-
-
+import io
 import json
 import gzip
 import zlib
@@ -14,114 +13,142 @@ from io import BytesIO
 import brotli
 
 from .base import BaseResponse
-from .const import DEFAULT_CHUNKED_SIZE
+from .const import MAX_LINE, MAX_HEADERS
 from .exceptions import InvalidStatusLine, InvalidResponseHeaders
 
 
 class HTTPResponse(BaseResponse):
 
-    def __init__(self, response=None):
+    def __init__(self, sock, method=None):
         super().__init__()
-        self.response = response
+        self.fp = sock.makefile("rb")
+        self._method = method
 
     def __repr__(self):
 
         return f"<HTTPResponse [{self.status_code.decode()}] {self.status_text.decode()}>"
 
-    def _seek(self):
+    def _close_conn(self):
+        fp = self.fp
+        self.fp = None
+        fp.close()
 
-        if self.raw is not None:
-            if len(self.raw) <= DEFAULT_CHUNKED_SIZE and self.raw.endswith(b"\r\n"):
-                return self.raw
+    def _read_status_line(self):
 
-            if self.raw.endswith(b"\r\n\r\n"):
-                return self.raw
+        line = self.fp.readline(MAX_LINE + 1)
+        if len(line) > MAX_LINE:
+            raise InvalidStatusLine(f"The status line is too long, exceeding the {MAX_LINE} Max limit")
 
-        data = b""
+        if not line:
+            raise InvalidStatusLine(f"The remote servers return an invalid response status line: {line!r}")
+
         try:
-            data = next(self.response)
-            self.raw = data
-        except StopIteration:
-            pass
+            protocol_version, status_code, status_text = line.split(None, 2)
+            self.protocol_version = protocol_version
+            self.status_code = status_code
+            self.status_text = status_text.strip()
+        except ValueError:
+            raise InvalidStatusLine(f"Can't parse status line: {line!r}")
 
-        return data
+        if not self.protocol_version.startswith(b"HTTP/"):
+            self._close_conn()
+            raise InvalidStatusLine(f"The status line version not support: {line!r}")
 
-    def _get_lines(self):
+        return protocol_version, status_code, status_text
 
-        lines = self._seek().split(b"\r\n", 1)
-        if len(lines) > 0:
-            self.protocol_version, self.status_code, self.status_text = status_lines = lines[0].split(b" ", 2)
-        else:
-            raise InvalidStatusLine(f"Invalid response status line: {lines!r}")
+    def _read_headers(self):
 
-        return status_lines
+        headers = []
+        while True:
+            line = self.fp.readline(MAX_LINE + 1)
+            if len(line) > MAX_LINE:
+                raise InvalidResponseHeaders(f"The response headers is too long, exceeding the {MAX_LINE} Max limit")
 
-    def _get_headers(self):
+            headers.append(line)
+            if len(headers) > MAX_HEADERS:
+                raise InvalidResponseHeaders(f"The response headers is too long, exceeding the {MAX_LINE} Max limit")
 
-        lines = self._seek().split(b"\r\n\r\n", 1)
-        if len(lines) > 0:
-            self.headers = headers = lines[0].split(b"\r\n", 1)[1]
-        else:
-            raise InvalidResponseHeaders(f"Invalid response headers: {lines!r}")
+            if line in (b"\r\n", b"\n", b""):
+                headers.pop()
+                break
 
         return headers
 
-    def _get_body(self, content_length=None, transfer_encode=None, content_encoding=None):
+    def _parse_headers(self, headers_list=None):
 
+        headers = {}
+        headers_list = headers_list if headers_list is not None else self.headers
+        if headers_list is None:
+            raise ValueError("Required headers to parse.")
+
+        for header in headers_list[1:]:
+            name, value = header.strip().split(b": ")
+            headers.setdefault(name.lower(), value)
+
+        return headers
+
+    def read_body(self):
         body = b""
-        data = self._seek()
-        if transfer_encode is not None:
-            while not data.endswith(b"0\r\n\r\n"):
-                data = self._seek()
 
-            lines = data.split(b"\r\n\r\n")
-            chunked_body = lines[1]
-            chunked_list = chunked_body.split(b"\r\n", 1)
-            while len(chunked_list) == 2:
-                chunked_size, chunked = chunked_list
-                size = int(chunked_size, 16)
-                body += chunked[:size]
-                chunked_body = chunked[size:].lstrip()
-                chunked_list = chunked_body.split(b"\r\n", 1)
-        else:
-            if content_length == 0:
-                return body
+        if self.fp is None:
+            return body
 
-            # body = data[len(data)-content_length:]
-            body = data.split(b"\r\n\r\n", 1)[1]
-            while len(body) < content_length:
-                data = self._seek()
-                # body = data[len(data) - content_length:]
-                body = data.split(b"\r\n\r\n", 1)[1]
+        if self._method == "HEAD":
+            self._close_conn()
+            return body
 
-        if content_encoding == "gzip":
-            body = gzip.decompress(body)
-        elif content_encoding == "deflate":
-            try:
-                body = zlib.decompress(body, -zlib.MAX_WBITS)
-            except zlib.error:
-                body = zlib.decompress(body)
-        elif content_encoding == "br":
-            body = brotli.decompress(body)
+        print(self.fp.read())
 
-        return body
+    # def _get_body(self, content_length=None, transfer_encode=None, content_encoding=None):
+    #
+    #     body = b""
+    #     data = self._seek()
+    #     if transfer_encode is not None:
+    #         while not data.endswith(b"0\r\n\r\n"):
+    #             data = self._seek()
+    #
+    #         lines = data.split(b"\r\n\r\n")
+    #         chunked_body = lines[1]
+    #         chunked_list = chunked_body.split(b"\r\n", 1)
+    #         while len(chunked_list) == 2:
+    #             chunked_size, chunked = chunked_list
+    #             size = int(chunked_size, 16)
+    #             body += chunked[:size]
+    #             chunked_body = chunked[size:].lstrip()
+    #             chunked_list = chunked_body.split(b"\r\n", 1)
+    #     else:
+    #         if content_length == 0:
+    #             return body
+    #
+    #         # body = data[len(data)-content_length:]
+    #         body = data.split(b"\r\n\r\n", 1)[1]
+    #         while len(body) < content_length:
+    #             data = self._seek()
+    #             # body = data[len(data) - content_length:]
+    #             body = data.split(b"\r\n\r\n", 1)[1]
+    #
+    #     if content_encoding == "gzip":
+    #         body = gzip.decompress(body)
+    #     elif content_encoding == "deflate":
+    #         try:
+    #             body = zlib.decompress(body, -zlib.MAX_WBITS)
+    #         except zlib.error:
+    #             body = zlib.decompress(body)
+    #     elif content_encoding == "br":
+    #         body = brotli.decompress(body)
+    #
+    #     return body
 
     def begin(self):
 
-        self._get_lines()
-        headers = self._get_headers()
-        content_encoding = None
-        content_length = None
-        transfer_encode = None
-        for header in headers.decode().split("\r\n"):
-            if "Content-Encoding" in header:
-                content_encoding = header.split(': ')[1]
-            elif "Content-Length" in header:
-                content_length = int(header.split(': ')[1])
-            elif 'Transfer-Encoding' in header:
-                transfer_encode = header.split(': ')[1]
+        if self.headers is not None:
+            return
 
-        self.body = self._get_body(content_length=content_length, transfer_encode=transfer_encode, content_encoding=content_encoding)
+        self.headers = self._read_headers()
+        headers = self._parse_headers()
+        self.read_body()
+
+        # self.body = self._get_body(content_length=content_length, transfer_encode=transfer_encode, content_encoding=content_encoding)
 
 
 class Response(BaseResponse):
