@@ -21,7 +21,7 @@
 
 Ja3Requests currently implements only the HTTP protocol and a few methods.
 
-## Installing Requests and Supported Versions
+## Installing Ja3Requests and Supported Versions
 
 Ja3Requests is available on PyPI:
 
