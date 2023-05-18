@@ -31,6 +31,13 @@ class _Const:
 
 const = _Const()
 
+const.MAX_LINE = 65536
+const.MAX_HEADERS = 100
+const.DEFAULT_CHUNKED_SIZE = 2048
+const.DEFAULT_HTTP_SCHEME = "http"
+const.DEFAULT_HTTPS_SCHEME = "https"
+const.DEFAULT_HTTP_PORT = 80
+const.DEFAULT_HTTPS_PORT = 443
 const.DEFAULT_REDIRECT_LIMIT = 8  # max redirect
 
 sys.modules[__name__] = const

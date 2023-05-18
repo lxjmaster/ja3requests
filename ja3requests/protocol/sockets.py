@@ -1,3 +1,4 @@
+# pylint: skip-file
 """
 ja3requests.protocol.sockets
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -10,11 +11,19 @@ from .exceptions import LocationParseError
 
 
 def create_connection(
-        address,
-        timeout=socket._GLOBAL_DEFAULT_TIMEOUT,
-        source_address=None,
-        socket_options=None,
+    address,
+    timeout=socket._GLOBAL_DEFAULT_TIMEOUT,
+    source_address=None,
+    socket_options=None,
 ):
+    """
+    Create a socket connection.
+    :param address:
+    :param timeout:
+    :param source_address:
+    :param socket_options:
+    :return:
+    """
     if socket_options is None:
         socket_options = [(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)]
 
@@ -56,7 +65,6 @@ def create_connection(
 
 
 def _set_socket_options(sock, options):
-
     if options is None:
         return
 
@@ -65,7 +73,6 @@ def _set_socket_options(sock, options):
 
 
 def allowed_gai_family():
-
     family = socket.AF_INET
     if HAS_IPV6:
         family = socket.AF_UNSPEC
