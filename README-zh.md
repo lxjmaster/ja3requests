@@ -1,9 +1,9 @@
 
 
 # Ja3Requests
-**Ja3Requests** is An http request library that can customize ja3 fingerprints.
+**Ja3Requests**是一个可以自定义ja3指纹（tls指纹）和HTTP2指纹的请求库
 
-[中文文档](README-zh.md)
+[English Document](README.md)
 
 ```python
 >>> import ja3requests
@@ -19,17 +19,17 @@
 '<!DOCTYPE html><!--STATUS OK--><html><head><meta http-equiv="Content-Type" content="text/html;char...'
 ```
 
-Ja3Requests currently implements only the HTTP protocol and a few methods.
+Ja3Requests目前只实现了HTTP协议和部分方法.
 
-## Installing Requests and Supported Versions
+## 安装 Requests/ 支持的版本
 
-Ja3Requests is available on PyPI:
+从PYPI安装:
 
 ```console
 $ python -m pip install ja3requests
 ```
 
-Ja3Requests officially supports Python 3.7+.
+Ja3Requests正式支持Python 3.7+
 
-## Reference
+## 参考
 - [HTTP](https://developer.mozilla.org/en-US/docs/Web/HTTP)
