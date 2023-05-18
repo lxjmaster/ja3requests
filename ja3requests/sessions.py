@@ -34,17 +34,7 @@ class Session(BaseSession):
         self.headers = default_headers()
         self.max_redirects = DEFAULT_REDIRECT_LIMIT
 
-    def ready(
-            self,
-            method,
-            url,
-            params,
-            data,
-            headers,
-            cookies,
-            auth,
-            json
-    ):
+    def ready(self, method, url, params, data, headers, cookies, auth, json):
         """
         Ready to send request.
         :return:
@@ -102,7 +92,7 @@ class Session(BaseSession):
             headers=headers,
             cookies=cookies,
             auth=auth,
-            json=json
+            json=json,
         )
 
         req = ready_request.request()

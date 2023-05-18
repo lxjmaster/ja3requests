@@ -12,7 +12,7 @@ fmt:
 
 lint:
 	@command -v pylint || $(PYTHON) -m pip install -r requirements.txt
-	$(shell pylint ja3requests)
+	@pylint ja3requests
 
 .PHONY: dist
 dist:

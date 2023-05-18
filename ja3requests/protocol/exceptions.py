@@ -13,7 +13,7 @@ class SocketException(Exception):
 
 
 class SocketTimeout(OSError):
-    """ Timeout expired. """
+    """Timeout expired."""
 
 
 class LocationParseError(SocketException, ValueError):

@@ -14,9 +14,11 @@ DEFAULT_HTTP_VERSION = "HTTP/1.1"
 
 
 class HTTPContext(BaseContext):
+    """
+    HTTPContext
+    """
 
     def __init__(self, connection):
-
         super().__init__()
         self.protocol = DEFAULT_HTTP_CONTEXT_PROTOCOL
         self.version = DEFAULT_HTTP_VERSION
@@ -24,27 +26,31 @@ class HTTPContext(BaseContext):
 
     @property
     def message(self):
-        self.start_line = " ".join(
-            [self.method, self.connection.path, self.version]
-        )
-        self._message = "\r\n".join(
-            [self.start_line, self.put_headers()]
-        )
+        """
+        HTTP Context message to send
+        :return:
+        """
+        self.start_line = " ".join([self.method, self.connection.path, self.version])
+        self._message = "\r\n".join([self.start_line, self.put_headers()])
         self._message += "\r\n\r\n"
 
         return self._message.encode()
 
-    def set_payload(
-            self,
-            **kwargs
-    ):
-
+    def set_payload(self, **kwargs):
+        """
+        Set context payload
+        :param kwargs:
+        :return:
+        """
         for k, v in kwargs.items():
             if hasattr(self, k):
                 setattr(self, k, v)
 
     def put_headers(self):
-
+        """
+        Set context headers
+        :return:
+        """
         headers = ""
         if self.headers is not None:
             if not self.headers.get("host", None):

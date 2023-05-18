@@ -10,20 +10,17 @@ from .response import HTTPResponse
 from .exceptions import InvalidHost
 from .base import BaseHttpConnection
 from .protocol.sockets import create_connection
-from .protocol.exceptions import SocketTimeout, ConnectTimeoutError, ReadTimeout
-
-
-DEFAULT_HTTP_SCHEME = "http"
-DEFAULT_HTTPS_SCHEME = "https"
-
-DEFAULT_HTTP_PORT = 80
-DEFAULT_HTTPS_PORT = 443
+from .const import DEFAULT_HTTP_SCHEME
+from .const import DEFAULT_HTTP_PORT
+from .protocol.exceptions import SocketTimeout, ConnectTimeoutError
 
 
 class HTTPConnection(BaseHttpConnection):
+    """
+    HTTP connection.
+    """
 
     def __init__(self):
-
         super().__init__()
         self.scheme = DEFAULT_HTTP_SCHEME
         self.port = DEFAULT_HTTP_PORT
@@ -44,10 +41,10 @@ class HTTPConnection(BaseHttpConnection):
                 self.timeout,
                 self.source_address,
             )
-        except SocketTimeout:
+        except SocketTimeout as err:
             raise ConnectTimeoutError(
                 f"Connection to {self.destination_address} timeout out. timeout={self.timeout}"
-            )
+            ) from err
 
         return conn
 
@@ -57,14 +54,27 @@ class HTTPConnection(BaseHttpConnection):
         :param kwargs:
         :return:
         """
-        if kwargs.get("scheme", None):
-            self.scheme = kwargs["scheme"]
-
-        if kwargs.get("port", None):
-            self.port = kwargs["port"]
-
-        if kwargs.get("source_address", None):
-            self.source_address = kwargs["source_address"]
+        self.scheme = kwargs["scheme"] if kwargs.get("scheme", None) else self.scheme
+        self.port = kwargs["port"] if kwargs.get("port", None) else self.port
+        self.source_address = (
+            kwargs["source_address"]
+            if kwargs.get("source_address", None)
+            else self.source_address
+        )
+        self.timeout = (
+            kwargs["timeout"] if kwargs.get("timeout", None) else self.timeout
+        )
+        self.proxy = kwargs["proxy"] if kwargs.get("proxy", None) else self.proxy
+        self.proxy_username = (
+            kwargs["proxy_username"]
+            if kwargs.get("proxy_username", None)
+            else self.proxy_username
+        )
+        self.proxy_password = (
+            kwargs["proxy_password"]
+            if kwargs.get("proxy_password", None)
+            else self.proxy_password
+        )
 
         if kwargs.get("host", None):
             host = kwargs["host"].replace("http://", "").split("/")
@@ -78,32 +88,33 @@ class HTTPConnection(BaseHttpConnection):
                 else:
                     self.destination_address = self.host
             else:
-                raise InvalidHost(f"Invalid Host: {kwargs['host']!r}, can not parse destination address or path.")
-
-        if kwargs.get("timeout", None):
-            self.timeout = kwargs["timeout"]
-
-        if kwargs.get("proxy", None):
-            self.proxy = kwargs["proxy"]
-
-        if kwargs.get("proxy_username", None):
-            self.proxy_username = kwargs["proxy_username"]
-
-        if kwargs.get("proxy_password", None):
-            self.proxy_password = kwargs["proxy_password"]
+                raise InvalidHost(
+                    f"Invalid Host: {kwargs['host']!r}, can not parse destination address or path."
+                )
 
     def connect(
-            self,
-            scheme=None,
-            port=None,
-            source_address=None,
-            host=None,
-            timeout=None,
-            proxy=None,
-            proxy_username=None,
-            proxy_password=None,
+        self,
+        scheme=None,
+        port=None,
+        source_address=None,
+        host=None,
+        timeout=None,
+        proxy=None,
+        proxy_username=None,
+        proxy_password=None,
     ):
-
+        """
+        Create an http connection.
+        :param scheme:
+        :param port:
+        :param source_address:
+        :param host:
+        :param timeout:
+        :param proxy:
+        :param proxy_username:
+        :param proxy_password:
+        :return:
+        """
         self._ready_connect(
             scheme=scheme,
             port=port,
@@ -122,44 +133,17 @@ class HTTPConnection(BaseHttpConnection):
         Send socket.
         :return:
         """
-        self.connection.sendall(
-            context.message
-        )
+        self.connection.sendall(context.message)
 
-        data = self.receive()
-        response = HTTPResponse(data)
+        response = HTTPResponse(sock=self.connection, method=context.method)
         response.begin()
 
         return response
 
-        # response_data = b""
-        # #
-        # self.connection.settimeout(3)
-        # try:
-        #     while True:
-        #         data = self.connection.recv(2048)
-        #         if not data:
-        #             break
-        #         response_data += data
-        # except TimeoutError:
-        #     pass
-        #
-        # print(response_data)
-        # return response_data
-
-    def receive(self):
-
-        response_data = bytes()
-        while True:
-            data = self.connection.recv(2048)
-            if not data:
-                self.is_close = True
-                break
-
-            response_data += data
-            yield response_data
-
     def close(self):
-
+        """
+        Close connection.
+        :return:
+        """
         if self.connection:
             self.connection.close()
