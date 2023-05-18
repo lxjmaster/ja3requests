@@ -21,7 +21,7 @@
 
 Ja3Requests目前只实现了HTTP协议和部分方法.
 
-## 安装 Requests/ 支持的版本
+## 安装 Ja3Requests/ 支持的版本
 
 从PYPI安装:
 
