@@ -63,3 +63,9 @@ class InvalidResponseHeaders(RequestException, ValueError):
     """
     Raised it when cant receive response headers.
     """
+
+
+class IssueError(ValueError):
+    """
+    This situation may not be considered yet, please issue it
+    """

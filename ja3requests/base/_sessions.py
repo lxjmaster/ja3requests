@@ -8,7 +8,7 @@ Basic Session
 
 class BaseSession:
     """
-    The base request session.
+    The basic request session.
     """
 
     def __init__(self):

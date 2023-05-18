@@ -2,17 +2,20 @@ from ja3requests.sessions import Session
 
 
 headers = {
-    "connection": "keep-alive"
-    # "Accept-Encoding": "deflate, br, gzip"
+    "connection": "keep-alive",
+    "Accept-Encoding": "deflate, br, gzip"
 }
 with Session() as session:
     # response = session.get("http://127.0.0.1:8080", headers=headers)
-    response = session.get("http://www.baidu.com")
-    # print(response.headers)
-    # print(response)
+    # response = session.get("http://www.baidu.com", headers=headers)
+    response = session.get("http://www.aliyun.com")
+    print(response.headers)
+    print(response)
     # print(response.status_code)
     # print(response.content)
     print(response.text)
+    # print(response.json())
+
     # with open("baidu.html", "w+") as f:
     #     f.write(response.text)
 

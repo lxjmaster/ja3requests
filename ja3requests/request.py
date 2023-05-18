@@ -4,29 +4,45 @@ ja3requests.request
 
 This module create a request struct and ready request object.
 """
-from .base import BaseRequest
-from .utils import default_headers
-from .context import HTTPContext
-from .connections import HTTPConnection
-from .exceptions import NotAllowedRequestMethod, MissingScheme, NotAllowedScheme, InvalidParams
+
+
 import warnings
 from http.cookiejar import CookieJar
 from urllib.parse import urlparse, urlencode
 from typing import Any, AnyStr, Dict, List, Union, ByteString, Tuple
+from .base import BaseRequest
+from .utils import default_headers
+from .context import HTTPContext
+from .connections import HTTPConnection
+from .exceptions import (
+    NotAllowedRequestMethod,
+    MissingScheme,
+    NotAllowedScheme,
+    InvalidParams,
+)
 
 
 class ReadyRequest(BaseRequest):
+    """
+    Ready a request, e.g.(check url, check params)
+    """
 
     def __init__(
-            self,
-            method: AnyStr,
-            url: AnyStr,
-            params: Union[Dict[Any, Any], List[Tuple[Any, Any]], Tuple[Tuple[Any, Any]], ByteString, AnyStr] = None,
-            data: Union[Dict[AnyStr, Any], List, Tuple, ByteString] = None,
-            headers: Dict[AnyStr, AnyStr] = None,
-            cookies: Union[Dict[AnyStr, AnyStr], CookieJar] = None,
-            auth: Tuple = None,
-            json: Dict[AnyStr, AnyStr] = None,
+        self,
+        method: AnyStr,
+        url: AnyStr,
+        params: Union[
+            Dict[Any, Any],
+            List[Tuple[Any, Any]],
+            Tuple[Tuple[Any, Any]],
+            ByteString,
+            AnyStr,
+        ] = None,
+        data: Union[Dict[AnyStr, Any], List, Tuple, ByteString] = None,
+        headers: Dict[AnyStr, AnyStr] = None,
+        cookies: Union[Dict[AnyStr, AnyStr], CookieJar] = None,
+        auth: Tuple = None,
+        json: Dict[AnyStr, AnyStr] = None,
     ):
         super().__init__()
         self.method = method
@@ -83,9 +99,7 @@ class ReadyRequest(BaseRequest):
 
         # Just allow http or https
         if parse.scheme not in ["http", "https"]:
-            raise NotAllowedScheme(
-                f"Schema: {parse.scheme} not allowed."
-            )
+            raise NotAllowedScheme(f"Schema: {parse.scheme} not allowed.")
 
         self.scheme = parse.scheme
         if self.scheme == "https":
@@ -144,7 +158,10 @@ class ReadyRequest(BaseRequest):
         for k, v in self.headers.items():
             header = k.lower()
             if header in header_list:
-                warnings.warn(f"Duplicate header: {k}, you should check the request headers.", RuntimeWarning)
+                warnings.warn(
+                    f"Duplicate header: {k}, you should check the request headers.",
+                    RuntimeWarning,
+                )
 
             header_list.append(header)
             new_headers[header] = v
@@ -186,7 +203,10 @@ class ReadyRequest(BaseRequest):
         self.ready_json()
 
     def request(self):
-
+        """
+        Create a Request object.
+        :return:
+        """
         req = Request()
         req.clone(self)
 
@@ -194,12 +214,19 @@ class ReadyRequest(BaseRequest):
 
 
 class Request(BaseRequest):
+    """
+    Request object to send.
+    """
 
     def __repr__(self):
         return f"<Request [{self.method}]>"
 
     def clone(self, ready_request: ReadyRequest):
-
+        """
+        Clone arguments from ReadyRequest
+        :param ready_request:
+        :return:
+        """
         for k, v in ready_request.__dict__.items():
             setattr(self, k, v)
 
@@ -219,7 +246,7 @@ class Request(BaseRequest):
             self.timeout,
             proxy,
             proxy_username,
-            proxy_password
+            proxy_password,
         )
         context = HTTPContext(conn)
         context.set_payload(
@@ -241,9 +268,11 @@ class Request(BaseRequest):
         elif self.is_https():
             # TODO: HTTPS
             # conn = HTTPSConnection()
-            raise NotImplementedError("HTTPSConnection not implemented yet.")
+            raise NotImplementedError("HTTPS not implemented yet.")
         else:
-            raise MissingScheme(f"Scheme: {self.scheme}, parse scheme failed, can't create connection.")
+            raise MissingScheme(
+                f"Scheme: {self.scheme}, parse scheme failed, can't create connection."
+            )
 
         return conn
 
