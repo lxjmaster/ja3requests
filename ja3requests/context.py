@@ -34,6 +34,11 @@ class HTTPContext(BaseContext):
         self._message = "\r\n".join([self.start_line, self.put_headers()])
         self._message += "\r\n\r\n"
 
+        if self.body:
+            self._message += self.body
+
+        print(self._message)
+
         return self._message.encode()
 
     def set_payload(self, **kwargs):
