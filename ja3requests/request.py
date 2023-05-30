@@ -138,9 +138,23 @@ class ReadyRequest(BaseRequest):
 
     def ready_data(self):
         """
-        Todo: Ready form data.
+        Ready form data.
         :return:
         """
+        if self.data:
+            if self.headers is not None:
+                content_type = self.headers.get("Content-Type", "")
+                if content_type == "":
+                    self.headers["Content-Type"] = content_type = "application/x-www-form-urlencoded"
+            else:
+                self.headers = default_headers()
+                self.headers["Content-Type"] = content_type = "application/x-www-form-urlencoded"
+
+            if content_type == "application/x-www-form-urlencoded":
+                self.data = urlencode(self.data)
+                self.headers["Content-Length"] = len(self.data)
+
+        print(self.data)
 
     def ready_headers(self):
         """
@@ -156,7 +170,7 @@ class ReadyRequest(BaseRequest):
         new_headers = {}
         header_list = []
         for k, v in self.headers.items():
-            header = k.lower()
+            header = k.title()
             if header in header_list:
                 warnings.warn(
                     f"Duplicate header: {k}, you should check the request headers.",
@@ -196,8 +210,8 @@ class ReadyRequest(BaseRequest):
         self.ready_method()
         self.ready_url()
         self.ready_params()
-        self.ready_data()
         self.ready_headers()
+        self.ready_data()
         self.ready_cookies()
         self.ready_auth()
         self.ready_json()
@@ -252,6 +266,7 @@ class Request(BaseRequest):
         context.set_payload(
             method=self.method,
             headers=self.headers,
+            body=self.data,
         )
         response = conn.send(context)
 
