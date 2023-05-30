@@ -33,3 +33,4 @@ Ja3Requests正式支持Python 3.7+
 
 ## 参考
 - [HTTP](https://developer.mozilla.org/en-US/docs/Web/HTTP)
+- [HTTP-RFC](https://www.rfc-editor.org/rfc/rfc2068.html)
