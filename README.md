@@ -31,6 +31,9 @@ $ python -m pip install ja3requests
 
 Ja3Requests officially supports Python 3.7+.
 
+## Architecture
+![Architecture](images/architecture.png)
+
 ## Reference
 - [HTTP](https://developer.mozilla.org/en-US/docs/Web/HTTP)
 - [HTTP-RFC](https://www.rfc-editor.org/rfc/rfc2068.html)
