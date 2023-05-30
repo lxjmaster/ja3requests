@@ -1,7 +1,7 @@
 
 
 # Ja3Requests
-**Ja3Requests** is An http request library that can customize ja3 fingerprints.
+**Ja3Requests** is an http request library that can customize ja3 or h2 fingerprints.
 
 [中文文档](README-zh.md)
 
@@ -33,3 +33,4 @@ Ja3Requests officially supports Python 3.7+.
 
 ## Reference
 - [HTTP](https://developer.mozilla.org/en-US/docs/Web/HTTP)
+- [HTTP-RFC](https://www.rfc-editor.org/rfc/rfc2068.html)
