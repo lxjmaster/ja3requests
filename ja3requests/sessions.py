@@ -13,7 +13,8 @@ from .base import BaseSession
 from .response import Response
 from .utils import default_headers
 from .const import DEFAULT_REDIRECT_LIMIT
-from .request import ReadyRequest, Request
+from ja3requests.requests.base import BaseRequest
+from ja3requests.requests.request import Request
 
 # Preferred clock, based on which one is more accurate on a given system.
 if sys.platform == "win32":
@@ -33,26 +34,6 @@ class Session(BaseSession):
 
         self.headers = default_headers()
         self.max_redirects = DEFAULT_REDIRECT_LIMIT
-
-    def ready(self, method, url, params, data, headers, cookies, auth, json):
-        """
-        Ready to send request.
-        :return:
-        """
-
-        req = ReadyRequest(
-            method=method,
-            url=url,
-            params=params,
-            data=data,
-            headers=headers,
-            cookies=cookies,
-            auth=auth,
-            json=json,
-        )
-        req.ready()
-
-        return req
 
     def request(
         self,
@@ -84,7 +65,8 @@ class Session(BaseSession):
         :param json:
         :return:
         """
-        ready_request = self.ready(
+
+        request = Request(
             method=method,
             url=url,
             params=params,
@@ -95,7 +77,7 @@ class Session(BaseSession):
             json=json,
         )
 
-        req = ready_request.request()
+        req = request.request()
         response = self.send(req)
 
         return response
@@ -176,7 +158,7 @@ class Session(BaseSession):
 
         return self.request("DELETE", url, **kwargs)
 
-    def send(self, request: Request):
+    def send(self, request: BaseRequest):
         """
         Send request.
         :return:
