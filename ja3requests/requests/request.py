@@ -68,9 +68,9 @@ class Request:
         self.ready_json()
 
         if self.scheme == "http":
-            return HttpRequest()
+            return HttpRequest(self)
         elif self.scheme == "https":
-            return HttpsRequest()
+            return HttpsRequest(self)
         else:
             raise NotAllowedScheme(f"Schema: {self.scheme} not allowed.")
 
