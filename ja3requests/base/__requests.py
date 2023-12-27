@@ -1,18 +1,14 @@
 from abc import ABC, abstractmethod
 import typing
 from urllib.parse import urlsplit
-# from .request import Request
-from ja3requests.sockets.socket import Socket
+from ja3requests.base import BaseContext
 
 
 class BaseRequest(ABC):
 
-    def __init__(self, request):
+    def __init__(self, context: BaseContext):
 
-        self.request = request
-        self.socket = Socket(self)
-        self.proxy = None
-        self.proxy_auth = None
+        self.context = context
 
     @staticmethod
     def parse_proxy(proxy: typing.AnyStr = None):

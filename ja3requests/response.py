@@ -10,7 +10,7 @@ import json
 import gzip
 import zlib
 import brotli
-from .base import BaseResponse
+from ja3requests.base import BaseResponse
 from .const import MAX_LINE, MAX_HEADERS
 from .exceptions import InvalidStatusLine, InvalidResponseHeaders, IssueError
 

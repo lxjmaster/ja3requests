@@ -11,6 +11,7 @@ from ja3requests.exceptions import (
 )
 from .http import HttpRequest
 from .https import HttpsRequest
+from ja3requests.contexts.context import HTTPContext, HTTPSContext
 
 
 class Request:
@@ -68,9 +69,13 @@ class Request:
         self.ready_json()
 
         if self.scheme == "http":
-            return HttpRequest(self)
+            context = HTTPContext()
+            context.set_payload(self)
+            return HttpRequest(context)
         elif self.scheme == "https":
-            return HttpsRequest(self)
+            context = HTTPSContext()
+            context.set_payload(self)
+            return HttpsRequest(context)
         else:
             raise NotAllowedScheme(f"Schema: {self.scheme} not allowed.")
 

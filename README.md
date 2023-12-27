@@ -1,7 +1,7 @@
 
 
 # Ja3Requests
-**Ja3Requests** is an http request library that can customize ja3 or h2 fingerprints.
+**Ja3Requests** is a http request library that can customize ja3 or h2 fingerprints.
 
 [中文文档](README-zh.md)
 

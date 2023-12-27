@@ -10,8 +10,7 @@ from .response import HTTPResponse
 from .exceptions import InvalidHost
 from .base import BaseHttpConnection
 from .protocol.sockets import create_connection
-from .const import DEFAULT_HTTP_SCHEME
-from .const import DEFAULT_HTTP_PORT
+from .const import DEFAULT_HTTP_SCHEME, DEFAULT_HTTP_PORT
 from .protocol.exceptions import SocketTimeout, ConnectTimeoutError
 
 
@@ -104,7 +103,7 @@ class HTTPConnection(BaseHttpConnection):
         proxy_password=None,
     ):
         """
-        Create an http connection.
+        Create a http connection.
         :param scheme:
         :param port:
         :param source_address:

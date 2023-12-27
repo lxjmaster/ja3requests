@@ -9,11 +9,11 @@ import sys
 import time
 from http.cookiejar import CookieJar
 from typing import AnyStr, Any, Dict, ByteString, Union, List, Tuple
-from .base import BaseSession
+from ja3requests.base import BaseSession
 from .response import Response
 from .utils import default_headers
 from .const import DEFAULT_REDIRECT_LIMIT
-from ja3requests.requests.base import BaseRequest
+from ja3requests.base import BaseRequest
 from ja3requests.requests.request import Request
 
 # Preferred clock, based on which one is more accurate on a given system.
