@@ -7,6 +7,7 @@ HTTP Context and HTTPS Context
 
 
 from ja3requests.base import BaseContext
+import typing
 
 
 DEFAULT_HTTP_CONTEXT_PROTOCOL = 11
@@ -49,6 +50,13 @@ class HTTPContext(BaseContext):
         self.method = request.method
         self.headers = request.headers
         self.body = request.body
+
+    def set_headers(self, headers: typing.Dict[typing.AnyStr, typing.AnyStr]):
+        """
+        Set context headers
+        :return:
+        """
+        headers_ctx = ""
 
     def put_headers(self):
         """
