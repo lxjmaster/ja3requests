@@ -5,8 +5,9 @@ from ja3requests.protocol.exceptions import SocketTimeout, ConnectTimeoutError
 
 class HttpSocket(BaseSocket):
 
-    def create_conn(self):
-        pass
+    def new_conn(self):
+
+        return self
 
     def _new_conn(self):
         try:

@@ -47,9 +47,6 @@ class Request:
         self.auth = auth
         self.json = json
 
-        self.scheme = "http"
-        self.port = 80
-
     def __repr__(self):
 
         return f"<Request [{self.method}]>"
@@ -59,25 +56,43 @@ class Request:
         Make a ready request to send.
         :return:
         """
-        self.ready_method()
-        self.ready_url()
-        self.ready_params()
-        self.ready_headers()
-        self.ready_data()
-        self.ready_cookies()
-        self.ready_auth()
-        self.ready_json()
+        method = self.ready_method()
+        schema, url = self.ready_url()
+        params = self.ready_params()
+        headers = self.ready_headers()
+        data = self.ready_data()
+        cookies = self.ready_cookies()
+        auth = self.ready_auth()
+        _json = self.ready_json()
 
-        if self.scheme == "http":
-            context = HTTPContext()
-            context.set_payload(self)
-            return HttpRequest(context)
-        elif self.scheme == "https":
-            context = HTTPSContext()
-            context.set_payload(self)
-            return HttpsRequest(context)
+        if schema == "http":
+            req = HttpRequest()
+            req.set_payload(
+                method=method,
+                url=url,
+                params=params,
+                data=data,
+                headers=headers,
+                cookies=cookies,
+                auth=auth,
+                json=_json
+            )
+            return req
+        elif schema == "https":
+            req = HttpsRequest()
+            req.set_payload(
+                method=method,
+                url=url,
+                params=params,
+                data=data,
+                headers=headers,
+                cookies=cookies,
+                auth=auth,
+                json=_json
+            )
+            return req
         else:
-            raise NotAllowedScheme(f"Schema: {self.scheme} not allowed.")
+            raise NotAllowedScheme(f"Schema: {schema} not allowed.")
 
     def ready_method(self):
         """
@@ -85,8 +100,8 @@ class Request:
         :return:
         """
 
-        self.method = self.method.upper()
-        if self.method == "" or self.method not in [
+        method = self.method.upper()
+        if method == "" or method not in [
             "GET",
             "OPTIONS",
             "HEAD",
@@ -95,21 +110,24 @@ class Request:
             "PATCH",
             "DELETE",
         ]:
-            raise NotAllowedRequestMethod(self.method)
+            raise NotAllowedRequestMethod(method)
+
+        return method
 
     def ready_url(self):
         """
         Ready http url and check url whether valid.
         :return:
         """
+        url = self.url
 
-        if self.url == "":
-            raise ValueError("The request url is required.")
+        if url == "":
+            raise ValueError("The request url is require.")
 
         # Remove whitespaces for url
-        self.url.strip()
+        url = url.strip()
 
-        parse = urlparse(self.url)
+        parse = urlparse(url)
 
         # Check HTTP scheme
         if parse.scheme == "":
@@ -122,40 +140,21 @@ class Request:
         if parse.scheme not in ["http", "https"]:
             raise NotAllowedScheme(f"Schema: {parse.scheme} not allowed.")
 
-        self.scheme = parse.scheme
-        if self.scheme == "https":
-            self.port = 443
-
-        if parse.netloc != "" and ":" in parse.netloc:
-            port = parse.netloc.split(":")[-1]
-            self.port = int(port)
-        else:
-            self.port = 80
+        return parse.scheme, url
 
     def ready_params(self):
         """
         Ready params.
         :return:
         """
-        if self.params:
-            parse = urlparse(self.url)
+        params = self.params
 
-            if isinstance(self.params, str):
-                params = self.params
-            elif isinstance(self.params, bytes):
-                params = self.params.decode()
-            elif isinstance(self.params, (dict, list, tuple)):
-                params = urlencode(self.params)
-            else:
+        if params:
+            # parse = urlparse(self.url)
+            if type(params) not in [str, bytes, dict, list, tuple]:
                 raise InvalidParams(f"Invalid params: {self.params!r}")
 
-            if params.startswith("?"):
-                params = params.replace("?", "")
-
-            if parse.query != "":
-                self.url = "&" + params
-            else:
-                self.url = "?" + params
+        return params
 
     def ready_headers(self):
         """
@@ -163,47 +162,29 @@ class Request:
         :return:
         """
 
-        # Default headers
-        if self.headers is None:
-            self.headers = default_headers()
+        headers = self.headers
 
         # Check duplicate default item
-        new_headers = {}
-        header_list = []
-        for k, v in self.headers.items():
-            header = k.title()
-            if header in header_list:
-                warnings.warn(
-                    f"Duplicate header: {k}, you should check the request headers.",
-                    RuntimeWarning,
-                )
+        if headers:
+            header_list = []
+            for k, v in headers.items():
+                if k.lower() in header_list:
+                    warnings.warn(
+                        f"Duplicate header: {k}, you should check the request headers.",
+                        RuntimeWarning,
+                    )
+                header_list.append(k.lower())
 
-            header_list.append(header)
-            new_headers[header] = v
-
-        self.headers = new_headers
-        del new_headers
-        del header_list
+        return headers
 
     def ready_data(self):
         """
         Ready form data.
         :return:
         """
-        if self.data:
-            if self.headers is not None:
-                content_type = self.headers.get("Content-Type", "")
-                if content_type == "":
-                    self.headers["Content-Type"] = content_type = "application/x-www-form-urlencoded"
-            else:
-                self.headers = default_headers()
-                self.headers["Content-Type"] = content_type = "application/x-www-form-urlencoded"
+        data = self.data
 
-            if content_type == "application/x-www-form-urlencoded":
-                self.data = urlencode(self.data)
-                self.headers["Content-Length"] = len(self.data)
-
-        print(self.data)
+        return data
 
     def ready_cookies(self):
         """
@@ -211,14 +192,26 @@ class Request:
         :return:
         """
 
+        cookies = self.cookies
+
+        return cookies
+
     def ready_auth(self):
         """
         Todo: Ready http authenticator
         :return:
         """
 
+        auth = self.auth
+
+        return auth
+
     def ready_json(self):
         """
         Todo: Ready post json.
         :return:
         """
+
+        _json = self.json
+
+        return _json

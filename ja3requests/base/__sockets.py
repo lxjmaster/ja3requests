@@ -3,6 +3,9 @@ from abc import ABC, abstractmethod
 
 class BaseSocket(ABC):
 
+    def __init__(self, context):
+        self.context = context
+
     @abstractmethod
     def new_conn(self):
 

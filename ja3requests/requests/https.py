@@ -4,8 +4,8 @@ from ja3requests.const import DEFAULT_HTTPS_SCHEME, DEFAULT_HTTPS_PORT
 
 class HttpsRequest(BaseRequest):
 
-    def __init__(self, context):
-        super(HttpsRequest, self).__init__(context)
+    def __init__(self):
+        super(HttpsRequest, self).__init__()
         self.scheme = DEFAULT_HTTPS_SCHEME
         self.port = DEFAULT_HTTPS_PORT
 

@@ -38,7 +38,7 @@ class ReadyRequest(BaseRequest):
             ByteString,
             AnyStr,
         ] = None,
-        data: Union[Dict[AnyStr, Any], List, Tuple, ByteString] = None,
+        data: Union[Dict[AnyStr, Any], List, Tuple, AnyStr] = None,
         headers: Dict[AnyStr, AnyStr] = None,
         cookies: Union[Dict[AnyStr, AnyStr], CookieJar] = None,
         auth: Tuple = None,
@@ -101,16 +101,6 @@ class ReadyRequest(BaseRequest):
         if parse.scheme not in ["http", "https"]:
             raise NotAllowedScheme(f"Schema: {parse.scheme} not allowed.")
 
-        self.scheme = parse.scheme
-        if self.scheme == "https":
-            self.port = 443
-
-        if parse.netloc != "" and ":" in parse.netloc:
-            port = parse.netloc.split(":")[-1]
-            self.port = int(port)
-        else:
-            self.port = 80
-
     def ready_params(self):
         """
         Ready params.
@@ -119,17 +109,6 @@ class ReadyRequest(BaseRequest):
         if self.params:
             parse = urlparse(self.url)
 
-            if isinstance(self.params, str):
-                params = self.params
-            elif isinstance(self.params, bytes):
-                params = self.params.decode()
-            elif isinstance(self.params, (dict, list, tuple)):
-                params = urlencode(self.params)
-            else:
-                raise InvalidParams(f"Invalid params: {self.params!r}")
-
-            if params.startswith("?"):
-                params = params.replace("?", "")
 
             if parse.query != "":
                 self.url = "&" + params

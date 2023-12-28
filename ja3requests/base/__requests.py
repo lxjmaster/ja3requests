@@ -1,33 +1,242 @@
 from abc import ABC, abstractmethod
 import typing
-from urllib.parse import urlsplit
+from http.cookiejar import CookieJar
+from ja3requests.const import DEFAULT_HTTP_SCHEME, DEFAULT_HTTP_PORT
 from ja3requests.base import BaseContext
+from urllib.parse import urlparse, urlencode
+from ja3requests.exceptions import InvalidParams, InvalidData
+from ja3requests.utils import default_headers
 
 
 class BaseRequest(ABC):
 
-    def __init__(self, context: BaseContext):
+    def __init__(self):
+        self._scheme = None
+        self._schema = None
+        self._port = None
+        self._method = None
+        self._url = None
+        self._params = None
+        self._data = None
+        self._headers = None
+        self._cookies = None
+        self._auth = None
+        self._json = None
 
-        self.context = context
+    @property
+    def schema(self) -> typing.AnyStr:
+        return self._schema
 
-    @staticmethod
-    def parse_proxy(proxy: typing.AnyStr = None):
-        if proxy is None:
-            return None, None, None, None
+    @schema.setter
+    def schema(self, attr: typing.AnyStr):
+        self._schema = attr if attr else DEFAULT_HTTP_SCHEME
 
-        split_result = urlsplit(f'https://{proxy}')
-        username = split_result.username
-        password = split_result.password
-        host = split_result.hostname
-        port = split_result.port
+    @property
+    def port(self) -> int:
+        return self._port
 
-        return username, password, host, port
+    @port.setter
+    def port(self, attr: int):
+        self._port = attr if attr else DEFAULT_HTTP_PORT
+
+    @property
+    def method(self) -> typing.AnyStr:
+        return self._method
+
+    @method.setter
+    def method(self, attr: typing.AnyStr):
+        self._method = attr.upper()
+
+    @property
+    def url(self) -> typing.AnyStr:
+        return self._url
+
+    @url.setter
+    def url(self, attr: typing.AnyStr):
+        self._url = attr
+        if self._url:
+            parse = urlparse(self._url)
+            self.schema = parse.scheme
+            if self.schema == "https":
+                self.port = 443
+
+            if parse.netloc != "" and ":" in parse.netloc:
+                port = parse.netloc.split(":")[-1]
+                self.port = int(port)
+            else:
+                self.port = 80
+
+    @property
+    def params(self):
+        return self._params
+
+    @params.setter
+    def params(self, attr: typing.Union[
+        typing.Dict[typing.AnyStr, typing.Any],
+        typing.List[typing.Tuple[typing.Any, typing.Any]],
+        typing.Tuple[typing.Tuple[typing.Any, typing.Any]],
+        typing.AnyStr]
+    ):
+        self._params = attr
+        if self._params:
+            if isinstance(self._params, str):
+                self._params = self._params
+            elif isinstance(self._params, bytes):
+                self._params = self._params.decode()
+            else:
+                try:
+                    self._params = urlencode(self._params)
+                except TypeError:
+                    raise InvalidParams(f"Invalid params: {self._params!r}")
+
+            if self._params.startswith("?"):
+                self._params = self._params.replace("?", "")
+
+            parse = urlparse(self.url)
+
+            if parse.query != "":
+                self.url += "&" + self._params
+            else:
+                self.url += "?" + self._params
+
+    @property
+    def data(self):
+        return self._data
+
+    @data.setter
+    def data(self, attr: typing.Union[
+        typing.Dict[typing.AnyStr, typing.Any],
+        typing.List[typing.Tuple[typing.AnyStr, typing.Any]],
+        typing.Tuple[typing.Tuple[typing.AnyStr, typing.Any]],
+        typing.AnyStr]
+    ):
+
+        self._data = attr
+        if self._data:
+
+            if isinstance(self._data, str):
+                self._data = self._data
+            elif isinstance(self._data, bytes):
+                self._data = self._data.decode()
+            else:
+                try:
+                    self._data = urlencode(self._data)
+                except TypeError:
+                    raise InvalidData(f"Invalid data: {self._data!r}")
+
+            if not self.headers:
+                self.headers = default_headers()
+
+            content_type = self.headers.get("Content-Type", "")
+            if content_type == "":
+                self.headers["Content-Type"] = "application/x-www-form-urlencoded"
+
+            self.headers["Content-Length"] = len(self._data)
+
+    @property
+    def headers(self):
+
+        return self._headers if self._headers else default_headers()
+
+    @headers.setter
+    def headers(self, attr: typing.Dict[typing.AnyStr, typing.AnyStr]):
+
+        self._headers = attr
+        if not self._headers:
+            self._headers = default_headers()
+
+        headers = dict()
+        for header, value in self._headers.items():
+            header = header.title()
+            headers.update({
+                header: value
+            })
+
+        self._headers = headers
+
+    @property
+    def cookies(self):
+
+        return self._cookies
+
+    @cookies.setter
+    def cookies(self, attr: typing.Union[typing.Dict[typing.AnyStr, typing.AnyStr], CookieJar]):
+
+        self._cookies = attr
+
+    @property
+    def auth(self):
+
+        return self._auth
+
+    @auth.setter
+    def auth(self, attr: typing.Tuple):
+
+        self._auth = attr
+
+    @property
+    def json(self):
+
+        return self._json
+
+    @json.setter
+    def json(self, attr: typing.Dict[typing.AnyStr, typing.AnyStr]):
+
+        self._json = attr
+
+    def set_payload(
+        self,
+        method: typing.AnyStr,
+        url: typing.AnyStr,
+        params: typing.Union[
+            typing.Dict[typing.AnyStr, typing.Any],
+            typing.List[typing.Tuple[typing.Any, typing.Any]],
+            typing.Tuple[typing.Tuple[typing.Any, typing.Any]],
+            typing.AnyStr,
+        ] = None,
+        data: typing.Union[
+            typing.Dict[typing.AnyStr, typing.Any],
+            typing.List[typing.Tuple[typing.AnyStr, typing.Any]],
+            typing.Tuple[typing.Tuple[typing.AnyStr, typing.Any]],
+            typing.AnyStr
+        ] = None,
+        headers: typing.Dict[typing.AnyStr, typing.AnyStr] = None,
+        cookies: typing.Union[typing.Dict[typing.AnyStr, typing.AnyStr], CookieJar] = None,
+        auth: typing.Tuple = None,
+        json: typing.Dict[typing.AnyStr, typing.AnyStr] = None,
+    ):
+        self.method = method
+        self.url = url
+        self.params = params
+        self.data = data
+        self.headers = headers
+        self.cookies = cookies
+        self.auth = auth
+        self.json = json
+
+    # @staticmethod
+    # def parse_proxy(proxy: typing.AnyStr = None):
+    #     if proxy is None:
+    #         return None, None, None, None
+    #
+    #     split_result = urlsplit(f'https://{proxy}')
+    #     username = split_result.username
+    #     password = split_result.password
+    #     host = split_result.hostname
+    #     port = split_result.port
+    #
+    #     return username, password, host, port
+
+    def is_http(self):
+
+        self.schema = self.schema.decode() if isinstance(self.schema, bytes) else self.schema
+        return self.schema.lower() == "http"
+
+    def is_https(self):
+
+        self.schema = self.schema.decode() if isinstance(self.schema, bytes) else self.schema
+        return self.schema.lower() == "https"
 
     @abstractmethod
     def send(self):
-
         raise NotImplementedError("send method must be implemented by subclass.")
-
-
-if __name__ == '__main__':
-    BaseRequest.parse_proxy("9jjmn:uweo3gw@123@169.197.83.75:6887")

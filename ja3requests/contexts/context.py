@@ -37,40 +37,23 @@ class HTTPContext(BaseContext):
         if self.body:
             self._message += self.body
 
-        print(self._message)
-
         return self._message.encode()
 
-    def set_payload(self, request):
+    def set_payload(
+        self,
+        method,
+        url,
+        data,
+        headers,
+    ):
         """
         Set context payload
-        :param request:
         :return:
         """
-        self.method = request.method
-        self.headers = request.headers
-        self.body = request.body
-
-    def set_headers(self, headers: typing.Dict[typing.AnyStr, typing.AnyStr]):
-        """
-        Set context headers
-        :return:
-        """
-        headers_ctx = ""
-
-    def put_headers(self):
-        """
-        Set context headers
-        :return:
-        """
-        headers = ""
-        if self.headers is not None:
-            if not self.headers.get("host", None):
-                self.headers["host"] = self.connection.host
-
-            headers = "\r\n".join([f"{k}: {v}" for k, v in self.headers.items()])
-
-        return headers
+        self.method = method
+        self.start_line = url
+        self.headers = headers
+        # self.body = request.body
 
 
 class HTTPSContext(BaseContext):
