@@ -5,6 +5,14 @@ ja3requests.protocol.exceptions
 This module contains socket exceptions.
 """
 
+import socket
+
+
+class SocketError(socket.error):
+    """
+    Socket error
+    """
+
 
 class SocketException(Exception):
     """

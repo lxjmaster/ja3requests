@@ -24,27 +24,14 @@ class HTTPContext(BaseContext):
         self.protocol = DEFAULT_HTTP_CONTEXT_PROTOCOL
         self.version = DEFAULT_HTTP_VERSION
 
-    @property
-    def message(self):
-        """
-        HTTP Context message to send
-        :return:
-        """
-        self.start_line = " ".join([self.method, self.connection.path, self.version])
-        self._message = "\r\n".join([self.start_line, self.put_headers()])
-        self._message += "\r\n\r\n"
-
-        if self.body:
-            self._message += self.body
-
-        return self._message.encode()
-
     def set_payload(
         self,
         method,
         url,
+        port,
         data,
         headers,
+        timeout,
     ):
         """
         Set context payload
@@ -52,7 +39,9 @@ class HTTPContext(BaseContext):
         """
         self.method = method
         self.start_line = url
+        self.port = port
         self.headers = headers
+        self.timeout = timeout
         # self.body = request.body
 
 

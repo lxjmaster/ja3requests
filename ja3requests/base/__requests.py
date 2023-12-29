@@ -22,6 +22,7 @@ class BaseRequest(ABC):
         self._cookies = None
         self._auth = None
         self._json = None
+        self._timeout = None
 
     @property
     def schema(self) -> typing.AnyStr:
@@ -184,6 +185,16 @@ class BaseRequest(ABC):
 
         self._json = attr
 
+    @property
+    def timeout(self):
+
+        return self._timeout
+
+    @timeout.setter
+    def timeout(self, attr):
+
+        self._timeout = attr
+
     def set_payload(
         self,
         method: typing.AnyStr,
@@ -204,6 +215,7 @@ class BaseRequest(ABC):
         cookies: typing.Union[typing.Dict[typing.AnyStr, typing.AnyStr], CookieJar] = None,
         auth: typing.Tuple = None,
         json: typing.Dict[typing.AnyStr, typing.AnyStr] = None,
+        timeout: float = None,
     ):
         self.method = method
         self.url = url
@@ -213,6 +225,7 @@ class BaseRequest(ABC):
         self.cookies = cookies
         self.auth = auth
         self.json = json
+        self.timeout = timeout
 
     # @staticmethod
     # def parse_proxy(proxy: typing.AnyStr = None):

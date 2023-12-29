@@ -8,6 +8,8 @@ This module provides utility functions.
 import platform
 from base64 import b64encode
 from typing import Union, AnyStr, List
+from .const import DEFAULT_MAX_RETRY_LIMIT
+from .exceptions import MaxRetriedException
 from .__version__ import __version__
 
 
@@ -87,3 +89,64 @@ def default_headers():
     """
 
     return make_headers(keep_alive=True)
+
+
+class SingletonMeta(type):
+    _instance = {}
+
+    def __call__(cls, *args, **kwargs):
+        if cls not in cls._instance:
+            cls._instance[cls] = super(SingletonMeta, cls).__call__(*args, **kwargs)
+
+        return cls._instance[cls]
+
+
+class Retry(metaclass=SingletonMeta):
+
+    _tasks = {}
+
+    def do(self, obj, exception, *args, **kwargs):
+        if obj not in self._tasks:
+            self._tasks[obj] = Task(obj, DEFAULT_MAX_RETRY_LIMIT, exception, *args, **kwargs)
+
+        while self._tasks[obj].times > 0:
+            result = self._tasks[obj].retry()
+            if result != 0:
+                return result
+
+        raise MaxRetriedException(f"Max retries exceeded with {obj!r}")
+
+
+class Task:
+
+    def __init__(self, task, times, exception, *args, **kwargs):
+        self.task = task
+        self.times = times
+        self.exception = exception
+        self.args = args
+        self.kwargs = kwargs
+
+    def retry(self):
+        self.times -= 1
+        try:
+            return self.task(*self.args, **self.kwargs)
+        except self.exception:
+            return 0
+
+
+def t(*args, **kwargs):
+    print(args, kwargs)
+    raise ValueError("123")
+
+def t2():
+    print(2)
+
+
+if __name__ == '__main__':
+    retry = Retry()
+    retry.do(t, ValueError, a1=1, a2=2)
+    # retry = Retry()
+    # retry.do(t, TypeError, a1=1, a2=2)
+    # retry.do(t2, RuntimeError)
+    # r = t2()
+    # print(r)

@@ -37,6 +37,7 @@ class Request:
             cookies: typing.Union[typing.Dict[typing.AnyStr, typing.AnyStr], CookieJar] = None,
             auth: typing.Tuple = None,
             json: typing.Dict[typing.AnyStr, typing.AnyStr] = None,
+            timeout: float = None,
     ):
         self.method = method
         self.url = url
@@ -46,6 +47,7 @@ class Request:
         self.cookies = cookies
         self.auth = auth
         self.json = json
+        self.timeout = timeout
 
     def __repr__(self):
 
@@ -56,14 +58,14 @@ class Request:
         Make a ready request to send.
         :return:
         """
-        method = self.ready_method()
-        schema, url = self.ready_url()
-        params = self.ready_params()
-        headers = self.ready_headers()
-        data = self.ready_data()
-        cookies = self.ready_cookies()
-        auth = self.ready_auth()
-        _json = self.ready_json()
+        method = self.__ready_method()
+        schema, url = self.__ready_url()
+        params = self.__ready_params()
+        headers = self.__ready_headers()
+        data = self.__ready_data()
+        cookies = self.__ready_cookies()
+        auth = self.__ready_auth()
+        _json = self.__ready_json()
 
         if schema == "http":
             req = HttpRequest()
@@ -75,7 +77,8 @@ class Request:
                 headers=headers,
                 cookies=cookies,
                 auth=auth,
-                json=_json
+                json=_json,
+                timeout=self.timeout,
             )
             return req
         elif schema == "https":
@@ -94,7 +97,7 @@ class Request:
         else:
             raise NotAllowedScheme(f"Schema: {schema} not allowed.")
 
-    def ready_method(self):
+    def __ready_method(self):
         """
         Ready request method and check request method whether allow used.
         :return:
@@ -114,7 +117,7 @@ class Request:
 
         return method
 
-    def ready_url(self):
+    def __ready_url(self):
         """
         Ready http url and check url whether valid.
         :return:
@@ -142,7 +145,7 @@ class Request:
 
         return parse.scheme, url
 
-    def ready_params(self):
+    def __ready_params(self):
         """
         Ready params.
         :return:
@@ -156,7 +159,7 @@ class Request:
 
         return params
 
-    def ready_headers(self):
+    def __ready_headers(self):
         """
         Ready http headers.
         :return:
@@ -177,7 +180,7 @@ class Request:
 
         return headers
 
-    def ready_data(self):
+    def __ready_data(self):
         """
         Ready form data.
         :return:
@@ -186,7 +189,7 @@ class Request:
 
         return data
 
-    def ready_cookies(self):
+    def __ready_cookies(self):
         """
         Todo: Ready http cookies.
         :return:
@@ -196,7 +199,7 @@ class Request:
 
         return cookies
 
-    def ready_auth(self):
+    def __ready_auth(self):
         """
         Todo: Ready http authenticator
         :return:
@@ -206,7 +209,7 @@ class Request:
 
         return auth
 
-    def ready_json(self):
+    def __ready_json(self):
         """
         Todo: Ready post json.
         :return:

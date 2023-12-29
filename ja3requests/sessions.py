@@ -29,12 +29,6 @@ class Session(BaseSession):
     Provides cookie persistence, connection-pooling, and configuration.
     """
 
-    def __init__(self):
-        super().__init__()
-
-        self.headers = default_headers()
-        self.max_redirects = DEFAULT_REDIRECT_LIMIT
-
     def request(
         self,
         method: AnyStr,
@@ -66,7 +60,7 @@ class Session(BaseSession):
         :return:
         """
 
-        request = Request(
+        self.Request = Request(
             method=method,
             url=url,
             params=params,
@@ -77,7 +71,7 @@ class Session(BaseSession):
             json=json,
         )
 
-        req = request.request()
+        req = self.Request.request()
         response = self.send(req)
 
         return response

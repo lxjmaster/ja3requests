@@ -18,12 +18,15 @@ class BaseContext(ABC):
         self._protocol = None
         self._version = None
         self._method = None
-        self._host = None
+        self._destination_address = None
         self._path = None
+        self._port = None
         self._headers = None
         self._body = None
         self._start_line = None
         self._message = None
+        self._source_address = None
+        self._timeout = None
 
     @property
     def protocol(self):
@@ -77,14 +80,14 @@ class BaseContext(ABC):
         self._method = attr
 
     @property
-    def host(self) -> typing.AnyStr:
+    def destination_address(self) -> typing.AnyStr:
 
-        return self._host
+        return self._destination_address
 
-    @host.setter
-    def host(self, attr: typing.AnyStr):
+    @destination_address.setter
+    def destination_address(self, attr: typing.AnyStr):
 
-        self._host = attr
+        self._destination_address = attr
 
     @property
     def path(self) -> typing.AnyStr:
@@ -95,6 +98,16 @@ class BaseContext(ABC):
     def path(self, attr: typing.AnyStr):
 
         self._path = attr
+
+    @property
+    def port(self) -> int:
+
+        return self._port
+
+    @port.setter
+    def port(self, attr: int):
+
+        self._port = attr
 
     @property
     def start_line(self) -> typing.AnyStr:
@@ -113,7 +126,7 @@ class BaseContext(ABC):
         """
         if attr:
             parse = urlparse(attr)
-            self.host = parse.hostname
+            self.destination_address = parse.hostname
             self.path = parse.path
             if self.path == "":
                 self.path = "/"
@@ -124,7 +137,7 @@ class BaseContext(ABC):
         self._start_line = " ".join([self.method, self.path, self.version])
 
     @property
-    def headers(self):
+    def headers(self) -> typing.AnyStr:
         """
         Headers
         :return:
@@ -132,16 +145,25 @@ class BaseContext(ABC):
         return self._headers
 
     @headers.setter
-    def headers(self, attr):
+    def headers(self, attr: typing.Dict):
         """
         Set headers
         :param attr:
         :return:
         """
         self._headers = attr
+        if self._headers:
+            if not self._headers.get("Host", None):
+                if self.destination_address:
+                    self._headers.update({
+                        "Host": self.destination_address
+                    })
+
+        headers = "\r\n".join([f"{k}: {v}" for k, v in self._headers.items()])
+        self._headers = headers
 
     @property
-    def body(self):
+    def body(self) -> typing.AnyStr:
         """
         Body
         :return:
@@ -158,15 +180,31 @@ class BaseContext(ABC):
         self._body = attr
 
     @property
-    def message(self):
+    def message(self) -> typing.AnyStr:
         """
         Message
         :return:
         """
+        message = ""
+        if self._message:
+            message = self._message
+        else:
+            if self.start_line:
+                message += self.start_line
+            if self.headers:
+                message += "\r\n"
+                message += self.headers
+
+            message += "\r\n\r\n"
+            if self.body:
+                message += self.body
+
+        self._message = message
+
         return self._message
 
     @message.setter
-    def message(self, attr):
+    def message(self, attr: typing.AnyStr):
         """
         Set message
         :param attr:
@@ -174,13 +212,35 @@ class BaseContext(ABC):
         """
         self._message = attr
 
+    @property
+    def source_address(self):
+
+        return self._source_address
+
+    @source_address.setter
+    def source_address(self, attr):
+
+        self._source_address = attr
+
+    @property
+    def timeout(self):
+
+        return self._timeout
+
+    @timeout.setter
+    def timeout(self, attr):
+
+        self._timeout = attr
+
     @abstractmethod
     def set_payload(
         self,
         method,
         url,
+        port,
         data,
         headers,
+        timeout,
     ):
         """
         Set context payload

@@ -71,6 +71,12 @@ class InvalidResponseHeaders(RequestException, ValueError):
     """
 
 
+class MaxRetriedException(RuntimeError):
+    """
+    Raised it when retried
+    """
+
+
 class IssueError(ValueError):
     """
     This situation may not be considered yet, please issue it
