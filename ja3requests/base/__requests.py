@@ -1,11 +1,10 @@
 from abc import ABC, abstractmethod
-import typing
 from http.cookiejar import CookieJar
 from ja3requests.const import DEFAULT_HTTP_SCHEME, DEFAULT_HTTP_PORT
-from ja3requests.base import BaseContext
 from urllib.parse import urlparse, urlencode
 from ja3requests.exceptions import InvalidParams, InvalidData
 from ja3requests.utils import default_headers
+from typing import Any, AnyStr, List, Dict, Tuple, Union
 
 
 class BaseRequest(ABC):
@@ -25,11 +24,11 @@ class BaseRequest(ABC):
         self._timeout = None
 
     @property
-    def schema(self) -> typing.AnyStr:
+    def schema(self) -> AnyStr:
         return self._schema
 
     @schema.setter
-    def schema(self, attr: typing.AnyStr):
+    def schema(self, attr: AnyStr):
         self._schema = attr if attr else DEFAULT_HTTP_SCHEME
 
     @property
@@ -41,19 +40,19 @@ class BaseRequest(ABC):
         self._port = attr if attr else DEFAULT_HTTP_PORT
 
     @property
-    def method(self) -> typing.AnyStr:
+    def method(self) -> AnyStr:
         return self._method
 
     @method.setter
-    def method(self, attr: typing.AnyStr):
+    def method(self, attr: AnyStr):
         self._method = attr.upper()
 
     @property
-    def url(self) -> typing.AnyStr:
+    def url(self) -> AnyStr:
         return self._url
 
     @url.setter
-    def url(self, attr: typing.AnyStr):
+    def url(self, attr: AnyStr):
         self._url = attr
         if self._url:
             parse = urlparse(self._url)
@@ -72,11 +71,11 @@ class BaseRequest(ABC):
         return self._params
 
     @params.setter
-    def params(self, attr: typing.Union[
-        typing.Dict[typing.AnyStr, typing.Any],
-        typing.List[typing.Tuple[typing.Any, typing.Any]],
-        typing.Tuple[typing.Tuple[typing.Any, typing.Any]],
-        typing.AnyStr]
+    def params(self, attr: Union[
+        Dict[AnyStr, Any],
+        List[Tuple[Any, Any]],
+        Tuple[Tuple[Any, Any]],
+        AnyStr]
     ):
         self._params = attr
         if self._params:
@@ -105,11 +104,11 @@ class BaseRequest(ABC):
         return self._data
 
     @data.setter
-    def data(self, attr: typing.Union[
-        typing.Dict[typing.AnyStr, typing.Any],
-        typing.List[typing.Tuple[typing.AnyStr, typing.Any]],
-        typing.Tuple[typing.Tuple[typing.AnyStr, typing.Any]],
-        typing.AnyStr]
+    def data(self, attr: Union[
+        Dict[AnyStr, Any],
+        List[Tuple[AnyStr, Any]],
+        Tuple[Tuple[AnyStr, Any]],
+        AnyStr]
     ):
 
         self._data = attr
@@ -140,7 +139,7 @@ class BaseRequest(ABC):
         return self._headers if self._headers else default_headers()
 
     @headers.setter
-    def headers(self, attr: typing.Dict[typing.AnyStr, typing.AnyStr]):
+    def headers(self, attr: Dict[AnyStr, AnyStr]):
 
         self._headers = attr
         if not self._headers:
@@ -161,7 +160,7 @@ class BaseRequest(ABC):
         return self._cookies
 
     @cookies.setter
-    def cookies(self, attr: typing.Union[typing.Dict[typing.AnyStr, typing.AnyStr], CookieJar]):
+    def cookies(self, attr: Union[Dict[AnyStr, AnyStr], CookieJar]):
 
         self._cookies = attr
 
@@ -171,7 +170,7 @@ class BaseRequest(ABC):
         return self._auth
 
     @auth.setter
-    def auth(self, attr: typing.Tuple):
+    def auth(self, attr: Tuple):
 
         self._auth = attr
 
@@ -181,7 +180,7 @@ class BaseRequest(ABC):
         return self._json
 
     @json.setter
-    def json(self, attr: typing.Dict[typing.AnyStr, typing.AnyStr]):
+    def json(self, attr: Dict[AnyStr, AnyStr]):
 
         self._json = attr
 
@@ -197,24 +196,24 @@ class BaseRequest(ABC):
 
     def set_payload(
         self,
-        method: typing.AnyStr,
-        url: typing.AnyStr,
-        params: typing.Union[
-            typing.Dict[typing.AnyStr, typing.Any],
-            typing.List[typing.Tuple[typing.Any, typing.Any]],
-            typing.Tuple[typing.Tuple[typing.Any, typing.Any]],
-            typing.AnyStr,
+        method: AnyStr,
+        url: AnyStr,
+        params: Union[
+            Dict[AnyStr, Any],
+            List[Tuple[Any, Any]],
+            Tuple[Tuple[Any, Any]],
+            AnyStr,
         ] = None,
-        data: typing.Union[
-            typing.Dict[typing.AnyStr, typing.Any],
-            typing.List[typing.Tuple[typing.AnyStr, typing.Any]],
-            typing.Tuple[typing.Tuple[typing.AnyStr, typing.Any]],
-            typing.AnyStr
+        data: Union[
+            Dict[AnyStr, Any],
+            List[Tuple[AnyStr, Any]],
+            Tuple[Tuple[AnyStr, Any]],
+            AnyStr
         ] = None,
-        headers: typing.Dict[typing.AnyStr, typing.AnyStr] = None,
-        cookies: typing.Union[typing.Dict[typing.AnyStr, typing.AnyStr], CookieJar] = None,
-        auth: typing.Tuple = None,
-        json: typing.Dict[typing.AnyStr, typing.AnyStr] = None,
+        headers: Dict[AnyStr, AnyStr] = None,
+        cookies: Union[Dict[AnyStr, AnyStr], CookieJar] = None,
+        auth: Tuple = None,
+        json: Dict[AnyStr, AnyStr] = None,
         timeout: float = None,
     ):
         self.method = method
@@ -228,7 +227,7 @@ class BaseRequest(ABC):
         self.timeout = timeout
 
     # @staticmethod
-    # def parse_proxy(proxy: typing.AnyStr = None):
+    # def parse_proxy(proxy: AnyStr = None):
     #     if proxy is None:
     #         return None, None, None, None
     #

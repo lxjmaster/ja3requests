@@ -1,17 +1,17 @@
 import typing
 import warnings
 from http.cookiejar import CookieJar
-from urllib.parse import urlparse, urlencode
+from urllib.parse import urlparse, parse_qs
 from ja3requests.utils import default_headers
 from ja3requests.exceptions import (
     NotAllowedRequestMethod,
     MissingScheme,
     NotAllowedScheme,
     InvalidParams,
+    InvalidData,
 )
 from .http import HttpRequest
 from .https import HttpsRequest
-from ja3requests.contexts.context import HTTPContext, HTTPSContext
 
 
 class Request:
@@ -31,7 +31,7 @@ class Request:
                 typing.Dict[typing.AnyStr, typing.Any],
                 typing.List,
                 typing.Tuple,
-                typing.ByteString
+                typing.AnyStr
             ] = None,
             headers: typing.Dict[typing.AnyStr, typing.AnyStr] = None,
             cookies: typing.Union[typing.Dict[typing.AnyStr, typing.AnyStr], CookieJar] = None,
@@ -186,6 +186,34 @@ class Request:
         :return:
         """
         data = self.data
+        if data:
+            if self.json:
+                raise InvalidData("Only one of the data and json parameters can be used at the same time")
+
+            if self.method.upper() not in ["POST", "PUT"]:
+                warnings.warn(
+                    f"The {self.method.upper()} method does not process data."
+                    f"Maybe you request the POST/PUT method?",
+                    RuntimeWarning,
+                )
+
+            if not isinstance(data, (dict, list, tuple, bytes, str)):
+                raise InvalidData(f"Invalid data: {data!r}")
+
+            if isinstance(data, (list, tuple)):
+                if len(data) < 1:
+                    raise InvalidData(f"Invalid data: {data!r}. The data parameter of iterable type is empty")
+
+                if not all(list(map(lambda x: isinstance(x, tuple), data))):
+                    raise InvalidData(
+                        f"Invalid data: {data!r}. The data parameter item of iterable type must be a tuple"
+                    )
+
+            if isinstance(data, (bytes, str)):
+                try:
+                    parse_qs(data)
+                except AttributeError:
+                    raise InvalidData(f"Invalid data: {data!r}")
 
         return data
 
@@ -211,10 +239,23 @@ class Request:
 
     def __ready_json(self):
         """
-        Todo: Ready post json.
+        Ready post json.
         :return:
         """
 
         _json = self.json
+        if _json:
+            if self.data:
+                raise ValueError("Only one of the data and json parameters can be used at the same time")
+
+            if self.method.upper() not in ["POST", "PUT"]:
+                warnings.warn(
+                    f"The {self.method.upper()} method does not process data."
+                    f"Maybe you request the POST/PUT method?",
+                    RuntimeWarning,
+                )
+
+            if not isinstance(self.json, (dict, str, bytes)):
+                raise ValueError(f"Invalid json: {self.json!r}")
 
         return _json

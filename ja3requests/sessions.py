@@ -15,6 +15,7 @@ from .utils import default_headers
 from .const import DEFAULT_REDIRECT_LIMIT
 from ja3requests.base import BaseRequest
 from ja3requests.requests.request import Request
+from urllib.parse import parse_qs
 
 # Preferred clock, based on which one is more accurate on a given system.
 if sys.platform == "win32":
@@ -34,7 +35,7 @@ class Session(BaseSession):
         method: AnyStr,
         url: AnyStr,
         params: Union[Dict[AnyStr, Any], ByteString] = None,
-        data: Union[Dict[AnyStr, Any], List, Tuple, ByteString] = None,
+        data: Union[Dict[Any, Any], List[Tuple[Any, Any]], Tuple[Tuple[Any, Any]], AnyStr] = None,
         headers: Dict[AnyStr, AnyStr] = None,
         cookies: Union[Dict[AnyStr, AnyStr], CookieJar] = None,
         # files = None,

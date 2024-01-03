@@ -27,7 +27,8 @@ class HttpRequest(BaseRequest):
             self.port,
             self.data,
             self.headers,
-            self.timeout
+            self.timeout,
+            self.json
         )
         sock = self.create_connection(context)
         sock.send()

@@ -32,6 +32,7 @@ class HTTPContext(BaseContext):
         data,
         headers,
         timeout,
+        json,
     ):
         """
         Set context payload
@@ -40,9 +41,10 @@ class HTTPContext(BaseContext):
         self.method = method
         self.start_line = url
         self.port = port
+        self.data = data
+        self.json = json
         self.headers = headers
         self.timeout = timeout
-        # self.body = request.body
 
 
 class HTTPSContext(BaseContext):

@@ -5,8 +5,9 @@ ja3Requests.contexts.base
 Basic Context
 """
 from abc import ABC, abstractmethod
-from urllib.parse import urlparse
-import typing
+from urllib.parse import urlparse, urlencode
+from typing import AnyStr, Dict
+from json import dumps
 
 
 class BaseContext(ABC):
@@ -22,6 +23,8 @@ class BaseContext(ABC):
         self._path = None
         self._port = None
         self._headers = None
+        self._data = None
+        self._json = None
         self._body = None
         self._start_line = None
         self._message = None
@@ -63,7 +66,7 @@ class BaseContext(ABC):
         self._version = attr
 
     @property
-    def method(self) -> typing.AnyStr:
+    def method(self) -> AnyStr:
         """
         Method
         :return:
@@ -71,7 +74,7 @@ class BaseContext(ABC):
         return self._method
 
     @method.setter
-    def method(self, attr: typing.AnyStr):
+    def method(self, attr: AnyStr):
         """
         Set method
         :param attr:
@@ -80,22 +83,22 @@ class BaseContext(ABC):
         self._method = attr
 
     @property
-    def destination_address(self) -> typing.AnyStr:
+    def destination_address(self) -> AnyStr:
 
         return self._destination_address
 
     @destination_address.setter
-    def destination_address(self, attr: typing.AnyStr):
+    def destination_address(self, attr: AnyStr):
 
         self._destination_address = attr
 
     @property
-    def path(self) -> typing.AnyStr:
+    def path(self) -> AnyStr:
 
         return self._path
 
     @path.setter
-    def path(self, attr: typing.AnyStr):
+    def path(self, attr: AnyStr):
 
         self._path = attr
 
@@ -110,7 +113,7 @@ class BaseContext(ABC):
         self._port = attr
 
     @property
-    def start_line(self) -> typing.AnyStr:
+    def start_line(self) -> AnyStr:
         """
         Start line
         :return:
@@ -118,7 +121,7 @@ class BaseContext(ABC):
         return self._start_line if self._start_line else " ".join([self.method, self.path, self.version])
 
     @start_line.setter
-    def start_line(self, attr: typing.AnyStr):
+    def start_line(self, attr: AnyStr):
         """
         Set start line
         :param attr:
@@ -137,7 +140,7 @@ class BaseContext(ABC):
         self._start_line = " ".join([self.method, self.path, self.version])
 
     @property
-    def headers(self) -> typing.AnyStr:
+    def headers(self) -> AnyStr:
         """
         Headers
         :return:
@@ -145,7 +148,7 @@ class BaseContext(ABC):
         return self._headers
 
     @headers.setter
-    def headers(self, attr: typing.Dict):
+    def headers(self, attr: Dict):
         """
         Set headers
         :param attr:
@@ -159,15 +162,76 @@ class BaseContext(ABC):
                         "Host": self.destination_address
                     })
 
+            if self.method == "POST" or self.method == "PUT":
+                if not self._headers.get("Content-Type", None):
+                    if self.data:
+                        self._headers.update({
+                            "Content-Type": "application/x-www-form-urlencoded"
+                        })
+
+                    if self.json:
+                        self._headers.update({
+                            "Content-Type": "application/json"
+                        })
+
+                if not self._headers.get("Content-Type", None):
+                    self._headers.update({
+                        "Content-Type": "application/x-www-form-urlencoded"
+                    })
+
+                self._headers.update({
+                    "Content-Length": len(self.body)
+                })
+
+
         headers = "\r\n".join([f"{k}: {v}" for k, v in self._headers.items()])
         self._headers = headers
 
     @property
-    def body(self) -> typing.AnyStr:
+    def data(self) -> AnyStr:
+
+        return self._data
+
+    @data.setter
+    def data(self, attr):
+
+        data = attr
+        if isinstance(data, (dict, list, tuple)):
+            data = urlencode(data)
+        elif isinstance(data, bytes):
+            data = data.decode()
+
+        self._data = data
+
+    @property
+    def json(self) -> AnyStr:
+
+        return self._json
+
+    @json.setter
+    def json(self, attr):
+
+        json = attr
+        if isinstance(json, dict):
+            json = dumps(json)
+        elif isinstance(json, bytes):
+            json = json.decode()
+
+        self._json = json
+
+    @property
+    def body(self) -> AnyStr:
         """
         Body
         :return:
         """
+        if not self._body:
+            if self.data:
+                self._body = self.data
+
+            if self.json:
+                self._body = self.json
+
         return self._body
 
     @body.setter
@@ -180,7 +244,7 @@ class BaseContext(ABC):
         self._body = attr
 
     @property
-    def message(self) -> typing.AnyStr:
+    def message(self) -> AnyStr:
         """
         Message
         :return:
@@ -204,7 +268,7 @@ class BaseContext(ABC):
         return self._message
 
     @message.setter
-    def message(self, attr: typing.AnyStr):
+    def message(self, attr: AnyStr):
         """
         Set message
         :param attr:
@@ -241,6 +305,7 @@ class BaseContext(ABC):
         data,
         headers,
         timeout,
+        json
     ):
         """
         Set context payload

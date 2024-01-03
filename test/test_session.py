@@ -29,6 +29,22 @@ class TestSession(unittest.TestCase):
         print(response.headers)
         print(response.text)
 
+    def test_request1(self):
+        response = self.session.get("http://127.0.0.1:8080/test1?page=1&limit=100", headers=self.headers)
+        # response = requests.get("http://127.0.0.1:8000/")
+        print(response)
+        print(response.status_code)
+        print(response.headers)
+        print(response.text)
+
+    def test_request2(self):
+        response = self.session.get("http://127.0.0.1:8080/test2/hello/9", headers=self.headers)
+        # response = requests.get("http://127.0.0.1:8000/")
+        print(response)
+        print(response.status_code)
+        print(response.headers)
+        print(response.text)
+
     def test_post_data(self):
 
         data = {
@@ -39,7 +55,11 @@ class TestSession(unittest.TestCase):
         print(response)
         print(response.status_code)
         print(response.headers)
-        print(response.content)
+        print(response.json())
+
+    def test_r(self):
+        response = requests.post("https://baidu.com", data={"a": 1})
+        print(response.text)
 
 
 if __name__ == '__main__':
