@@ -77,6 +77,7 @@ class Request:
                 url=url,
                 params=params,
                 data=data,
+                files=files,
                 headers=headers,
                 cookies=cookies,
                 auth=auth,

@@ -5,6 +5,7 @@ from urllib.parse import urlparse, urlencode
 from ja3requests.exceptions import InvalidParams, InvalidData
 from ja3requests.utils import default_headers
 from typing import Any, AnyStr, List, Dict, Tuple, Union
+from io import IOBase
 
 
 class BaseRequest(ABC):
@@ -17,6 +18,7 @@ class BaseRequest(ABC):
         self._url = None
         self._params = None
         self._data = None
+        self._files = None
         self._headers = None
         self._cookies = None
         self._auth = None
@@ -134,6 +136,16 @@ class BaseRequest(ABC):
             self.headers["Content-Length"] = len(self._data)
 
     @property
+    def files(self):
+
+        return self._files
+
+    @files.setter
+    def files(self, attr):
+
+        self._files = attr
+
+    @property
     def headers(self):
 
         return self._headers if self._headers else default_headers()
@@ -210,6 +222,7 @@ class BaseRequest(ABC):
             Tuple[Tuple[AnyStr, Any]],
             AnyStr
         ] = None,
+        files: Union[List[IOBase], IOBase] = None,
         headers: Dict[AnyStr, AnyStr] = None,
         cookies: Union[Dict[AnyStr, AnyStr], CookieJar] = None,
         auth: Tuple = None,
@@ -220,6 +233,7 @@ class BaseRequest(ABC):
         self.url = url
         self.params = params
         self.data = data
+        self.files = files
         self.headers = headers
         self.cookies = cookies
         self.auth = auth
