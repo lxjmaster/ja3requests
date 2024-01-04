@@ -1,4 +1,3 @@
-import typing
 import warnings
 from http.cookiejar import CookieJar
 from urllib.parse import urlparse, parse_qs
@@ -12,31 +11,33 @@ from ja3requests.exceptions import (
 )
 from .http import HttpRequest
 from .https import HttpsRequest
+from io import IOBase
+from typing import Any, AnyStr, List, Dict, Tuple, Union
 
 
 class Request:
 
     def __init__(
             self,
-            method: typing.AnyStr,
-            url: typing.AnyStr,
-            params: typing.Union[
-                typing.Dict[typing.AnyStr, typing.Any],
-                typing.List[typing.Tuple[typing.Any, typing.Any]],
-                typing.Tuple[typing.Tuple[typing.Any, typing.Any]],
-                typing.ByteString,
-                typing.AnyStr,
+            method: AnyStr,
+            url: AnyStr,
+            params: Union[
+                Dict[AnyStr, Any],
+                List[Tuple[Any, Any]],
+                Tuple[Tuple[Any, Any]],
+                AnyStr,
             ] = None,
-            data: typing.Union[
-                typing.Dict[typing.AnyStr, typing.Any],
-                typing.List,
-                typing.Tuple,
-                typing.AnyStr
+            data: Union[
+                Dict[AnyStr, Any],
+                List,
+                Tuple,
+                AnyStr
             ] = None,
-            headers: typing.Dict[typing.AnyStr, typing.AnyStr] = None,
-            cookies: typing.Union[typing.Dict[typing.AnyStr, typing.AnyStr], CookieJar] = None,
-            auth: typing.Tuple = None,
-            json: typing.Dict[typing.AnyStr, typing.AnyStr] = None,
+            headers: Dict[AnyStr, AnyStr] = None,
+            cookies: Union[Dict[AnyStr, AnyStr], CookieJar] = None,
+            files: Union[List[IOBase, ...], IOBase] = None,
+            auth: Tuple = None,
+            json: Dict[AnyStr, AnyStr] = None,
             timeout: float = None,
     ):
         self.method = method
@@ -45,6 +46,7 @@ class Request:
         self.data = data
         self.headers = headers
         self.cookies = cookies
+        self.files = files
         self.auth = auth
         self.json = json
         self.timeout = timeout
@@ -61,11 +63,12 @@ class Request:
         method = self.__ready_method()
         schema, url = self.__ready_url()
         params = self.__ready_params()
-        headers = self.__ready_headers()
         data = self.__ready_data()
+        _json = self.__ready_json()
+        files = self.__ready_files()
+        headers = self.__ready_headers()
         cookies = self.__ready_cookies()
         auth = self.__ready_auth()
-        _json = self.__ready_json()
 
         if schema == "http":
             req = HttpRequest()
@@ -258,4 +261,33 @@ class Request:
             if not isinstance(self.json, (dict, str, bytes)):
                 raise ValueError(f"Invalid json: {self.json!r}")
 
+            for name, value in self.headers.items():
+                if name.title() == "Content-Type" and value == "multipart/form-data":
+                    warnings.warn(
+                        "When sending a json data, the Content-Type header should be set to application/json",
+                        RuntimeWarning,
+                    )
+                break
+
         return _json
+
+    def __ready_files(self):
+        """
+        Ready post file
+        :return:
+        """
+        files = self.files
+        if isinstance(files, list):
+            for file in files:
+                if not isinstance(file, IOBase):
+                    raise AttributeError("The files parameter must be an IO object")
+                else:
+                    if not file.readable():
+                        raise AttributeError("IO object is not readable")
+        elif isinstance(files, IOBase):
+            if not files.readable():
+                raise AttributeError("IO object is not readable")
+        else:
+            raise AttributeError("The files parameter must be an IO object")
+
+        return files

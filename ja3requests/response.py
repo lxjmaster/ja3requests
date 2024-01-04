@@ -175,8 +175,9 @@ class Response(BaseResponse):
     <Response [200]>
     """
 
-    def __init__(self, response=None):
+    def __init__(self, request=None, response=None):
         super().__init__()
+        self.request = request
         self.response = response
 
     def __repr__(self):

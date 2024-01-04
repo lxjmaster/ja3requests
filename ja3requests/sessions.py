@@ -16,6 +16,7 @@ from .const import DEFAULT_REDIRECT_LIMIT
 from ja3requests.base import BaseRequest
 from ja3requests.requests.request import Request
 from urllib.parse import parse_qs
+from io import IOBase
 
 # Preferred clock, based on which one is more accurate on a given system.
 if sys.platform == "win32":
@@ -38,7 +39,7 @@ class Session(BaseSession):
         data: Union[Dict[Any, Any], List[Tuple[Any, Any]], Tuple[Tuple[Any, Any]], AnyStr] = None,
         headers: Dict[AnyStr, AnyStr] = None,
         cookies: Union[Dict[AnyStr, AnyStr], CookieJar] = None,
-        # files = None,
+        files: Union[List[IOBase, ...], IOBase] = None,
         auth: Tuple = None,
         timeout: float = None,
         allow_redirects: bool = True,
@@ -53,6 +54,7 @@ class Session(BaseSession):
         :param data:
         :param headers:
         :param cookies:
+        :param files:
         :param auth:
         :param timeout:
         :param allow_redirects:
@@ -68,6 +70,7 @@ class Session(BaseSession):
             data=data,
             headers=headers,
             cookies=cookies,
+            files=files,
             auth=auth,
             json=json,
         )
@@ -160,6 +163,6 @@ class Session(BaseSession):
         """
 
         rep = request.send()
-        response = Response(rep)
+        response = Response(request, rep)
 
         return response

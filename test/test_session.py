@@ -1,6 +1,7 @@
 import unittest
 from ja3requests.sessions import Session
 import requests
+from io import BufferedRandom, TextIOWrapper, BytesIO, IOBase
 
 
 class TestSession(unittest.TestCase):
@@ -49,9 +50,14 @@ class TestSession(unittest.TestCase):
 
         data = {
             "username": "admin",
-            "password": "admin"
+            "password": "admin",
         }
-        response = self.session.post("http://127.0.0.1:8080/login", data=data)
+        headers = {
+            "content-type": "multipart/form-data"
+        }
+        response = self.session.post("http://127.0.0.1:8080/login", data=data, headers=headers)
+        # response = requests.post("http://127.0.0.1:8080/login", data=data)
+
         print(response)
         print(response.status_code)
         print(response.headers)

@@ -5,7 +5,7 @@ ja3Requests.contexts.base
 Basic Context
 """
 from abc import ABC, abstractmethod
-from urllib.parse import urlparse, urlencode
+from urllib.parse import urlparse, urlencode, parse_qsl
 from typing import AnyStr, Dict
 from json import dumps
 
@@ -25,6 +25,7 @@ class BaseContext(ABC):
         self._headers = None
         self._data = None
         self._json = None
+        self._file = None
         self._body = None
         self._start_line = None
         self._message = None
@@ -140,7 +141,7 @@ class BaseContext(ABC):
         self._start_line = " ".join([self.method, self.path, self.version])
 
     @property
-    def headers(self) -> AnyStr:
+    def headers(self) -> Dict:
         """
         Headers
         :return:
@@ -154,37 +155,37 @@ class BaseContext(ABC):
         :param attr:
         :return:
         """
-        self._headers = attr
-        if self._headers:
-            if not self._headers.get("Host", None):
+        headers = attr
+        if headers:
+            if not headers.get("Host", None):
                 if self.destination_address:
-                    self._headers.update({
+                    headers.update({
                         "Host": self.destination_address
                     })
 
             if self.method == "POST" or self.method == "PUT":
-                if not self._headers.get("Content-Type", None):
+                if not headers.get("Content-Type", None):
                     if self.data:
-                        self._headers.update({
+                        headers.update({
                             "Content-Type": "application/x-www-form-urlencoded"
                         })
 
                     if self.json:
-                        self._headers.update({
+                        headers.update({
                             "Content-Type": "application/json"
                         })
+                else:
+                    content_type = headers["Content-Type"]
+                    if "multipart/form-data" in content_type.lower():
+                        headers.update({
+                            "Content-Type": 'multipart/form-data;boundary="boundary"'
+                        })
 
-                if not self._headers.get("Content-Type", None):
-                    self._headers.update({
+                if not headers.get("Content-Type", None):
+                    headers.update({
                         "Content-Type": "application/x-www-form-urlencoded"
                     })
 
-                self._headers.update({
-                    "Content-Length": len(self.body)
-                })
-
-
-        headers = "\r\n".join([f"{k}: {v}" for k, v in self._headers.items()])
         self._headers = headers
 
     @property
@@ -220,17 +221,21 @@ class BaseContext(ABC):
         self._json = json
 
     @property
+    def file(self):
+
+        return self._file
+
+    @file.setter
+    def file(self, attr):
+
+        self.file = attr
+
+    @property
     def body(self) -> AnyStr:
         """
         Body
         :return:
         """
-        if not self._body:
-            if self.data:
-                self._body = self.data
-
-            if self.json:
-                self._body = self.json
 
         return self._body
 
@@ -241,7 +246,22 @@ class BaseContext(ABC):
         :param attr:
         :return:
         """
-        self._body = attr
+        body = attr
+        if self.headers.get("Content-Type", "") == 'multipart/form-data;boundary="boundary"':
+            body_list = parse_qsl(body)
+            form_data = "--boundary"
+            for name, value in body_list:
+                content = f'\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n--boundary'
+                form_data += content
+
+            form_data += "--"
+            body = form_data
+
+        self.headers.update({
+            "Content-Length": len(body)
+        })
+
+        self._body = body
 
     @property
     def message(self) -> AnyStr:
@@ -249,6 +269,14 @@ class BaseContext(ABC):
         Message
         :return:
         """
+        if self.data:
+            self.body = self.data
+        if self.json:
+            self.headers.update({
+                "Content-Type": "application/json"
+            })
+            self.body = self.json
+
         message = ""
         if self._message:
             message = self._message
@@ -257,9 +285,10 @@ class BaseContext(ABC):
                 message += self.start_line
             if self.headers:
                 message += "\r\n"
-                message += self.headers
+                message += "\r\n".join([f"{k}: {v}" for k, v in self.headers.items()])
 
             message += "\r\n\r\n"
+
             if self.body:
                 message += self.body
 
