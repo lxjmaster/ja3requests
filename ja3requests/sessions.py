@@ -80,15 +80,17 @@ class Session(BaseSession):
 
         return response
 
-    def get(self, url, **kwargs):
+    def get(self, url, params=None, headers=None, **kwargs):
         """
         Send a GET request.
         :param url:
+        :param params:
+        :param headers:
         :param kwargs:
         :return:
         """
 
-        return self.request("GET", url, **kwargs)
+        return self.request("GET", url, params=params, headers=headers, **kwargs)
 
     def options(self, url, **kwargs):
         """
@@ -111,45 +113,43 @@ class Session(BaseSession):
         kwargs.setdefault("allow_redirects", False)
         return self.request("HEAD", url, **kwargs)
 
-    def post(self, url, data=None, json=None, **kwargs):
+    def post(self, url, data=None, json=None, headers=None, **kwargs):
         """
         Send a POST request.
         :param url:
         :param data:
         :param json:
+        :param headers:
         :param kwargs:
         :return:
         """
 
-        return self.request("POST", url, data=data, json=json, **kwargs)
+        return self.request("POST", url, data=data, json=json, headers=headers, **kwargs)
 
-    def put(self, url, data=None, **kwargs):
+    def put(self, url, **kwargs):
         """
         Send a PUT request.
         :param url:
-        :param data:
         :param kwargs:
         :return:
         """
 
-        return self.request("PUT", url, data=data, **kwargs)
+        return self.request("PUT", url, **kwargs)
 
-    def patch(self, url, data=None, **kwargs):
+    def patch(self, url, **kwargs):
         """
         Send a PATCH request.
         :param url:
-        :param data:
         :param kwargs:
         :return:
         """
 
-        return self.request("PATCH", url, data=data, **kwargs)
+        return self.request("PATCH", url, **kwargs)
 
-    def delete(self, url, data=None, **kwargs):
+    def delete(self, url, **kwargs):
         """
         Send a DELETE request.
         :param url:
-        :param data:
         :param kwargs:
         :return:
         """

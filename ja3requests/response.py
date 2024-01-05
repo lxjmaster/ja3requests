@@ -179,6 +179,7 @@ class Response(BaseResponse):
         super().__init__()
         self.request = request
         self.response = response
+        self.body = self.response.read_body() if self.response else b""
 
     def __repr__(self):
         return f"<Response [{self.status_code}]>"
@@ -202,18 +203,6 @@ class Response(BaseResponse):
             headers.append({name.strip(): value.strip()})
 
         return headers
-
-    @property
-    def body(self):
-        """
-        Response Body.
-        :return:
-        """
-        body = b""
-        if self.response is None:
-            return body
-
-        return self.response.read_body()
 
     @property
     def status_code(self):

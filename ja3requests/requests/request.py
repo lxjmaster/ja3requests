@@ -280,36 +280,37 @@ class Request:
         :return:
         """
         files = self.files
-        if not isinstance(files, dict):
-            raise AttributeError("The files parameter is invalid, reference structure: {'file': FileObject}")
+        if files:
+            if not isinstance(files, dict):
+                raise AttributeError("The files parameter is invalid, reference structure: {'file': FileObject}")
 
-        for file_name, file in files.items():
-            if isinstance(file, list):
-                for f in file:
-                    if isinstance(f, (str, bytes)):
-                        if not os.path.isfile(f):
-                            raise AttributeError(f"{f} is not a file")
-                    elif isinstance(f, IOBase):
-                        if not f.readable():
-                            raise AttributeError("IO object is not readable")
-                    else:
-                        raise AttributeError("File object not supported yet")
-            elif isinstance(file, (str, bytes)):
-                if not os.path.isfile(file):
-                    raise AttributeError(f"{file} is not a file")
-            elif isinstance(file, IOBase):
-                if not file.readable():
-                    raise AttributeError("IO object is not readable")
-            else:
-                raise AttributeError("The files parameter must be an IO object")
+            for file_name, file in files.items():
+                if isinstance(file, list):
+                    for f in file:
+                        if isinstance(f, (str, bytes)):
+                            if not os.path.isfile(f):
+                                raise AttributeError(f"{f} is not a file")
+                        elif isinstance(f, IOBase):
+                            if not f.readable():
+                                raise AttributeError("IO object is not readable")
+                        else:
+                            raise AttributeError("File object not supported yet")
+                elif isinstance(file, (str, bytes)):
+                    if not os.path.isfile(file):
+                        raise AttributeError(f"{file} is not a file")
+                elif isinstance(file, IOBase):
+                    if not file.readable():
+                        raise AttributeError("IO object is not readable")
+                else:
+                    raise AttributeError("The files parameter must be an IO object")
 
-        if self.headers:
-            for name, value in self.headers.items():
-                if name.title() == "Content-Type" and value != "multipart/form-data":
-                    warnings.warn(
-                        "When sending a files data, the Content-Type header should be set to multipart/form-data",
-                        RuntimeWarning,
-                    )
-                break
+            if self.headers:
+                for name, value in self.headers.items():
+                    if name.title() == "Content-Type" and value != "multipart/form-data":
+                        warnings.warn(
+                            "When sending a files data, the Content-Type header should be set to multipart/form-data",
+                            RuntimeWarning,
+                        )
+                    break
 
         return files

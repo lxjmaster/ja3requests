@@ -87,6 +87,20 @@ class TestSession(unittest.TestCase):
         response = requests.post("https://baidu.com", data={"a": 1})
         print(response.text)
 
+    def test_proxy(self):
+
+        proxies = {
+            "http": "127.0.0.1:7890",
+            "https": "127.0.0.1:7890"
+        }
+        response = self.session.get("http://ifconfig.me")
+        print(response)
+        print(response.status_code)
+        print(response.content)
+        print(response.headers)
+        print(response.text)
+        # print(response.json())
+
 
 if __name__ == '__main__':
     unittest.main()
