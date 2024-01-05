@@ -2,6 +2,7 @@ import unittest
 from ja3requests.sessions import Session
 import requests
 from io import BufferedRandom, TextIOWrapper, BytesIO, IOBase
+import mimetypes
 
 
 class TestSession(unittest.TestCase):
@@ -55,9 +56,28 @@ class TestSession(unittest.TestCase):
         headers = {
             "content-type": "multipart/form-data"
         }
-        response = self.session.post("http://127.0.0.1:8080/login", data=data, headers=headers)
-        # response = requests.post("http://127.0.0.1:8080/login", data=data)
+        f = open("test.txt", "rb+")
 
+        response = self.session.post("http://127.0.0.1:8080/login", json=data, files={"file": f}, headers=headers)
+        # response = requests.post("http://127.0.0.1:8080/login", data=data, files={"file": f})
+
+        print(response)
+        print(response.status_code)
+        print(response.headers)
+        print(response.json())
+        f.close()
+
+    def test_post_multi_files(self):
+
+        data = {
+            "name": "test",
+            "project_type": 1
+        }
+        files = {
+            "documents": ["/Users/pledgebox/Projects/ja3requests/test/test.txt", "/Users/pledgebox/Projects/ja3requests/test/1.csv"]
+        }
+
+        response = self.session.post("http://127.0.0.1:8080/api/v1/project/create", data=data, files=files)
         print(response)
         print(response.status_code)
         print(response.headers)

@@ -30,6 +30,7 @@ class HTTPContext(BaseContext):
         url,
         port,
         data,
+        files,
         headers,
         timeout,
         json,
@@ -43,6 +44,7 @@ class HTTPContext(BaseContext):
         self.port = port
         self.data = data
         self.json = json
+        self.files = files
         self.headers = headers
         self.timeout = timeout
 

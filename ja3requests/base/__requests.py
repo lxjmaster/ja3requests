@@ -6,6 +6,7 @@ from ja3requests.exceptions import InvalidParams, InvalidData
 from ja3requests.utils import default_headers
 from typing import Any, AnyStr, List, Dict, Tuple, Union
 from io import IOBase
+import os
 
 
 class BaseRequest(ABC):
@@ -143,7 +144,35 @@ class BaseRequest(ABC):
     @files.setter
     def files(self, attr):
 
-        self._files = attr
+        new_files = {}
+        files = attr
+        for name, file in files.items():
+            if not isinstance(file, list):
+                file = [file]
+
+            for f in file:
+                if isinstance(f, (str, bytes)):
+                    with open(f, "rb+") as f_obj:
+                        item = {
+                            "file_name": os.path.basename(f_obj.name),
+                            "content": f_obj.read()
+                        }
+                elif isinstance(f, IOBase):
+                    item = {
+                        "file_name": os.path.basename(f.name if hasattr(f, "name") else ""),
+                        "content": f.read()
+                    }
+                else:
+                    continue
+
+                if not new_files.get(name, None):
+                    new_files.update({
+                        name: [item]
+                    })
+                else:
+                    new_files[name].append(item)
+
+        self._files = new_files
 
     @property
     def headers(self):
@@ -222,7 +251,7 @@ class BaseRequest(ABC):
             Tuple[Tuple[AnyStr, Any]],
             AnyStr
         ] = None,
-        files: Union[List[IOBase], IOBase] = None,
+        files: Dict[AnyStr, Union[List[Union[AnyStr, IOBase]], IOBase, AnyStr]] = None,
         headers: Dict[AnyStr, AnyStr] = None,
         cookies: Union[Dict[AnyStr, AnyStr], CookieJar] = None,
         auth: Tuple = None,

@@ -13,6 +13,7 @@ from .http import HttpRequest
 from .https import HttpsRequest
 from io import IOBase
 from typing import Any, AnyStr, List, Dict, Tuple, Union
+import os
 
 
 class Request:
@@ -35,7 +36,7 @@ class Request:
             ] = None,
             headers: Dict[AnyStr, AnyStr] = None,
             cookies: Union[Dict[AnyStr, AnyStr], CookieJar] = None,
-            files: Union[List[IOBase, ...], IOBase] = None,
+            files: Dict[AnyStr, Union[List[Union[AnyStr, IOBase]], IOBase, AnyStr]] = None,
             auth: Tuple = None,
             json: Dict[AnyStr, AnyStr] = None,
             timeout: float = None,
@@ -262,13 +263,14 @@ class Request:
             if not isinstance(self.json, (dict, str, bytes)):
                 raise ValueError(f"Invalid json: {self.json!r}")
 
-            for name, value in self.headers.items():
-                if name.title() == "Content-Type" and value == "multipart/form-data":
-                    warnings.warn(
-                        "When sending a json data, the Content-Type header should be set to application/json",
-                        RuntimeWarning,
-                    )
-                break
+            if self.headers:
+                for name, value in self.headers.items():
+                    if name.title() == "Content-Type" and value == "multipart/form-data":
+                        warnings.warn(
+                            "When sending a json data, the Content-Type header should be set to application/json",
+                            RuntimeWarning,
+                        )
+                    break
 
         return _json
 
@@ -278,17 +280,36 @@ class Request:
         :return:
         """
         files = self.files
-        if isinstance(files, list):
-            for file in files:
-                if not isinstance(file, IOBase):
-                    raise AttributeError("The files parameter must be an IO object")
-                else:
-                    if not file.readable():
-                        raise AttributeError("IO object is not readable")
-        elif isinstance(files, IOBase):
-            if not files.readable():
-                raise AttributeError("IO object is not readable")
-        else:
-            raise AttributeError("The files parameter must be an IO object")
+        if not isinstance(files, dict):
+            raise AttributeError("The files parameter is invalid, reference structure: {'file': FileObject}")
+
+        for file_name, file in files.items():
+            if isinstance(file, list):
+                for f in file:
+                    if isinstance(f, (str, bytes)):
+                        if not os.path.isfile(f):
+                            raise AttributeError(f"{f} is not a file")
+                    elif isinstance(f, IOBase):
+                        if not f.readable():
+                            raise AttributeError("IO object is not readable")
+                    else:
+                        raise AttributeError("File object not supported yet")
+            elif isinstance(file, (str, bytes)):
+                if not os.path.isfile(file):
+                    raise AttributeError(f"{file} is not a file")
+            elif isinstance(file, IOBase):
+                if not file.readable():
+                    raise AttributeError("IO object is not readable")
+            else:
+                raise AttributeError("The files parameter must be an IO object")
+
+        if self.headers:
+            for name, value in self.headers.items():
+                if name.title() == "Content-Type" and value != "multipart/form-data":
+                    warnings.warn(
+                        "When sending a files data, the Content-Type header should be set to multipart/form-data",
+                        RuntimeWarning,
+                    )
+                break
 
         return files

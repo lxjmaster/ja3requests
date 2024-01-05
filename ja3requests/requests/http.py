@@ -26,6 +26,7 @@ class HttpRequest(BaseRequest):
             self.url,
             self.port,
             self.data,
+            self.files,
             self.headers,
             self.timeout,
             self.json

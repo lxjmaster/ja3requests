@@ -39,7 +39,7 @@ class Session(BaseSession):
         data: Union[Dict[Any, Any], List[Tuple[Any, Any]], Tuple[Tuple[Any, Any]], AnyStr] = None,
         headers: Dict[AnyStr, AnyStr] = None,
         cookies: Union[Dict[AnyStr, AnyStr], CookieJar] = None,
-        files: Union[List[IOBase, ...], IOBase] = None,
+        files: Dict[AnyStr, Union[List[Union[AnyStr, IOBase]], IOBase, AnyStr]] = None,
         auth: Tuple = None,
         timeout: float = None,
         allow_redirects: bool = True,

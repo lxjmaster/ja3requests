@@ -33,7 +33,7 @@ class HttpSocket(BaseSocket):
     def send(self):
 
         print(self.context.message)
-        self.conn.sendall(self.context.message.encode())
+        self.conn.sendall(self.context.message)
 
         return self.conn
 

@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 from urllib.parse import urlparse, urlencode, parse_qsl
 from typing import AnyStr, Dict
 from json import dumps
+import mimetypes
 
 
 class BaseContext(ABC):
@@ -25,7 +26,7 @@ class BaseContext(ABC):
         self._headers = None
         self._data = None
         self._json = None
-        self._file = None
+        self._files = None
         self._body = None
         self._start_line = None
         self._message = None
@@ -174,6 +175,11 @@ class BaseContext(ABC):
                         headers.update({
                             "Content-Type": "application/json"
                         })
+
+                    if self.files:
+                        headers.update({
+                            "Content-Type": 'multipart/form-data;boundary="boundary"'
+                        })
                 else:
                     content_type = headers["Content-Type"]
                     if "multipart/form-data" in content_type.lower():
@@ -221,14 +227,14 @@ class BaseContext(ABC):
         self._json = json
 
     @property
-    def file(self):
+    def files(self):
 
-        return self._file
+        return self._files
 
-    @file.setter
-    def file(self, attr):
+    @files.setter
+    def files(self, attr):
 
-        self.file = attr
+        self._files = attr
 
     @property
     def body(self) -> AnyStr:
@@ -254,7 +260,22 @@ class BaseContext(ABC):
                 content = f'\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n--boundary'
                 form_data += content
 
-            form_data += "--"
+            if self.files:
+                for name, file in self.files.items():
+                    for f in file:
+                        mime_type, mime_encode = mimetypes.guess_type(f["file_name"])
+                        file_name = f["file_name"]
+                        content = f'\r\nContent-Disposition: form-data; name="{name}"; filename="{file_name}"'.encode()
+                        if mime_type:
+                            content += f"\r\nContent-Type: {mime_type}".encode()
+
+                        content += b"\r\n\r\n"
+                        content += f["content"]
+                        content += b"\r\n--boundary"
+                        form_data = form_data.encode()
+                        form_data += content
+
+            form_data += b"--"
             body = form_data
 
         self.headers.update({
@@ -275,19 +296,19 @@ class BaseContext(ABC):
             self.headers.update({
                 "Content-Type": "application/json"
             })
-            self.body = self.json
+            self.body = self.json.encode()
 
-        message = ""
+        message = b""
         if self._message:
             message = self._message
         else:
             if self.start_line:
-                message += self.start_line
+                message += self.start_line.encode()
             if self.headers:
-                message += "\r\n"
-                message += "\r\n".join([f"{k}: {v}" for k, v in self.headers.items()])
+                message += b"\r\n"
+                message += "\r\n".join([f"{k}: {v}" for k, v in self.headers.items()]).encode()
 
-            message += "\r\n\r\n"
+            message += b"\r\n\r\n"
 
             if self.body:
                 message += self.body
@@ -332,6 +353,7 @@ class BaseContext(ABC):
         url,
         port,
         data,
+        files,
         headers,
         timeout,
         json
