@@ -34,6 +34,7 @@ class HTTPContext(BaseContext):
         headers,
         timeout,
         json,
+        proxy,
     ):
         """
         Set context payload
@@ -46,6 +47,7 @@ class HTTPContext(BaseContext):
         self.json = json
         self.files = files
         self.headers = headers
+        self.proxy = proxy
         self.timeout = timeout
 
 

@@ -73,6 +73,7 @@ class Session(BaseSession):
             files=files,
             auth=auth,
             json=json,
+            proxies=proxies,
         )
 
         req = self.Request.request()

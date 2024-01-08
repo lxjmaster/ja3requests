@@ -93,7 +93,11 @@ class TestSession(unittest.TestCase):
             "http": "127.0.0.1:7890",
             "https": "127.0.0.1:7890"
         }
-        response = self.session.get("http://ifconfig.me")
+        # proxies = {
+        #     "http": "9jjmn:uweo3gw@169.197.83.75:6887",
+        #     "https": "9jjmn:uweo3gw@169.197.83.75:6887"
+        # }
+        response = self.session.get("http://ifconfig.me", proxies=proxies)
         print(response)
         print(response.status_code)
         print(response.content)

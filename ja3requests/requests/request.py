@@ -39,6 +39,7 @@ class Request:
             files: Dict[AnyStr, Union[List[Union[AnyStr, IOBase]], IOBase, AnyStr]] = None,
             auth: Tuple = None,
             json: Dict[AnyStr, AnyStr] = None,
+            proxies: Dict[AnyStr, AnyStr] = None,
             timeout: float = None,
     ):
         self.method = method
@@ -50,6 +51,7 @@ class Request:
         self.files = files
         self.auth = auth
         self.json = json
+        self.proxies = proxies
         self.timeout = timeout
 
     def __repr__(self):
@@ -70,6 +72,7 @@ class Request:
         headers = self.__ready_headers()
         cookies = self.__ready_cookies()
         auth = self.__ready_auth()
+        proxies = self.__read_proxies()
 
         if schema == "http":
             req = HttpRequest()
@@ -83,6 +86,7 @@ class Request:
                 cookies=cookies,
                 auth=auth,
                 json=_json,
+                proxies=proxies,
                 timeout=self.timeout,
             )
             return req
@@ -314,3 +318,26 @@ class Request:
                     break
 
         return files
+
+    def __read_proxies(self):
+        """
+        Read proxies
+        :return:
+        """
+        proxies = self.proxies
+        if proxies:
+            if not isinstance(proxies, dict):
+                raise AttributeError(
+                    f"Invalid proxies attribute: {proxies!r}."
+                    "The property structure should look like "
+                    "{'http': 'username:password@host:port', 'https': 'username:password@host:port'}"
+                )
+            else:
+                for schema in proxies:
+                    if schema not in ("http", "https"):
+                        raise AttributeError(
+                            f"Invalid proxy schema: {schema!r}.",
+                            "The schema is only support http or https."
+                        )
+
+        return proxies

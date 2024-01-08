@@ -42,6 +42,18 @@ class ConnectTimeoutError(SocketTimeoutError):
     """
 
 
+class ProxyError(socket.error):
+    """
+    Raised when a proxy error
+    """
+
+
+class ProxyTimeoutError(ProxyError):
+    """
+    Raised when a proxy socket timeout occurs while connecting to a server
+    """
+
+
 class ReadTimeout(SocketTimeoutError):
     """
     Raised when socket receive timeout.

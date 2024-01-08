@@ -24,6 +24,7 @@ class BaseRequest(ABC):
         self._cookies = None
         self._auth = None
         self._json = None
+        self._proxy = None
         self._timeout = None
 
     @property
@@ -228,6 +229,22 @@ class BaseRequest(ABC):
         self._json = attr
 
     @property
+    def proxy(self):
+
+        return self._proxy
+
+    @proxy.setter
+    def proxy(self, attr):
+
+        self._proxy = attr
+        if self._proxy:
+            proxy = self._proxy.get(self.schema, None)
+        else:
+            proxy = None
+
+        self._proxy = proxy
+
+    @property
     def timeout(self):
 
         return self._timeout
@@ -258,6 +275,7 @@ class BaseRequest(ABC):
         cookies: Union[Dict[AnyStr, AnyStr], CookieJar] = None,
         auth: Tuple = None,
         json: Dict[AnyStr, AnyStr] = None,
+        proxies: Dict[AnyStr, AnyStr] = None,
         timeout: float = None,
     ):
         self.method = method
@@ -269,6 +287,7 @@ class BaseRequest(ABC):
         self.cookies = cookies
         self.auth = auth
         self.json = json
+        self.proxy = proxies
         self.timeout = timeout
 
     # @staticmethod

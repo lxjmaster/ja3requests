@@ -98,3 +98,19 @@ def _has_ipv6(host):
 
 
 HAS_IPV6 = _has_ipv6("::1")
+
+
+if __name__ == '__main__':
+    sock = create_connection(("127.0.0.1", 7890))
+    sock.sendall("CONNECT ifconfig.me:80 HTTP/1.1\r\n\r\n".encode())
+    response = sock.recv(4096).decode("utf8")
+    if "200" in response:
+        sock.sendall(
+            # "GET / HTTP/1.1\r\nAccept: */*\r\nConnection: keep-alive\r\nUser-Agent: Python/3.11.6 (Darwin; macOS-13.3.1-x86_64-i386-64bit) Ja3Requests/1.0.2\r\nHost: ifconfig.me\r\n\r\n".encode()
+            "GET / HTTP/1.1\r\nAccept: */*\r\nConnection: keep-alive\r\nUser-Agent: Python/3.11.6 (Darwin; macOS-13.3.1-x86_64-i386-64bit) Ja3Requests/1.0.2\r\nHost: ifconfig.me\r\n\r\n".encode()
+        )
+    a = 0
+    while a < 50:
+        response = sock.recv(4096).decode("utf8")
+        a +=1
+        print(response)

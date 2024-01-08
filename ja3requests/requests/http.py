@@ -1,6 +1,7 @@
 from ja3requests.base import BaseRequest
 from ja3requests.contexts.context import HTTPContext
 from ja3requests.sockets.http import HttpSocket
+from ja3requests.sockets.proxy import ProxySocket
 from ja3requests.const import DEFAULT_HTTP_SCHEME, DEFAULT_HTTP_PORT
 from ja3requests.response import HTTPResponse
 import typing
@@ -15,7 +16,10 @@ class HttpRequest(BaseRequest):
 
     @staticmethod
     def create_connection(context: HTTPContext):
-        sock = HttpSocket(context)
+        if context.proxy:
+            sock = ProxySocket(context)
+        else:
+            sock = HttpSocket(context)
 
         return sock.new_conn()
 
@@ -29,7 +33,8 @@ class HttpRequest(BaseRequest):
             self.files,
             self.headers,
             self.timeout,
-            self.json
+            self.json,
+            self.proxy
         )
         sock = self.create_connection(context)
         sock.send()

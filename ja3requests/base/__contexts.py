@@ -32,6 +32,7 @@ class BaseContext(ABC):
         self._message = None
         self._source_address = None
         self._timeout = None
+        self._proxy = None
 
     @property
     def protocol(self):
@@ -346,18 +347,35 @@ class BaseContext(ABC):
 
         self._timeout = attr
 
+    @property
+    def proxy(self):
+
+        proxy = None
+        if self._proxy:
+            if "@" in self._proxy:
+                proxy = self._proxy.split("@")[-1]
+            else:
+                proxy = self._proxy
+
+        return proxy
+
+    @proxy.setter
+    def proxy(self, attr):
+
+        self._proxy = attr
+
+    @property
+    def proxy_auth(self):
+
+        proxy_auth = None
+        if self._proxy:
+            if "@" in self._proxy:
+                proxy_auth = self._proxy.split("@")[0]
+
+        return proxy_auth
+
     @abstractmethod
-    def set_payload(
-        self,
-        method,
-        url,
-        port,
-        data,
-        files,
-        headers,
-        timeout,
-        json
-    ):
+    def set_payload(self, *args, **kwargs):
         """
         Set context payload
         :return:
