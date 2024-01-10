@@ -24,7 +24,6 @@ class TestSession(unittest.TestCase):
     def test_request_index(self):
 
         response = self.session.get("http://127.0.0.1:8080/", headers=self.headers)
-        print(self.session.Request)
         # response = requests.get("http://127.0.0.1:8000/")
         print(response)
         print(response.status_code)
@@ -104,6 +103,24 @@ class TestSession(unittest.TestCase):
         print(response.headers)
         print(response.text)
         # print(response.json())
+
+    def test_redirect(self):
+
+        response = self.session.get("http://127.0.0.1:8080/redirect")
+        print(response)
+        print(response.status_code)
+        print(response.content)
+        print(response.headers)
+        print(response.text)
+
+    def test_cookies(self):
+
+        response = self.session.get("http://127.0.0.1:8080/cookies")
+        print(response)
+        print(response.status_code)
+        print(response.content)
+        print(response.headers)
+        print(response.text)
 
 
 if __name__ == '__main__':

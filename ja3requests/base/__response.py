@@ -92,6 +92,21 @@ class BaseResponse:
         self._status_text = attr
 
     @property
+    def raw_headers(self):
+
+        headers = []
+        if self.headers:
+            headers_raw = self.headers.decode()
+            header_list = headers_raw.split("\r\n")
+            for header_item in header_list:
+                if header_item == "":
+                    continue
+                name, value = header_item.split(": ", 1)
+                headers.append({name.strip(): value.strip()})
+
+        return headers
+
+    @property
     def headers(self):
         """Headers
         Response headers

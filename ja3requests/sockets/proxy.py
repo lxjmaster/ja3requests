@@ -96,7 +96,6 @@ class ProxySocket(BaseSocket):
 
     def send(self):
 
-        print(self.context.message)
         self.conn.sendall(self.context.message)
 
         return self.conn

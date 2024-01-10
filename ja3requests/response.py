@@ -190,17 +190,12 @@ class Response(BaseResponse):
         Response Headers.
         :return:
         """
-        headers = []
-        if self.response is None:
+        headers = {}
+        if not self.response.raw_headers:
             return headers
 
-        headers_raw = self.response.headers.decode()
-        header_list = headers_raw.split("\r\n")
-        for header_item in header_list:
-            if header_item == "":
-                continue
-            name, value = header_item.split(": ", 1)
-            headers.append({name.strip(): value.strip()})
+        for header in self.response.raw_headers:
+            headers.update(header)
 
         return headers
 
@@ -238,3 +233,16 @@ class Response(BaseResponse):
         :return:
         """
         return json.loads(self.body)
+
+    @property
+    def is_redirected(self):
+
+        return 300 <= self.status_code < 400
+
+    @property
+    def location(self):
+        location = self.headers.get("Location", None)
+        if not location:
+            location = self.headers.get("location", None)
+
+        return location

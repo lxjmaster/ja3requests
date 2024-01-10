@@ -35,7 +35,7 @@ class Request:
                 AnyStr
             ] = None,
             headers: Dict[AnyStr, AnyStr] = None,
-            cookies: Union[Dict[AnyStr, AnyStr], CookieJar] = None,
+            cookies: Union[Dict[AnyStr, AnyStr], CookieJar, AnyStr] = None,
             files: Dict[AnyStr, Union[List[Union[AnyStr, IOBase]], IOBase, AnyStr]] = None,
             auth: Tuple = None,
             json: Dict[AnyStr, AnyStr] = None,
@@ -97,10 +97,13 @@ class Request:
                 url=url,
                 params=params,
                 data=data,
+                files=files,
                 headers=headers,
                 cookies=cookies,
                 auth=auth,
-                json=_json
+                json=_json,
+                proxies=proxies,
+                timeout=self.timeout,
             )
             return req
         else:
@@ -228,11 +231,20 @@ class Request:
 
     def __ready_cookies(self):
         """
-        Todo: Ready http cookies.
         :return:
         """
 
         cookies = self.cookies
+        if cookies:
+            if not isinstance(cookies, (dict, CookieJar, bytes, str)):
+                raise AttributeError(
+                    f"Invalid cookies: {cookies!r}."
+                    "Cookies type only support dict, CookieJar, bytes, str"
+                )
+
+            if isinstance(cookies, (dict, bytes, str)):
+                if len(cookies) < 1:
+                    raise AttributeError("Invalid cookies, it's empty.")
 
         return cookies
 
