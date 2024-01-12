@@ -10,6 +10,7 @@ from base64 import b64encode
 from typing import Union, AnyStr, List
 from .const import DEFAULT_MAX_RETRY_LIMIT
 from .exceptions import MaxRetriedException
+from .cookies import cookiejar_from_dict
 from .__version__ import __version__
 
 
@@ -134,19 +135,47 @@ class Task:
             return 0
 
 
-def t(*args, **kwargs):
-    print(args, kwargs)
-    raise ValueError("123")
+def dict_from_cookie_string(cookie_string: AnyStr):
+    """Returns a key/value dictionary from a cookie string like name1=value1;name2=value2;...
 
-def t2():
-    print(2)
+    :param cookie_string:
+    :return: dict
+    """
+
+    cookie_dict = {}
+    if isinstance(cookie_string, bytes):
+        cookie_string = cookie_string.decode()
+
+    cookie_list = cookie_string.split(";")
+    for cookie in cookie_list:
+        cookie = cookie.strip()
+        name, value = cookie.split("=")
+        cookie_dict.setdefault(name, value)
+
+    return cookie_dict
 
 
-if __name__ == '__main__':
-    retry = Retry()
-    retry.do(t, ValueError, a1=1, a2=2)
-    # retry = Retry()
-    # retry.do(t, TypeError, a1=1, a2=2)
-    # retry.do(t2, RuntimeError)
-    # r = t2()
-    # print(r)
+def dict_from_cookiejar(cj):
+    """Returns a key/value dictionary from a CookieJar.
+
+    :param cj: CookieJar object to extract cookies from.
+    :rtype: dict
+    """
+
+    cookie_dict = {}
+
+    for cookie in cj:
+        cookie_dict[cookie.name] = cookie.value
+
+    return cookie_dict
+
+
+def add_dict_to_cookiejar(cj, cookie_dict):
+    """Returns a CookieJar from a key/value dictionary.
+
+    :param cj: CookieJar to insert cookies into.
+    :param cookie_dict: Dict of key/values to insert into CookieJar.
+    :rtype: CookieJar
+    """
+
+    return cookiejar_from_dict(cookie_dict, cj)

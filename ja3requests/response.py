@@ -11,8 +11,10 @@ import gzip
 import zlib
 import brotli
 from ja3requests.base import BaseResponse
-from .const import MAX_LINE, MAX_HEADERS
-from .exceptions import InvalidStatusLine, InvalidResponseHeaders, IssueError
+from ja3requests.cookies import Ja3RequestsCookieJar
+from ja3requests.utils import add_dict_to_cookiejar
+from ja3requests.const import MAX_LINE, MAX_HEADERS
+from ja3requests.exceptions import InvalidStatusLine, InvalidResponseHeaders, IssueError
 
 
 class HTTPResponse(BaseResponse):
@@ -169,6 +171,21 @@ class HTTPResponse(BaseResponse):
 
         self._content_length = int(headers.get(b"content-length", 0))
 
+    @property
+    def raw_headers(self):
+
+        headers = []
+        if self.headers:
+            headers_raw = self.headers.decode()
+            header_list = headers_raw.split("\r\n")
+            for header_item in header_list:
+                if header_item == "":
+                    continue
+                name, value = header_item.split(": ", 1)
+                headers.append({name.strip(): value.strip()})
+
+        return headers
+
 
 class Response(BaseResponse):
     """Response
@@ -176,13 +193,32 @@ class Response(BaseResponse):
     """
 
     def __init__(self, request=None, response=None):
-        super().__init__()
+        super(Response, self).__init__()
         self.request = request
         self.response = response
         self.body = self.response.read_body() if self.response else b""
 
     def __repr__(self):
         return f"<Response [{self.status_code}]>"
+
+    @property
+    def cookies(self):
+
+        cookies = Ja3RequestsCookieJar()
+        if self.response.raw_headers:
+            for header in self.response.raw_headers:
+                set_cookie = header.get("Set-Cookie", None)
+                if set_cookie is None:
+                    set_cookie = header.get("set-cookie", None)
+
+                if set_cookie:
+                    cookie_item = set_cookie.split(";")
+                    if len(cookie_item) > 0:
+                        cookie = cookie_item[0].split("=")
+                        if len(cookie) == 2:
+                            cookies = add_dict_to_cookiejar(cookies, {cookie[0].strip(): cookie[1].strip()})
+
+        return cookies
 
     @property
     def headers(self):
@@ -195,6 +231,13 @@ class Response(BaseResponse):
             return headers
 
         for header in self.response.raw_headers:
+            set_cookie = header.get("Set-Cookie", None)
+            if set_cookie is None:
+                set_cookie = header.get("set-cookie", None)
+
+            if set_cookie:
+                continue
+
             headers.update(header)
 
         return headers

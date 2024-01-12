@@ -24,31 +24,13 @@ class HTTPContext(BaseContext):
         self.protocol = DEFAULT_HTTP_CONTEXT_PROTOCOL
         self.version = DEFAULT_HTTP_VERSION
 
-    def set_payload(
-        self,
-        method,
-        url,
-        port,
-        data,
-        files,
-        headers,
-        timeout,
-        json,
-        proxy,
-    ):
+    def set_payload(self, **kwargs):
         """
         Set context payload
         :return:
         """
-        self.method = method
-        self.start_line = url
-        self.port = port
-        self.data = data
-        self.json = json
-        self.files = files
-        self.headers = headers
-        self.proxy = proxy
-        self.timeout = timeout
+        for k, v in kwargs.items():
+            setattr(self, k, v)
 
 
 class HTTPSContext(BaseContext):

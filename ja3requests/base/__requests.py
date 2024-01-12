@@ -3,7 +3,7 @@ from http.cookiejar import CookieJar
 from ja3requests.const import DEFAULT_HTTP_SCHEME, DEFAULT_HTTP_PORT
 from urllib.parse import urlparse, urlencode
 from ja3requests.exceptions import InvalidParams, InvalidData
-from ja3requests.utils import default_headers
+from ja3requests.utils import default_headers, dict_from_cookie_string, dict_from_cookiejar
 from typing import Any, AnyStr, List, Dict, Tuple, Union
 from io import IOBase
 import os
@@ -199,14 +199,21 @@ class BaseRequest(ABC):
         self._headers = headers
 
     @property
-    def cookies(self):
+    def cookies(self) -> Dict | None:
 
         return self._cookies
 
     @cookies.setter
-    def cookies(self, attr: Union[Dict[AnyStr, AnyStr], CookieJar]):
+    def cookies(self, attr: Union[Dict[AnyStr, AnyStr], CookieJar, AnyStr]):
 
-        self._cookies = attr
+        cookies = attr
+        if cookies:
+            if isinstance(cookies, (bytes, str)):
+                cookies = dict_from_cookie_string(cookies)
+            elif isinstance(cookies, CookieJar):
+                cookies = dict_from_cookiejar(cookies)
+
+        self._cookies = cookies
 
     @property
     def auth(self):
@@ -256,52 +263,10 @@ class BaseRequest(ABC):
 
     def set_payload(
         self,
-        method: AnyStr,
-        url: AnyStr,
-        params: Union[
-            Dict[AnyStr, Any],
-            List[Tuple[Any, Any]],
-            Tuple[Tuple[Any, Any]],
-            AnyStr,
-        ] = None,
-        data: Union[
-            Dict[AnyStr, Any],
-            List[Tuple[AnyStr, Any]],
-            Tuple[Tuple[AnyStr, Any]],
-            AnyStr
-        ] = None,
-        files: Dict[AnyStr, Union[List[Union[AnyStr, IOBase]], IOBase, AnyStr]] = None,
-        headers: Dict[AnyStr, AnyStr] = None,
-        cookies: Union[Dict[AnyStr, AnyStr], CookieJar] = None,
-        auth: Tuple = None,
-        json: Dict[AnyStr, AnyStr] = None,
-        proxies: Dict[AnyStr, AnyStr] = None,
-        timeout: float = None,
+        **kwargs
     ):
-        self.method = method
-        self.url = url
-        self.params = params
-        self.data = data
-        self.files = files
-        self.headers = headers
-        self.cookies = cookies
-        self.auth = auth
-        self.json = json
-        self.proxy = proxies
-        self.timeout = timeout
-
-    # @staticmethod
-    # def parse_proxy(proxy: AnyStr = None):
-    #     if proxy is None:
-    #         return None, None, None, None
-    #
-    #     split_result = urlsplit(f'https://{proxy}')
-    #     username = split_result.username
-    #     password = split_result.password
-    #     host = split_result.hostname
-    #     port = split_result.port
-    #
-    #     return username, password, host, port
+        for k, v in kwargs.items():
+            setattr(self, k, v)
 
     def is_http(self):
 

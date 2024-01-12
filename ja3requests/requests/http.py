@@ -26,15 +26,16 @@ class HttpRequest(BaseRequest):
     def send(self):
         context = HTTPContext()
         context.set_payload(
-            self.method,
-            self.url,
-            self.port,
-            self.data,
-            self.files,
-            self.headers,
-            self.timeout,
-            self.json,
-            self.proxy
+            method=self.method,
+            start_line=self.url,
+            port=self.port,
+            data=self.data,
+            files=self.files,
+            headers=self.headers,
+            timeout=self.timeout,
+            json=self.json,
+            proxy=self.proxy,
+            cookies=self.cookies,
         )
         sock = self.create_connection(context)
         sock.send()

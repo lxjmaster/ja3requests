@@ -7,6 +7,8 @@ Basic Session
 
 
 from ja3requests.const import DEFAULT_REDIRECT_LIMIT
+from ja3requests.cookies import Ja3RequestsCookieJar, CookieJar
+from ja3requests.utils import dict_from_cookie_string, add_dict_to_cookiejar
 
 
 class BaseSession:
@@ -16,7 +18,7 @@ class BaseSession:
 
     def __init__(self):
         self._request = None
-        # self._response = None
+        self._response = None
         self._headers = None
         self._cookies = None
         self._auth = None
@@ -38,14 +40,14 @@ class BaseSession:
     def Request(self, attr):
 
         self._request = attr
-    #
-    # @property
-    # def Response(self):
-    #     return self._response
-    #
-    # @Response.setter
-    # def Response(self, attr):
-    #     self._response = attr
+
+    @property
+    def response(self):
+        return self._response
+
+    @response.setter
+    def response(self, attr):
+        self._response = attr
 
     @property
     def headers(self):
@@ -69,18 +71,37 @@ class BaseSession:
         """
         self._headers = attr
 
+    @staticmethod
+    def resolve_cookies(cj: Ja3RequestsCookieJar, cookie):
+
+        if isinstance(cookie, (bytes, str)):
+            cookies_dict = dict_from_cookie_string(cookie)
+            cj = add_dict_to_cookiejar(cj, cookies_dict)
+        elif isinstance(cookie, dict):
+            cj = add_dict_to_cookiejar(cj, cookie)
+        elif isinstance(cookie, CookieJar):
+            cj.update(cookie)
+
+        return cj
+
     @property
     def cookies(self):
         """Cookies
         Http cookies.
-        >>> CookieJar({})
+        >>> <Ja3RequestsCookieJar[]>
         :return:
         """
-        if not self._cookies:
-            if self.Request:
-                self._cookies = self.Request.cookies
+        cookies = Ja3RequestsCookieJar()
+        if self._cookies:
+            cookies = self.resolve_cookies(cookies, self._cookies)
 
-        return self._cookies
+        if self.Request.cookies:
+            cookies = self.resolve_cookies(cookies, self.Request.cookies)
+
+        if self.response.cookies:
+            cookies = self.resolve_cookies(cookies, self.response.cookies)
+
+        return cookies
 
     @cookies.setter
     def cookies(self, attr):
@@ -89,7 +110,7 @@ class BaseSession:
         :param attr:
         :return:
         """
-        self.cookies = attr
+        self._cookies = attr
 
     @property
     def auth(self):

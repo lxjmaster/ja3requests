@@ -178,6 +178,8 @@ class Session(BaseSession):
         if allow_redirects and response.is_redirected:
             response = self.resolve_redirects(response.location, **kwargs)
 
+        self.response = response
+
         return response
 
     def resolve_redirects(self, url, **kwargs):

@@ -6,6 +6,7 @@ Basic Context
 """
 from abc import ABC, abstractmethod
 from urllib.parse import urlparse, urlencode, parse_qsl
+from http.cookiejar import CookieJar
 from typing import AnyStr, Dict
 from json import dumps
 import mimetypes
@@ -33,6 +34,7 @@ class BaseContext(ABC):
         self._source_address = None
         self._timeout = None
         self._proxy = None
+        self._cookies = None
 
     @property
     def protocol(self):
@@ -373,6 +375,24 @@ class BaseContext(ABC):
                 proxy_auth = self._proxy.split("@")[0]
 
         return proxy_auth
+
+    @property
+    def cookies(self):
+
+        return self._cookies
+
+    @cookies.setter
+    def cookies(self, attr: Dict):
+
+        cookies = attr
+        if isinstance(cookies, dict):
+            cookies_list = [f"{k}={v};" for k, v in cookies.items()]
+            self._cookies = " ".join(cookies_list)
+        else:
+            self._cookies = None
+
+        if self._cookies:
+            self.headers.setdefault("Cookie", self._cookies)
 
     @abstractmethod
     def set_payload(self, *args, **kwargs):
