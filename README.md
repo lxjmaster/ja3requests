@@ -33,7 +33,7 @@ Ja3Requests officially supports Python 3.7+.
 
 ## How To Use
 ### Unreasonable Request Method
-Ja3Requests supports multiple request methods such as Get, Post, PUT, Delete, etc.
+Ja3Requests supports multiple request methods such as Get, Post, Put, Delete, etc.
 ```python
 import ja3requests
 
