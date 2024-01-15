@@ -1,5 +1,5 @@
 """
-ja3requests.exceptions
+Ja3Requests.exceptions
 ~~~~~~~~~~~~~~~~~~~~~~
 
 This module contains the set of Requests' exceptions.
@@ -47,6 +47,12 @@ class InvalidParams(RequestException, ValueError):
     """
 
 
+class InvalidData(RequestException, ValueError):
+    """
+    If request data invalid and raise it.
+    """
+
+
 class InvalidHost(RequestException, ValueError):
     """
     Raised it while host can not parse.
@@ -62,6 +68,12 @@ class InvalidStatusLine(RequestException, ValueError):
 class InvalidResponseHeaders(RequestException, ValueError):
     """
     Raised it when cant receive response headers.
+    """
+
+
+class MaxRetriedException(RuntimeError):
+    """
+    Raised it when retried
     """
 
 

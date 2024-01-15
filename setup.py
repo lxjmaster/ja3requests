@@ -55,7 +55,14 @@ setup(
     author=about["__author__"],
     author_email=about["__author_email__"],
     url=about["__url__"],
-    packages=["ja3requests", "ja3requests/base", "ja3requests/protocol"],
+    packages=[
+        "ja3requests",
+        "ja3requests/base",
+        "ja3requests/contexts",
+        "ja3requests/protocol",
+        "ja3requests/requests",
+        "ja3requests/sockets"
+    ],
     package_dir={"ja3requests": "ja3requests"},
     zip_safe=False,
     include_package_data=True,
