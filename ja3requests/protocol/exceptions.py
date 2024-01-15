@@ -1,9 +1,17 @@
 """
-ja3requests.protocol.exceptions
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Ja3Requests.protocol.exceptions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 This module contains socket exceptions.
 """
+
+import socket
+
+
+class SocketError(socket.error):
+    """
+    Socket error
+    """
 
 
 class SocketException(Exception):
@@ -31,6 +39,18 @@ class SocketTimeoutError(SocketException):
 class ConnectTimeoutError(SocketTimeoutError):
     """
     Raised when a socket timeout occurs while connecting to a server
+    """
+
+
+class ProxyError(socket.error):
+    """
+    Raised when a proxy error
+    """
+
+
+class ProxyTimeoutError(ProxyError):
+    """
+    Raised when a proxy socket timeout occurs while connecting to a server
     """
 
 

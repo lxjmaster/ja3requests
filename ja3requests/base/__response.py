@@ -1,8 +1,8 @@
 """
-ja3Requests.base._response
+Ja3Requests.base.__response
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Basic Response
+Basic of Response.
 """
 
 

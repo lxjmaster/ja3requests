@@ -1,9 +1,14 @@
 """
-ja3Requests.base._sessions
+Ja3Requests.base.__sessions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Basic Session
+Basic of Session.
 """
+
+
+from ja3requests.const import DEFAULT_REDIRECT_LIMIT
+from ja3requests.cookies import Ja3RequestsCookieJar, CookieJar
+from ja3requests.utils import dict_from_cookie_string, add_dict_to_cookiejar
 
 
 class BaseSession:
@@ -12,6 +17,8 @@ class BaseSession:
     """
 
     def __init__(self):
+        self._request = None
+        self._response = None
         self._headers = None
         self._cookies = None
         self._auth = None
@@ -25,12 +32,40 @@ class BaseSession:
         self._h2_headers = None
 
     @property
+    def Request(self):
+        """
+        Session property Request
+        :return:
+        """
+        return self._request
+
+    @Request.setter
+    def Request(self, attr):
+        self._request = attr
+
+    @property
+    def response(self):
+        """
+        Session property response
+        :return:
+        """
+        return self._response
+
+    @response.setter
+    def response(self, attr):
+        self._response = attr
+
+    @property
     def headers(self):
         """Headers
         Http headers.
         >>> {'Accept': '*/*', 'Accept-Encoding': 'gzip,deflate'}
         :return:
         """
+        if not self._headers:
+            if self.Request:
+                self._headers = self.Request.headers
+
         return self._headers
 
     @headers.setter
@@ -42,14 +77,42 @@ class BaseSession:
         """
         self._headers = attr
 
+    @staticmethod
+    def resolve_cookies(cj: Ja3RequestsCookieJar, cookie):
+        """
+        Collection session cookies
+        :param cj:
+        :param cookie:
+        :return:
+        """
+        if isinstance(cookie, (bytes, str)):
+            cookies_dict = dict_from_cookie_string(cookie)
+            cj = add_dict_to_cookiejar(cj, cookies_dict)
+        elif isinstance(cookie, dict):
+            cj = add_dict_to_cookiejar(cj, cookie)
+        elif isinstance(cookie, CookieJar):
+            cj.update(cookie)
+
+        return cj
+
     @property
     def cookies(self):
         """Cookies
         Http cookies.
-        >>> CookieJar({})
+        >>> <Ja3RequestsCookieJar[]>
         :return:
         """
-        return self._cookies
+        cookies = Ja3RequestsCookieJar()
+        if self._cookies:
+            cookies = self.resolve_cookies(cookies, self._cookies)
+
+        if self.Request.cookies:
+            cookies = self.resolve_cookies(cookies, self.Request.cookies)
+
+        if self.response.cookies:
+            cookies = self.resolve_cookies(cookies, self.response.cookies)
+
+        return cookies
 
     @cookies.setter
     def cookies(self, attr):
@@ -58,7 +121,7 @@ class BaseSession:
         :param attr:
         :return:
         """
-        self.cookies = attr
+        self._cookies = attr
 
     @property
     def auth(self):
@@ -66,6 +129,10 @@ class BaseSession:
         >>> {'user': 'xxx', 'password': 'xxx'}
         :return:
         """
+        if not self._auth:
+            if self.Request:
+                self._auth = self.Request.auth
+
         return self._auth
 
     @auth.setter
@@ -84,7 +151,11 @@ class BaseSession:
         >>> {'http': 'user:password@host:port', 'https': 'user:password@host:port'}
         :return:
         """
-        return self._cookies
+        if not self._proxies:
+            if self.Request:
+                self._proxies = self.Request.proxies
+
+        return self._proxies
 
     @proxies.setter
     def proxies(self, attr):
@@ -102,6 +173,10 @@ class BaseSession:
         >>> {'page': 1, 'per_page': 10}
         :return:
         """
+        if not self._params:
+            if self.Request:
+                self._params = self.Request.params
+
         return self._params
 
     @params.setter
@@ -120,6 +195,13 @@ class BaseSession:
         >>> 5
         :return:
         """
+        if not self._max_redirects:
+            if self.Request:
+                self._max_redirects = self.Request.max_redirects
+
+        if not self._max_redirects:
+            self._max_redirects = DEFAULT_REDIRECT_LIMIT
+
         return self._max_redirects
 
     @max_redirects.setter
@@ -138,6 +220,13 @@ class BaseSession:
         >>> True or False.
         :return:
         """
+        if not self._allow_redirect:
+            if self.Request:
+                self._allow_redirect = self.Request.allow_redirect
+
+        if not self._allow_redirect:
+            self._allow_redirect = True
+
         return self._allow_redirect
 
     @allow_redirect.setter

@@ -5,10 +5,20 @@ headers = {
     "connection": "keep-alive",
     "Accept-Encoding": "deflate, br, gzip"
 }
+
+data = {
+            "username": "admin",
+            "password": "admin",
+            "args": ["1", "2", "3"]
+        }
+headers = {
+    "content-type": "multipart/form-data"
+}
 with Session() as session:
     # response = session.get("http://127.0.0.1:8080", headers=headers)
     # response = session.get("http://www.baidu.com", headers=headers)
-    response = session.get("http://www.aliyun.com")
+    # response = session.get("http://www.aliyun.com")
+    response = session.post("http://127.0.0.1:8080/login", json=data, headers=headers)
     print(response.headers)
     print(response)
     # print(response.status_code)
