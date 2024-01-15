@@ -1,5 +1,5 @@
 """
-ja3requests.exceptions
+Ja3Requests.exceptions
 ~~~~~~~~~~~~~~~~~~~~~~
 
 This module contains the set of Requests' exceptions.

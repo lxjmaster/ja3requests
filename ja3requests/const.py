@@ -1,5 +1,5 @@
 """
-ja3requests.const
+Ja3Requests.const
 ~~~~~~~~~~~~~~~~~
 
 A constant module.

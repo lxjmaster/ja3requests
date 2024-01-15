@@ -1,5 +1,5 @@
 """
-ja3requests.base
+Ja3Requests.base
 ~~~~~~~~~~~~~~~~
 
 Basic module.

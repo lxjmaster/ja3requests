@@ -1,6 +1,6 @@
 # pylint: skip-file
 """
-ja3requests.protocol.sockets
+Ja3Requests.protocol.sockets
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 This module contains socket dependencies.
@@ -112,5 +112,5 @@ if __name__ == '__main__':
     a = 0
     while a < 50:
         response = sock.recv(4096).decode("utf8")
-        a +=1
+        a += 1
         print(response)

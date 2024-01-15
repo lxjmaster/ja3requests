@@ -1,6 +1,6 @@
 """
-ja3requests.response
-~~~~~~~~~~~~~~~~~~~~~~~
+Ja3Requests.response
+~~~~~~~~~~~~~~~~~~~~
 
 This module contains response.
 """
@@ -173,7 +173,10 @@ class HTTPResponse(BaseResponse):
 
     @property
     def raw_headers(self):
-
+        """
+        Raw response headers
+        :return:
+        """
         headers = []
         if self.headers:
             headers_raw = self.headers.decode()
@@ -193,16 +196,24 @@ class Response(BaseResponse):
     """
 
     def __init__(self, request=None, response=None):
-        super(Response, self).__init__()
+        super().__init__()
         self.request = request
         self.response = response
         self.body = self.response.read_body() if self.response else b""
 
     def __repr__(self):
+        """
+        Response repr
+        :return:
+        """
         return f"<Response [{self.status_code}]>"
 
     @property
     def cookies(self):
+        """
+        Response cookie property
+        :return:
+        """
 
         cookies = Ja3RequestsCookieJar()
         if self.response.raw_headers:
@@ -216,7 +227,9 @@ class Response(BaseResponse):
                     if len(cookie_item) > 0:
                         cookie = cookie_item[0].split("=")
                         if len(cookie) == 2:
-                            cookies = add_dict_to_cookiejar(cookies, {cookie[0].strip(): cookie[1].strip()})
+                            cookies = add_dict_to_cookiejar(
+                                cookies, {cookie[0].strip(): cookie[1].strip()}
+                            )
 
         return cookies
 
@@ -279,11 +292,19 @@ class Response(BaseResponse):
 
     @property
     def is_redirected(self):
+        """
+        Response property of has redirected
+        :return:
+        """
 
         return 300 <= self.status_code < 400
 
     @property
     def location(self):
+        """
+        Response redirected location
+        :return:
+        """
         location = self.headers.get("Location", None)
         if not location:
             location = self.headers.get("location", None)

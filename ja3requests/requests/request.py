@@ -1,7 +1,19 @@
+"""
+Ja3Requests.requests.request
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This module of Request.
+"""
+
+
+import os
 import warnings
+from io import IOBase
 from http.cookiejar import CookieJar
 from urllib.parse import urlparse, parse_qs
-from ja3requests.utils import default_headers
+from typing import Any, AnyStr, List, Dict, Tuple, Union
+from ja3requests.requests.https import HttpsRequest
+from ja3requests.requests.http import HttpRequest
 from ja3requests.exceptions import (
     NotAllowedRequestMethod,
     MissingScheme,
@@ -9,38 +21,31 @@ from ja3requests.exceptions import (
     InvalidParams,
     InvalidData,
 )
-from .http import HttpRequest
-from .https import HttpsRequest
-from io import IOBase
-from typing import Any, AnyStr, List, Dict, Tuple, Union
-import os
 
 
 class Request:
+    """
+    Request
+    """
 
     def __init__(
-            self,
-            method: AnyStr,
-            url: AnyStr,
-            params: Union[
-                Dict[AnyStr, Any],
-                List[Tuple[Any, Any]],
-                Tuple[Tuple[Any, Any]],
-                AnyStr,
-            ] = None,
-            data: Union[
-                Dict[AnyStr, Any],
-                List,
-                Tuple,
-                AnyStr
-            ] = None,
-            headers: Dict[AnyStr, AnyStr] = None,
-            cookies: Union[Dict[AnyStr, AnyStr], CookieJar, AnyStr] = None,
-            files: Dict[AnyStr, Union[List[Union[AnyStr, IOBase]], IOBase, AnyStr]] = None,
-            auth: Tuple = None,
-            json: Dict[AnyStr, AnyStr] = None,
-            proxies: Dict[AnyStr, AnyStr] = None,
-            timeout: float = None,
+        self,
+        method: AnyStr,
+        url: AnyStr,
+        params: Union[
+            Dict[AnyStr, Any],
+            List[Tuple[Any, Any]],
+            Tuple[Tuple[Any, Any]],
+            AnyStr,
+        ] = None,
+        data: Union[Dict[AnyStr, Any], List, Tuple, AnyStr] = None,
+        headers: Dict[AnyStr, AnyStr] = None,
+        cookies: Union[Dict[AnyStr, AnyStr], CookieJar, AnyStr] = None,
+        files: Dict[AnyStr, Union[List[Union[AnyStr, IOBase]], IOBase, AnyStr]] = None,
+        auth: Tuple = None,
+        json: Dict[AnyStr, AnyStr] = None,
+        proxies: Dict[AnyStr, AnyStr] = None,
+        timeout: float = None,
     ):
         self.method = method
         self.url = url
@@ -55,7 +60,6 @@ class Request:
         self.timeout = timeout
 
     def __repr__(self):
-
         return f"<Request [{self.method}]>"
 
     def request(self):
@@ -90,7 +94,8 @@ class Request:
                 timeout=self.timeout,
             )
             return req
-        elif schema == "https":
+
+        if schema == "https":
             req = HttpsRequest()
             req.set_payload(
                 method=method,
@@ -106,8 +111,8 @@ class Request:
                 timeout=self.timeout,
             )
             return req
-        else:
-            raise NotAllowedScheme(f"Schema: {schema} not allowed.")
+
+        raise NotAllowedScheme(f"Schema: {schema} not allowed.")
 
     def __ready_method(self):
         """
@@ -136,7 +141,7 @@ class Request:
         """
         url = self.url
 
-        if url == "":
+        if not url or url == "":
             raise ValueError("The request url is require.")
 
         # Remove whitespaces for url
@@ -163,11 +168,12 @@ class Request:
         :return:
         """
         params = self.params
+        if not params:
+            return params
 
-        if params:
-            # parse = urlparse(self.url)
-            if type(params) not in [str, bytes, dict, list, tuple]:
-                raise InvalidParams(f"Invalid params: {self.params!r}")
+        # parse = urlparse(self.url)
+        if not isinstance(params, (str, bytes, dict, list, tuple)):
+            raise InvalidParams(f"Invalid params: {self.params!r}")
 
         return params
 
@@ -178,17 +184,18 @@ class Request:
         """
 
         headers = self.headers
+        if not headers:
+            return headers
 
         # Check duplicate default item
-        if headers:
-            header_list = []
-            for k, v in headers.items():
-                if k.lower() in header_list:
-                    warnings.warn(
-                        f"Duplicate header: {k}, you should check the request headers.",
-                        RuntimeWarning,
-                    )
-                header_list.append(k.lower())
+        header_list = []
+        for k, _ in headers.items():
+            if k.lower() in header_list:
+                warnings.warn(
+                    f"Duplicate header: {k}, you should check the request headers.",
+                    RuntimeWarning,
+                )
+            header_list.append(k.lower())
 
         return headers
 
@@ -198,34 +205,40 @@ class Request:
         :return:
         """
         data = self.data
-        if data:
-            if self.json:
-                raise InvalidData("Only one of the data and json parameters can be used at the same time")
+        if not data:
+            return data
 
-            if self.method.upper() not in ["POST", "PUT"]:
-                warnings.warn(
-                    f"The {self.method.upper()} method does not process data."
-                    f"Maybe you request the POST/PUT method?",
-                    RuntimeWarning,
+        if self.json:
+            raise InvalidData(
+                "Only one of the data and json parameters can be used at the same time"
+            )
+
+        if self.method.upper() not in ["POST", "PUT"]:
+            warnings.warn(
+                f"The {self.method.upper()} method does not process data."
+                f"Maybe you request the POST/PUT method?",
+                RuntimeWarning,
+            )
+
+        if not isinstance(data, (dict, list, tuple, bytes, str)):
+            raise InvalidData(f"Invalid data: {data!r}")
+
+        if isinstance(data, (list, tuple)):
+            if len(data) < 1:
+                raise InvalidData(
+                    f"Invalid data: {data!r}. The data parameter of iterable type is empty"
                 )
 
-            if not isinstance(data, (dict, list, tuple, bytes, str)):
-                raise InvalidData(f"Invalid data: {data!r}")
+            if not all(list(map(lambda x: isinstance(x, tuple), data))):
+                raise InvalidData(
+                    f"Invalid data: {data!r}. The data parameter item of iterable type must be a tuple"
+                )
 
-            if isinstance(data, (list, tuple)):
-                if len(data) < 1:
-                    raise InvalidData(f"Invalid data: {data!r}. The data parameter of iterable type is empty")
-
-                if not all(list(map(lambda x: isinstance(x, tuple), data))):
-                    raise InvalidData(
-                        f"Invalid data: {data!r}. The data parameter item of iterable type must be a tuple"
-                    )
-
-            if isinstance(data, (bytes, str)):
-                try:
-                    parse_qs(data)
-                except AttributeError:
-                    raise InvalidData(f"Invalid data: {data!r}")
+        if isinstance(data, (bytes, str)):
+            try:
+                parse_qs(data)
+            except AttributeError as err:
+                raise InvalidData(f"Invalid data: {data!r}") from err
 
         return data
 
@@ -235,16 +248,18 @@ class Request:
         """
 
         cookies = self.cookies
-        if cookies:
-            if not isinstance(cookies, (dict, CookieJar, bytes, str)):
-                raise AttributeError(
-                    f"Invalid cookies: {cookies!r}."
-                    "Cookies type only support dict, CookieJar, bytes, str"
-                )
+        if not cookies:
+            return cookies
 
-            if isinstance(cookies, (dict, bytes, str)):
-                if len(cookies) < 1:
-                    raise AttributeError("Invalid cookies, it's empty.")
+        if not isinstance(cookies, (dict, CookieJar, bytes, str)):
+            raise AttributeError(
+                f"Invalid cookies: {cookies!r}."
+                "Cookies type only support dict, CookieJar, bytes, str"
+            )
+
+        if isinstance(cookies, (dict, bytes, str)):
+            if len(cookies) < 1:
+                raise AttributeError("Invalid cookies, it's empty.")
 
         return cookies
 
@@ -265,27 +280,31 @@ class Request:
         """
 
         _json = self.json
-        if _json:
-            if self.data:
-                raise ValueError("Only one of the data and json parameters can be used at the same time")
+        if not _json:
+            return _json
 
-            if self.method.upper() not in ["POST", "PUT"]:
-                warnings.warn(
-                    f"The {self.method.upper()} method does not process data."
-                    f"Maybe you request the POST/PUT method?",
-                    RuntimeWarning,
-                )
+        if self.data or self.files:
+            raise ValueError(
+                "Only one of the data/files and json parameters can be used at the same time"
+            )
 
-            if not isinstance(self.json, (dict, str, bytes)):
-                raise ValueError(f"Invalid json: {self.json!r}")
+        if self.method.upper() not in ["POST", "PUT"]:
+            warnings.warn(
+                f"The {self.method.upper()} method does not process data."
+                f"Maybe you request the POST/PUT method?",
+                RuntimeWarning,
+            )
 
-            if self.headers:
-                for name, value in self.headers.items():
-                    if name.title() == "Content-Type" and value == "multipart/form-data":
-                        warnings.warn(
-                            "When sending a json data, the Content-Type header should be set to application/json",
-                            RuntimeWarning,
-                        )
+        if not isinstance(self.json, (dict, str, bytes)):
+            raise ValueError(f"Invalid json: {self.json!r}")
+
+        if self.headers:
+            for name, value in self.headers.items():
+                if name.title() == "Content-Type" and value == "multipart/form-data":
+                    warnings.warn(
+                        "When sending a json data, the Content-Type header should be set to application/json",
+                        RuntimeWarning,
+                    )
                     break
 
         return _json
@@ -296,38 +315,36 @@ class Request:
         :return:
         """
         files = self.files
-        if files:
-            if not isinstance(files, dict):
-                raise AttributeError("The files parameter is invalid, reference structure: {'file': FileObject}")
+        if not files:
+            return files
 
-            for file_name, file in files.items():
-                if isinstance(file, list):
-                    for f in file:
-                        if isinstance(f, (str, bytes)):
-                            if not os.path.isfile(f):
-                                raise AttributeError(f"{f} is not a file")
-                        elif isinstance(f, IOBase):
-                            if not f.readable():
-                                raise AttributeError("IO object is not readable")
-                        else:
-                            raise AttributeError("File object not supported yet")
-                elif isinstance(file, (str, bytes)):
-                    if not os.path.isfile(file):
-                        raise AttributeError(f"{file} is not a file")
-                elif isinstance(file, IOBase):
-                    if not file.readable():
+        if not isinstance(files, dict):
+            raise AttributeError(
+                "The files parameter is invalid, reference structure: {'file': FileObject}"
+            )
+
+        for _, file in files.items():
+            if isinstance(file, list):
+                for f in file:
+                    if isinstance(f, (str, bytes)) and not os.path.isfile(f):
+                        raise AttributeError(f"{f} is not a file")
+                    if isinstance(f, IOBase) and not f.readable():
                         raise AttributeError("IO object is not readable")
-                else:
-                    raise AttributeError("The files parameter must be an IO object")
 
-            if self.headers:
-                for name, value in self.headers.items():
-                    if name.title() == "Content-Type" and value != "multipart/form-data":
-                        warnings.warn(
-                            "When sending a files data, the Content-Type header should be set to multipart/form-data",
-                            RuntimeWarning,
-                        )
-                    break
+            if isinstance(file, (str, bytes)) and not os.path.isfile(file):
+                raise AttributeError(f"{file} is not a file")
+
+            if isinstance(file, IOBase) and not file.readable():
+                raise AttributeError("IO object is not readable")
+
+        if self.headers:
+            for name, value in self.headers.items():
+                if name.title() == "Content-Type" and value != "multipart/form-data":
+                    warnings.warn(
+                        "When sending a files data, the Content-Type header should be set to multipart/form-data",
+                        RuntimeWarning,
+                    )
+                break
 
         return files
 
@@ -337,19 +354,21 @@ class Request:
         :return:
         """
         proxies = self.proxies
-        if proxies:
-            if not isinstance(proxies, dict):
+        if not proxies:
+            return proxies
+
+        if not isinstance(proxies, dict):
+            raise AttributeError(
+                f"Invalid proxies attribute: {proxies!r}."
+                "The property structure should look like "
+                "{'http': 'username:password@host:port', 'https': 'username:password@host:port'}"
+            )
+
+        for schema in proxies:
+            if schema not in ("http", "https"):
                 raise AttributeError(
-                    f"Invalid proxies attribute: {proxies!r}."
-                    "The property structure should look like "
-                    "{'http': 'username:password@host:port', 'https': 'username:password@host:port'}"
+                    f"Invalid proxy schema: {schema!r}.",
+                    "The schema is only support http or https.",
                 )
-            else:
-                for schema in proxies:
-                    if schema not in ("http", "https"):
-                        raise AttributeError(
-                            f"Invalid proxy schema: {schema!r}.",
-                            "The schema is only support http or https."
-                        )
 
         return proxies

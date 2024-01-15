@@ -1,6 +1,6 @@
 """
-ja3requests.protocol.exceptions
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Ja3Requests.protocol.exceptions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 This module contains socket exceptions.
 """

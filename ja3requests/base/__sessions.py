@@ -1,8 +1,8 @@
 """
-ja3Requests.base._sessions
+Ja3Requests.base.__sessions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Basic Session
+Basic of Session.
 """
 
 
@@ -33,16 +33,22 @@ class BaseSession:
 
     @property
     def Request(self):
-
+        """
+        Session property Request
+        :return:
+        """
         return self._request
 
     @Request.setter
     def Request(self, attr):
-
         self._request = attr
 
     @property
     def response(self):
+        """
+        Session property response
+        :return:
+        """
         return self._response
 
     @response.setter
@@ -73,7 +79,12 @@ class BaseSession:
 
     @staticmethod
     def resolve_cookies(cj: Ja3RequestsCookieJar, cookie):
-
+        """
+        Collection session cookies
+        :param cj:
+        :param cookie:
+        :return:
+        """
         if isinstance(cookie, (bytes, str)):
             cookies_dict = dict_from_cookie_string(cookie)
             cj = add_dict_to_cookiejar(cj, cookies_dict)

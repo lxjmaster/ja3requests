@@ -1,21 +1,36 @@
+"""
+Ja3Requests.requests.http
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This module of HTTP Request.
+"""
+
+
 from ja3requests.base import BaseRequest
 from ja3requests.contexts.context import HTTPContext
 from ja3requests.sockets.http import HttpSocket
 from ja3requests.sockets.proxy import ProxySocket
 from ja3requests.const import DEFAULT_HTTP_SCHEME, DEFAULT_HTTP_PORT
 from ja3requests.response import HTTPResponse
-import typing
 
 
 class HttpRequest(BaseRequest):
+    """
+    HTTP Request
+    """
 
     def __init__(self):
-        super(HttpRequest, self).__init__()
+        super().__init__()
         self.scheme = DEFAULT_HTTP_SCHEME
         self.port = DEFAULT_HTTP_PORT
 
     @staticmethod
     def create_connection(context: HTTPContext):
+        """
+        create a new connection by context
+        :param context:
+        :return:
+        """
         if context.proxy:
             sock = ProxySocket(context)
         else:

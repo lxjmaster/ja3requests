@@ -1,5 +1,5 @@
 """
-ja3requests.utils
+Ja3Requests.utils
 ~~~~~~~~~~~~~~~~~
 
 This module provides utility functions.
@@ -93,6 +93,10 @@ def default_headers():
 
 
 class SingletonMeta(type):
+    """
+    SingletonMeta Class
+    """
+
     _instance = {}
 
     def __call__(cls, *args, **kwargs):
@@ -103,12 +107,25 @@ class SingletonMeta(type):
 
 
 class Retry(metaclass=SingletonMeta):
+    """
+    Retry Class
+    """
 
     _tasks = {}
 
     def do(self, obj, exception, *args, **kwargs):
+        """
+        Method of run retry task
+        :param obj:
+        :param exception:
+        :param args:
+        :param kwargs:
+        :return:
+        """
         if obj not in self._tasks:
-            self._tasks[obj] = Task(obj, DEFAULT_MAX_RETRY_LIMIT, exception, *args, **kwargs)
+            self._tasks[obj] = Task(
+                obj, DEFAULT_MAX_RETRY_LIMIT, exception, *args, **kwargs
+            )
 
         while self._tasks[obj].times > 0:
             result = self._tasks[obj].retry()
@@ -119,6 +136,9 @@ class Retry(metaclass=SingletonMeta):
 
 
 class Task:
+    """
+    Retry Task
+    """
 
     def __init__(self, task, times, exception, *args, **kwargs):
         self.task = task
@@ -128,6 +148,10 @@ class Task:
         self.kwargs = kwargs
 
     def retry(self):
+        """
+        retry method
+        :return:
+        """
         self.times -= 1
         try:
             return self.task(*self.args, **self.kwargs)

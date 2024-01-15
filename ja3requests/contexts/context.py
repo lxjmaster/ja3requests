@@ -1,5 +1,5 @@
 """
-ja3requests.context
+Ja3Requests.contexts.context
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 HTTP Context and HTTPS Context
@@ -7,7 +7,6 @@ HTTP Context and HTTPS Context
 
 
 from ja3requests.base import BaseContext
-import typing
 
 
 DEFAULT_HTTP_CONTEXT_PROTOCOL = 11
@@ -34,6 +33,9 @@ class HTTPContext(BaseContext):
 
 
 class HTTPSContext(BaseContext):
+    """
+    HTTPS Context
+    """
 
     def set_payload(self, request):
         pass

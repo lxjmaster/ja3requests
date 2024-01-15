@@ -1,5 +1,5 @@
 """
-ja3Requests.sessions
+Ja3Requests.sessions
 ~~~~~~~~~~~~~~~~~~~~
 
 This module provides a Session object to manage and persist settings across
@@ -7,17 +7,15 @@ ja3Requests.
 """
 import sys
 import time
+from io import IOBase
 from http.cookiejar import CookieJar
 from typing import AnyStr, Any, Dict, ByteString, Union, List, Tuple
 from ja3requests.base import BaseSession
-from .response import Response
-from .utils import default_headers
-from .const import DEFAULT_REDIRECT_LIMIT
+from ja3requests.response import Response
+from ja3requests.const import DEFAULT_REDIRECT_LIMIT
 from ja3requests.base import BaseRequest
 from ja3requests.requests.request import Request
-from urllib.parse import parse_qs
-from io import IOBase
-from .exceptions import MaxRetriedException
+from ja3requests.exceptions import MaxRetriedException
 
 # Preferred clock, based on which one is more accurate on a given system.
 if sys.platform == "win32":
@@ -37,15 +35,16 @@ class Session(BaseSession):
         method: AnyStr,
         url: AnyStr,
         params: Union[Dict[AnyStr, Any], ByteString] = None,
-        data: Union[Dict[Any, Any], List[Tuple[Any, Any]], Tuple[Tuple[Any, Any]], AnyStr] = None,
+        data: Union[
+            Dict[Any, Any], List[Tuple[Any, Any]], Tuple[Tuple[Any, Any]], AnyStr
+        ] = None,
         headers: Dict[AnyStr, AnyStr] = None,
         cookies: Union[Dict[AnyStr, AnyStr], CookieJar, AnyStr] = None,
         files: Dict[AnyStr, Union[List[Union[AnyStr, IOBase]], IOBase, AnyStr]] = None,
         auth: Tuple = None,
-        timeout: float = None,
-        allow_redirects: bool = True,
         proxies: Dict[AnyStr, AnyStr] = None,
-        json: Dict[AnyStr, AnyStr] = None,
+        json: Union[Dict[AnyStr, AnyStr], AnyStr] = None,
+        **kwargs
     ):
         """
         Instantiating a request class<Request> and ready request<ReadyRequest> to send.
@@ -57,8 +56,6 @@ class Session(BaseSession):
         :param cookies:
         :param files:
         :param auth:
-        :param timeout:
-        :param allow_redirects:
         :param proxies:
         :param json:
         :return:
@@ -77,13 +74,11 @@ class Session(BaseSession):
             proxies=proxies,
         )
 
-        send_kwargs = {
-            "timeout": timeout,
-            "allow_redirects": allow_redirects
-        }
+        kwargs.setdefault("timeout", None)
+        kwargs.setdefault("allow_redirects", True)
 
         req = self.Request.request()
-        response = self.send(req, **send_kwargs)
+        response = self.send(req, **kwargs)
 
         return response
 
@@ -120,18 +115,21 @@ class Session(BaseSession):
         kwargs.setdefault("allow_redirects", False)
         return self.request("HEAD", url, **kwargs)
 
-    def post(self, url, data=None, json=None, headers=None, **kwargs):
+    def post(self, url, data=None, json=None, files=None, headers=None, **kwargs):
         """
         Send a POST request.
         :param url:
         :param data:
         :param json:
+        :param files:
         :param headers:
         :param kwargs:
         :return:
         """
 
-        return self.request("POST", url, data=data, json=json, headers=headers, **kwargs)
+        return self.request(
+            "POST", url, data=data, json=json, files=files, headers=headers, **kwargs
+        )
 
     def put(self, url, **kwargs):
         """
@@ -183,7 +181,12 @@ class Session(BaseSession):
         return response
 
     def resolve_redirects(self, url, **kwargs):
-
+        """
+        Handle response redirects
+        :param url:
+        :param kwargs:
+        :return:
+        """
         send_kwargs = kwargs
 
         for _ in range(DEFAULT_REDIRECT_LIMIT):
@@ -192,7 +195,7 @@ class Session(BaseSession):
                 url=url,
                 headers=self.Request.headers,
                 cookies=self.Request.cookies,
-                proxies=self.Request.proxies
+                proxies=self.Request.proxies,
             ).request()
 
             response = self.send(req, **send_kwargs)

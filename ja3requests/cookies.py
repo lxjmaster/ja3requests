@@ -1,3 +1,11 @@
+"""
+Ja3Requests.cookies
+~~~~~~~~~~~~~~~~~~~
+
+This module contains Request or Response Cookies.
+"""
+
+
 from http.cookiejar import CookieJar, Cookie
 from http import cookies
 from typing import MutableMapping
@@ -39,16 +47,29 @@ class MockRequest:
         self.type = urlparse(self._r.url).scheme
 
     def get_type(self):
+        """
+        Get schema type
+        :return:
+        """
         return self.type
 
     def get_host(self):
+        """
+        Get host
+        :return:
+        """
         return urlparse(self._r.url).netloc
 
     def get_origin_req_host(self):
+        """
+        Get host
+        :return:
+        """
         return self.get_host()
 
     def get_full_url(self):
-        # Only return the response's URL if the user hadn't set the Host
+        """Only return the response's URL if the user hadn't set the Host"""
+
         # header
         if not self._r.headers.get("Host"):
             return self._r.url
@@ -69,12 +90,27 @@ class MockRequest:
 
     @staticmethod
     def is_unverifiable():
+        """
+        Check unverifiable
+        :return:
+        """
         return True
 
     def has_header(self, name):
+        """
+        Check header
+        :param name:
+        :return:
+        """
         return name in self._r.headers or name in self._new_headers
 
     def get_header(self, name, default=None):
+        """
+        Get header
+        :param name:
+        :param default:
+        :return:
+        """
         return self._r.headers.get(name, self._new_headers.get(name, default))
 
     def add_header(self, key, val):
@@ -84,21 +120,43 @@ class MockRequest:
         )
 
     def add_unredirected_header(self, name, value):
+        """
+        Add unredirected header
+        :param name:
+        :param value:
+        :return:
+        """
         self._new_headers[name] = value
 
     def get_new_headers(self):
+        """
+        Get new headers
+        :return:
+        """
         return self._new_headers
 
     @property
     def unverifiable(self):
+        """
+        Get unverifiable
+        :return:
+        """
         return self.is_unverifiable()
 
     @property
     def origin_req_host(self):
+        """
+        Get host
+        :return:
+        """
         return self.get_origin_req_host()
 
     @property
     def host(self):
+        """
+        Host
+        :return:
+        """
         return self.get_host()
 
 
@@ -116,9 +174,18 @@ class MockResponse:
         self.response = response
 
     def info(self):
+        """
+        Info method of Response
+        :return:
+        """
         return self.response.headers
 
     def getheaders(self, name):
+        """
+        Get header
+        :param name:
+        :return:
+        """
         self.response.headers.get(name)
 
 
@@ -162,8 +229,8 @@ def remove_cookie_by_name(cookiejar, name, domain=None, path=None):
             continue
         clear_ables.append((cookie.domain, cookie.path, cookie.name))
 
-    for domain, path, name in clear_ables:
-        cookiejar.clear(domain, path, name)
+    for _domain, _path, _name in clear_ables:
+        cookiejar.clear(_domain, _path, _name)
 
 
 class CookieConflictError(RuntimeError):
@@ -188,7 +255,7 @@ class Ja3RequestsCookieJar(CookieJar, MutableMapping):
     Unlike a regular CookieJar, this class is pickleable.
     """
 
-    def get(self, name, default=None, domain=None, path=None):
+    def get(self, key, default=None, domain=None, path=None):
         """Dict-like get() that also supports optional domain and path args in
         order to resolve naming collisions from using one cookie jar over
         multiple domains.
@@ -196,7 +263,7 @@ class Ja3RequestsCookieJar(CookieJar, MutableMapping):
         .. warning:: operation is O(n), not O(1).
         """
         try:
-            return self._find_no_duplicates(name, domain, path)
+            return self._find_no_duplicates(key, domain, path)
         except KeyError:
             return default
 
@@ -210,13 +277,15 @@ class Ja3RequestsCookieJar(CookieJar, MutableMapping):
             remove_cookie_by_name(
                 self, name, domain=kwargs.get("domain"), path=kwargs.get("path")
             )
-            return
+            return None
 
         if isinstance(value, cookies.Morsel):
             c = morsel_to_cookie(value)
         else:
             c = create_cookie(name, value, **kwargs)
+
         self.set_cookie(c)
+
         return c
 
     def iterkeys(self):
@@ -316,6 +385,11 @@ class Ja3RequestsCookieJar(CookieJar, MutableMapping):
         return dictionary
 
     def __contains__(self, name):
+        """
+        Class builtin method
+        :param name:
+        :return:
+        """
         try:
             return super().__contains__(name)
         except CookieConflictError:
@@ -344,6 +418,11 @@ class Ja3RequestsCookieJar(CookieJar, MutableMapping):
         remove_cookie_by_name(self, name)
 
     def set_cookie(self, cookie):
+        """
+        Set cookie
+        :param cookie:
+        :return:
+        """
         if (
             hasattr(cookie.value, "startswith")
             and cookie.value.startswith('"')
@@ -435,6 +514,11 @@ class Ja3RequestsCookieJar(CookieJar, MutableMapping):
 
 
 def _copy_cookie_jar(jar):
+    """
+    Copy CookieJar
+    :param jar:
+    :return:
+    """
     if jar is None:
         return None
 
@@ -493,8 +577,8 @@ def morsel_to_cookie(morsel):
     if morsel["max-age"]:
         try:
             expires = int(time.time() + int(morsel["max-age"]))
-        except ValueError:
-            raise TypeError(f"max-age: {morsel['max-age']} must be integer")
+        except ValueError as err:
+            raise TypeError(f"max-age: {morsel['max-age']} must be integer") from err
     elif morsel["expires"]:
         time_template = "%a, %d-%b-%Y %H:%M:%S GMT"
         expires = calendar.timegm(time.strptime(morsel["expires"], time_template))
