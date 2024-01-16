@@ -107,7 +107,7 @@ class Request:
                 cookies=cookies,
                 auth=auth,
                 json=_json,
-                proxies=proxies,
+                proxy=proxies,
                 timeout=self.timeout,
             )
             return req

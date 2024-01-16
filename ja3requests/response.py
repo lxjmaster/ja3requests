@@ -190,6 +190,10 @@ class HTTPResponse(BaseResponse):
         return headers
 
 
+class HTTPSResponse(HTTPResponse):
+    pass
+
+
 class Response(BaseResponse):
     """Response
     <Response [200]>

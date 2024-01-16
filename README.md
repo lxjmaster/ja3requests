@@ -207,3 +207,7 @@ print(response)
 ## Reference
 - [HTTP](https://developer.mozilla.org/en-US/docs/Web/HTTP)
 - [HTTP-RFC](https://www.rfc-editor.org/rfc/rfc2068.html)
+- [TLS v1.2-RFC](https://datatracker.ietf.org/doc/html/rfc5246)
+- [TLS v1.3-RFC](https://datatracker.ietf.org/doc/html/rfc8446)
+- [HTTP2-RFC](https://httpwg.org/specs/rfc9113.html)
+- [SSL-CONFIG-GENERATOR](https://ssl-config.mozilla.org/)

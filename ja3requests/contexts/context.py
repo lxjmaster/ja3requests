@@ -10,7 +10,10 @@ from ja3requests.base import BaseContext
 
 
 DEFAULT_HTTP_CONTEXT_PROTOCOL = 11
+DEFAULT_HTTPS_CONTEXT_PROTOCOL = 20
+
 DEFAULT_HTTP_VERSION = "HTTP/1.1"
+DEFAULT_HTTPS_VERSION = "HTTP/2.0"
 
 
 class HTTPContext(BaseContext):
@@ -37,5 +40,15 @@ class HTTPSContext(BaseContext):
     HTTPS Context
     """
 
-    def set_payload(self, request):
-        pass
+    def __init__(self):
+        super().__init__()
+        self.protocol = DEFAULT_HTTPS_CONTEXT_PROTOCOL
+        self.version = DEFAULT_HTTPS_VERSION
+
+    def set_payload(self, **kwargs):
+        """
+        Set context payload
+        :return:
+        """
+        for k, v in kwargs.items():
+            setattr(self, k, v)

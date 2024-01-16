@@ -124,6 +124,11 @@ class TestSession(unittest.TestCase):
         # print(response.cookies)
         # print(response.text)
 
+    def test_https(self):
+
+        response = self.session.get("https://127.0.0.1:8443")
+        print(response)
+
 
 if __name__ == '__main__':
     unittest.main()
