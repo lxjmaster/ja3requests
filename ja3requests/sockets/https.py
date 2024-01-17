@@ -7,6 +7,7 @@ This module of HTTPS Socket.
 
 
 from ja3requests.base import BaseSocket
+from ja3requests.protocol.tls import TLS
 
 
 class HttpsSocket(BaseSocket):
@@ -19,6 +20,8 @@ class HttpsSocket(BaseSocket):
         self.conn = self._new_conn(self.context.destination_address, self.context.port)
 
         # TLS握手
+        tls = TLS(self.conn)
+        tls.set_payload()
 
         return self
 
