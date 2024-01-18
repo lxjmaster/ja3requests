@@ -1,10 +1,44 @@
+import struct
+from ja3requests.protocol.tls.layers import HandShake
+from ja3requests.protocol.tls.layers.client_hello import ClientHello
 
 
 class TLS:
 
     def __init__(self, conn):
 
+        # TODO: cipher suites, extensions
+        self._tls_version = None
+        self._body = None
         self.conn = conn
+
+    @property
+    def tls_version(self) -> bytes:
+        tls_version = self._tls_version
+        if not tls_version:
+            tls_version = struct.pack("I", 771)[:2]
+
+        return tls_version
+
+    @tls_version.setter
+    def tls_version(self, attr: bytes):
+
+        self._tls_version = attr
+
+    @property
+    def body(self) -> HandShake:
+        body = self._body
+        if not body:
+            body = ClientHello(
+                # TODO: cipher suites, extensions
+            )
+
+        return body
+
+    @body.setter
+    def body(self, attr: HandShake):
+
+        self._body = attr
 
     def set_payload(self):
         pass
@@ -38,4 +72,4 @@ class TLS:
         } Handshake;
         :return:
         """
-        pass
+        print(self.body.message)

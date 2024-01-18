@@ -11,6 +11,7 @@ class CipherSuite:
         self._key_length = None
         self._mac_key_length = None
         self._value = None
+        self._version = None
 
     def __repr__(self):
         if self.name:
@@ -87,3 +88,13 @@ class CipherSuite:
     def value(self, attr):
 
         self._value = attr
+
+    @property
+    def version(self):
+
+        return self._version
+
+    @version.setter
+    def version(self, attr):
+
+        self._version = attr

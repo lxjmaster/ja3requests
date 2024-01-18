@@ -21,7 +21,11 @@ class HttpsSocket(BaseSocket):
 
         # TLS握手
         tls = TLS(self.conn)
-        tls.set_payload()
+        # 设置相关ja3参数等
+        tls.set_payload(
+            # TODO set tls payload
+        )
+        tls.handshake()
 
         return self
 

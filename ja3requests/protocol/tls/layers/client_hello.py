@@ -127,13 +127,13 @@ class ClientHello(HandShake):
         SSL 3.
     """
 
-    def __init__(self):
+    def __init__(self, cipher_suites, extensions):
+        # TODO: cipher_suites, extensions
         super().__init__()
         self._client_version = None
         self._random = None
         self._session_id = None
         self._cipher_suites = None
-        self._compression_methods = None
         self._extensions = None
 
     @property
@@ -161,6 +161,7 @@ class ClientHello(HandShake):
         client_version = self._version
         if not client_version:
             client_version = struct.pack("B", 3) + struct.pack("B", 3)
+            # client_version = struct.pack("I", 771)[:2]
 
         return client_version
 

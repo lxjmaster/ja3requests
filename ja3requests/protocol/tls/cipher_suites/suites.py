@@ -1,6 +1,56 @@
 from ja3requests.protocol.tls.cipher_suites import CipherSuite
 
 
+"""
+When SSLv3 and TLS 1.0 were designed, the United States restricted
+the export of cryptographic software containing certain strong
+encryption algorithms.  A series of cipher suites were designed to
+operate at reduced key lengths in order to comply with those
+regulations.  Due to advances in computer performance, these
+algorithms are now unacceptably weak, and export restrictions have
+since been loosened.  TLS 1.1 implementations MUST NOT negotiate
+these cipher suites in TLS 1.1 mode.  However, for backward
+compatibility they may be offered in the ClientHello for use with TLS
+1.0 or SSLv3-only servers.  TLS 1.1 clients MUST check that the
+server did not choose one of these cipher suites during the
+handshake.  These ciphersuites are listed below for informational
+purposes and to reserve the numbers.
+
+    CipherSuite TLS_RSA_EXPORT_WITH_RC4_40_MD5         = { 0x00,0x03 };
+    CipherSuite TLS_RSA_EXPORT_WITH_RC2_CBC_40_MD5     = { 0x00,0x06 };
+    CipherSuite TLS_RSA_EXPORT_WITH_DES40_CBC_SHA      = { 0x00,0x08 };
+    CipherSuite TLS_DH_DSS_EXPORT_WITH_DES40_CBC_SHA   = { 0x00,0x0B };
+    CipherSuite TLS_DH_RSA_EXPORT_WITH_DES40_CBC_SHA   = { 0x00,0x0E };
+    CipherSuite TLS_DHE_DSS_EXPORT_WITH_DES40_CBC_SHA  = { 0x00,0x11 };
+    CipherSuite TLS_DHE_RSA_EXPORT_WITH_DES40_CBC_SHA  = { 0x00,0x14 };
+    CipherSuite TLS_DH_anon_EXPORT_WITH_RC4_40_MD5     = { 0x00,0x17 };
+    CipherSuite TLS_DH_anon_EXPORT_WITH_DES40_CBC_SHA  = { 0x00,0x19 };
+
+The following cipher suites were defined in [TLSKRB] and are included
+here for completeness.  See [TLSKRB] for details:
+
+    CipherSuite    TLS_KRB5_WITH_DES_CBC_SHA           = { 0x00,0x1E }:
+    CipherSuite    TLS_KRB5_WITH_3DES_EDE_CBC_SHA      = { 0x00,0x1F };
+    CipherSuite    TLS_KRB5_WITH_RC4_128_SHA           = { 0x00,0x20 };
+    CipherSuite    TLS_KRB5_WITH_IDEA_CBC_SHA          = { 0x00,0x21 };
+    CipherSuite    TLS_KRB5_WITH_DES_CBC_MD5           = { 0x00,0x22 };
+    CipherSuite    TLS_KRB5_WITH_3DES_EDE_CBC_MD5      = { 0x00,0x23 };
+    CipherSuite    TLS_KRB5_WITH_RC4_128_MD5           = { 0x00,0x24 };
+    CipherSuite    TLS_KRB5_WITH_IDEA_CBC_MD5          = { 0x00,0x25 };
+    
+The following exportable cipher suites were defined in [TLSKRB] and
+are included here for completeness.  TLS 1.1 implementations MUST NOT
+negotiate these cipher suites.
+
+    CipherSuite  TLS_KRB5_EXPORT_WITH_DES_CBC_40_SHA    = { 0x00,0x26};
+    CipherSuite  TLS_KRB5_EXPORT_WITH_RC2_CBC_40_SHA    = { 0x00,0x27};
+    CipherSuite  TLS_KRB5_EXPORT_WITH_RC4_40_SHA        = { 0x00,0x28};
+    CipherSuite  TLS_KRB5_EXPORT_WITH_DES_CBC_40_MD5    = { 0x00,0x29};
+    CipherSuite  TLS_KRB5_EXPORT_WITH_RC2_CBC_40_MD5    = { 0x00,0x2A};
+    CipherSuite  TLS_KRB5_EXPORT_WITH_RC4_40_MD5        = { 0x00,0x2B};
+"""
+
+
 class NullWithNullNull(CipherSuite):
     """
     TLS_NULL_WITH_NULL_NULL is specified and is the initial state of a
@@ -16,10 +66,11 @@ class NullWithNullNull(CipherSuite):
         self.name = "TLS_NULL_WITH_NULL_NULL"
         self.key_exchange_type = None
         self.hash_type = None
-        self.cipher_type = None
-        self.key_length = None
-        self.mac_key_length = None
+        self.cipher_type = "Stream"
+        self.key_length = 0
+        self.mac_key_length = 0
         self.value = 0x0000
+        self.version = {1.1, 1.2}
 
 
 """
@@ -39,11 +90,12 @@ class RsaWithNullMd5(CipherSuite):
         super().__init__()
         self.name = "TLS_RSA_WITH_NULL_MD5"
         self.key_exchange_type = "RSA"
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.hash_type = "HMAC-MD5"
+        self.cipher_type = "Stream"
+        self.key_length = 0
+        self.mac_key_length = 16
         self.value = 0x0001
+        self.version = {1.1, 1.2}
 
 
 class RsaWithNullSha(CipherSuite):
@@ -54,12 +106,47 @@ class RsaWithNullSha(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_RSA_WITH_NULL_SHA"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "RSA"
+        self.hash_type = "HMAC-SHA1"
+        self.cipher_type = "Stream"
+        self.key_length = 0
+        self.mac_key_length = 20
         self.value = 0x0002
+        self.version = {1.1, 1.2}
+
+
+class RsaWithIdeaCbcSha(CipherSuite):
+    """
+    CipherSuite TLS_RSA_WITH_IDEA_CBC_SHA              = { 0x00,0x07 };
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.name = "TLS_RSA_WITH_IDEA_CBC_SHA"
+        self.key_exchange_type = "RSA"
+        self.hash_type = "HMAC-SHA1"
+        self.cipher_type = "Block"
+        self.key_length = 16
+        self.mac_key_length = 20
+        self.value = 0x0007
+        self.version = {1.2}
+
+
+class RsaWithDesCbcSha(CipherSuite):
+    """
+    CipherSuite TLS_RSA_WITH_DES_CBC_SHA               = { 0x00,0x09 };
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.name = "TLS_RSA_WITH_DES_CBC_SHA"
+        self.key_exchange_type = "RSA"
+        self.hash_type = "HMAC-SHA1"
+        self.cipher_type = "Block"
+        self.key_length = 8
+        self.mac_key_length = 20
+        self.value = 0x0009
+        self.version = {1.2}
 
 
 class RsaWithNullSha256(CipherSuite):
@@ -70,12 +157,13 @@ class RsaWithNullSha256(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_RSA_WITH_NULL_SHA256"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "RSA"
+        self.hash_type = "HMAC-SHA256"
+        self.cipher_type = "Stream"
+        self.key_length = 0
+        self.mac_key_length = 32
         self.value = 0x003B
+        self.version = {1.1}
 
 
 class RsaWithRc4128Md5(CipherSuite):
@@ -86,12 +174,13 @@ class RsaWithRc4128Md5(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_RSA_WITH_RC4_128_MD5"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "RSA"
+        self.hash_type = "HMAC-MD5"
+        self.cipher_type = "Stream"
+        self.key_length = 16
+        self.mac_key_length = 20
         self.value = 0x0004
+        self.version = {1.1, 1.2}
 
 
 class RsaWithRc4128Sha(CipherSuite):
@@ -102,12 +191,13 @@ class RsaWithRc4128Sha(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_RSA_WITH_RC4_128_SHA"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "RSA"
+        self.hash_type = "HMAC-SHA1"
+        self.cipher_type = "Stream"
+        self.key_length = 16
+        self.mac_key_length = 20
         self.value = 0x0005
+        self.version = {1.1, 1.2}
 
 
 class RsaWith3DesEdeCbcSha(CipherSuite):
@@ -118,12 +208,13 @@ class RsaWith3DesEdeCbcSha(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_RSA_WITH_3DES_EDE_CBC_SHA"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "RSA"
+        self.hash_type = "HMAC-SHA1"
+        self.cipher_type = "Block"
+        self.key_length = 24
+        self.mac_key_length = 20
         self.value = 0x000A
+        self.version = {1.1, 1.2}
 
 
 class RsaWithAes128CbcSha(CipherSuite):
@@ -134,12 +225,13 @@ class RsaWithAes128CbcSha(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_RSA_WITH_AES_128_CBC_SHA"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "RSA"
+        self.hash_type = "HMAC-SHA1"
+        self.cipher_type = "Block"
+        self.key_length = 16
+        self.mac_key_length = 20
         self.value = 0x002F
+        self.version = {1.1, 1.2}
 
 
 class RsaWithAes256CbcSha(CipherSuite):
@@ -150,12 +242,13 @@ class RsaWithAes256CbcSha(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_RSA_WITH_AES_256_CBC_SHA"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "RSA"
+        self.hash_type = "HMAC-SHA1"
+        self.cipher_type = "Block"
+        self.key_length = 32
+        self.mac_key_length = 20
         self.value = 0x0035
+        self.version = {1.1, 1.2}
 
 
 class RsaWithAes128CbcSha256(CipherSuite):
@@ -166,12 +259,13 @@ class RsaWithAes128CbcSha256(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_RSA_WITH_AES_128_CBC_SHA256"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "RSA"
+        self.hash_type = "HMAC-SHA256"
+        self.cipher_type = "Block"
+        self.key_length = 16
+        self.mac_key_length = 32
         self.value = 0x003C
+        self.version = {1.1}
 
 
 class RsaWithAes256CbcSha256(CipherSuite):
@@ -182,12 +276,13 @@ class RsaWithAes256CbcSha256(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_RSA_WITH_AES_256_CBC_SHA256"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "RSA"
+        self.hash_type = "HMAC-SHA256"
+        self.cipher_type = "Block"
+        self.key_length = 32
+        self.mac_key_length = 32
         self.value = 0x003D
+        self.version = {1.1}
 
 
 """
@@ -207,6 +302,23 @@ server.
 """
 
 
+class DhDssWithDesCbcSha(CipherSuite):
+    """
+    CipherSuite TLS_DH_DSS_WITH_DES_CBC_SHA            = { 0x00,0x0C };
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.name = "TLS_DH_DSS_WITH_DES_CBC_SHA"
+        self.key_exchange_type = "DH_DSS"
+        self.hash_type = "HMAC-SHA1"
+        self.cipher_type = "Block"
+        self.key_length = 8
+        self.mac_key_length = 20
+        self.value = 0x000C
+        self.version = {1.2}
+
+
 class DhDssWith3DesEdeCbcSha(CipherSuite):
     """
     CipherSuite TLS_DH_DSS_WITH_3DES_EDE_CBC_SHA      = { 0x00,0x0D };
@@ -215,12 +327,30 @@ class DhDssWith3DesEdeCbcSha(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_DH_DSS_WITH_3DES_EDE_CBC_SHA"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "DH_DSS"
+        self.hash_type = "HMAC-SHA1"
+        self.cipher_type = "Block"
+        self.key_length = 24
+        self.mac_key_length = 20
         self.value = 0x000D
+        self.version = {1.1, 1.2}
+
+
+class DhRsaWithDesCbcSha(CipherSuite):
+    """
+    CipherSuite TLS_DH_RSA_WITH_DES_CBC_SHA            = { 0x00,0x0F };
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.name = "TLS_DH_RSA_WITH_DES_CBC_SHA"
+        self.key_exchange_type = "DH_RSA"
+        self.hash_type = "HMAC-SHA1"
+        self.cipher_type = "Block"
+        self.key_length = 8
+        self.mac_key_length = 20
+        self.value = 0x000F
+        self.version = {1.2}
 
 
 class DhRsaWith3DesEdeCbcSha(CipherSuite):
@@ -231,12 +361,30 @@ class DhRsaWith3DesEdeCbcSha(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_DH_RSA_WITH_3DES_EDE_CBC_SHA"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "DH_RSA"
+        self.hash_type = "HMAC-SHA1"
+        self.cipher_type = "Block"
+        self.key_length = 24
+        self.mac_key_length = 20
         self.value = 0x0010
+        self.version = {1.1, 1.2}
+
+
+class DheDssWithDesCbcSha(CipherSuite):
+    """
+    CipherSuite TLS_DHE_DSS_WITH_DES_CBC_SHA           = { 0x00,0x12 };
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.name = "TLS_DHE_DSS_WITH_DES_CBC_SHA"
+        self.key_exchange_type = "DHE_DSS"
+        self.hash_type = "HMAC-SHA1"
+        self.cipher_type = "Block"
+        self.key_length = 8
+        self.mac_key_length = 20
+        self.value = 0x0012
+        self.version = {1.2}
 
 
 class DheDssWith3DesEdeCbcSha(CipherSuite):
@@ -247,12 +395,30 @@ class DheDssWith3DesEdeCbcSha(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_DHE_DSS_WITH_3DES_EDE_CBC_SHA"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "DHE_DSS"
+        self.hash_type = "HMAC-SHA1"
+        self.cipher_type = "Block"
+        self.key_length = 24
+        self.mac_key_length = 20
         self.value = 0x0013
+        self.version = {1.1, 1.2}
+
+
+class DheRsaWithDesCbcSha(CipherSuite):
+    """
+    CipherSuite TLS_DHE_RSA_WITH_DES_CBC_SHA           = { 0x00,0x15 };
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.name = "TLS_DHE_RSA_WITH_DES_CBC_SHA"
+        self.key_exchange_type = "DHE_DSS"
+        self.hash_type = "HMAC-SHA1"
+        self.cipher_type = "Block"
+        self.key_length = 8
+        self.mac_key_length = 20
+        self.value = 0x0015
+        self.version = {1.2}
 
 
 class DheRsaWith3DesEdeCbcSha(CipherSuite):
@@ -263,12 +429,13 @@ class DheRsaWith3DesEdeCbcSha(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_DHE_RSA_WITH_3DES_EDE_CBC_SHA"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "DHE_RSA"
+        self.hash_type = "HMAC-SHA1"
+        self.cipher_type = "Block"
+        self.key_length = 24
+        self.mac_key_length = 20
         self.value = 0x0016
+        self.version = {1.1, 1.2}
 
 
 class DhDssWithAes128CbcSha(CipherSuite):
@@ -279,12 +446,13 @@ class DhDssWithAes128CbcSha(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_DH_DSS_WITH_AES_128_CBC_SHA"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "DH_DSS"
+        self.hash_type = "HMAC-SHA1"
+        self.cipher_type = "Block"
+        self.key_length = 16
+        self.mac_key_length = 20
         self.value = 0x0030
+        self.version = {1.1, 1.2}
 
 
 class DhRsaWithAes128CbcSha(CipherSuite):
@@ -295,12 +463,13 @@ class DhRsaWithAes128CbcSha(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_DH_RSA_WITH_AES_128_CBC_SHA"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "DH_RSA"
+        self.hash_type = "HMAC-SHA1"
+        self.cipher_type = "Block"
+        self.key_length = 16
+        self.mac_key_length = 20
         self.value = 0x0031
+        self.version = {1.1, 1.2}
 
 
 class DheDssWithAes128CbcSha(CipherSuite):
@@ -311,12 +480,13 @@ class DheDssWithAes128CbcSha(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_DHE_DSS_WITH_AES_128_CBC_SHA"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "DHE_DSS"
+        self.hash_type = "HMAC-SHA1"
+        self.cipher_type = "Block"
+        self.key_length = 16
+        self.mac_key_length = 20
         self.value = 0x0032
+        self.version = {1.1, 1.2}
 
 
 class DheRsaWithAes128CbcSha(CipherSuite):
@@ -327,12 +497,13 @@ class DheRsaWithAes128CbcSha(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_DHE_RSA_WITH_AES_128_CBC_SHA"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "DHE_RSA"
+        self.hash_type = "HMAC-SHA1"
+        self.cipher_type = "Block"
+        self.key_length = 16
+        self.mac_key_length = 20
         self.value = 0x0033
+        self.version = {1.1, 1.2}
 
 
 class DhDssWithAes256CbcSha(CipherSuite):
@@ -343,12 +514,13 @@ class DhDssWithAes256CbcSha(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_DH_DSS_WITH_AES_256_CBC_SHA"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "DH_DSS"
+        self.hash_type = "HMAC-SHA1"
+        self.cipher_type = "Block"
+        self.key_length = 32
+        self.mac_key_length = 20
         self.value = 0x0036
+        self.version = {1.1, 1.2}
 
 
 class DhRsaWithAes256CbcSha(CipherSuite):
@@ -359,12 +531,13 @@ class DhRsaWithAes256CbcSha(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_DH_RSA_WITH_AES_256_CBC_SHA"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "DH_RSA"
+        self.hash_type = "HMAC-SHA1"
+        self.cipher_type = "Block"
+        self.key_length = 32
+        self.mac_key_length = 20
         self.value = 0x0037
+        self.version = {1.1, 1.2}
 
 
 class DheDssWithAes256CbcSha(CipherSuite):
@@ -375,12 +548,13 @@ class DheDssWithAes256CbcSha(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_DHE_DSS_WITH_AES_256_CBC_SHA"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "DHE_DSS"
+        self.hash_type = "HMAC-SHA1"
+        self.cipher_type = "Block"
+        self.key_length = 32
+        self.mac_key_length = 20
         self.value = 0x0038
+        self.version = {1.1, 1.2}
 
 
 class DheRsaWithAes256CbcSha(CipherSuite):
@@ -391,12 +565,13 @@ class DheRsaWithAes256CbcSha(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_DHE_RSA_WITH_AES_256_CBC_SHA"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "DHE_RSA"
+        self.hash_type = "HMAC-SHA1"
+        self.cipher_type = "Block"
+        self.key_length = 32
+        self.mac_key_length = 20
         self.value = 0x0039
+        self.version = {1.1, 1.2}
 
 
 class DhDssWithAes128CbcSha256(CipherSuite):
@@ -407,12 +582,13 @@ class DhDssWithAes128CbcSha256(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_DH_DSS_WITH_AES_128_CBC_SHA256"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "DH_DSS"
+        self.hash_type = "HMAC-SHA256"
+        self.cipher_type = "Block"
+        self.key_length = 16
+        self.mac_key_length = 32
         self.value = 0x003E
+        self.version = {1.1}
 
 
 class DhRsaWithAes128CbcSha256(CipherSuite):
@@ -423,12 +599,13 @@ class DhRsaWithAes128CbcSha256(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_DH_RSA_WITH_AES_128_CBC_SHA256"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "DH_RSA"
+        self.hash_type = "HMAC-SHA256"
+        self.cipher_type = "Block"
+        self.key_length = 16
+        self.mac_key_length = 32
         self.value = 0x003F
+        self.version = {1.1}
 
 
 class DheDssWithAes128CbcSha256(CipherSuite):
@@ -439,12 +616,13 @@ class DheDssWithAes128CbcSha256(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_DHE_DSS_WITH_AES_128_CBC_SHA256"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "DHE_DSS"
+        self.hash_type = "HMAC-SHA256"
+        self.cipher_type = "Block"
+        self.key_length = 16
+        self.mac_key_length = 32
         self.value = 0x0040
+        self.version = {1.1}
 
 
 class DheRsaWithAes128CbcSha256(CipherSuite):
@@ -455,12 +633,13 @@ class DheRsaWithAes128CbcSha256(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_DHE_RSA_WITH_AES_128_CBC_SHA256"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "DHE_RSA"
+        self.hash_type = "HMAC-SHA256"
+        self.cipher_type = "Block"
+        self.key_length = 16
+        self.mac_key_length = 32
         self.value = 0x0067
+        self.version = {1.1}
 
 
 class DhDssWithAes256CbcSha256(CipherSuite):
@@ -471,12 +650,13 @@ class DhDssWithAes256CbcSha256(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_DH_DSS_WITH_AES_256_CBC_SHA256"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "DH_DSS"
+        self.hash_type = "HMAC-SHA256"
+        self.cipher_type = "Block"
+        self.key_length = 32
+        self.mac_key_length = 32
         self.value = 0x0068
+        self.version = {1.1}
 
 
 class DhRsaWithAes256CbcSha256(CipherSuite):
@@ -487,12 +667,13 @@ class DhRsaWithAes256CbcSha256(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_DH_RSA_WITH_AES_256_CBC_SHA256"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "DH_RSA"
+        self.hash_type = "HMAC-SHA256"
+        self.cipher_type = "Block"
+        self.key_length = 32
+        self.mac_key_length = 32
         self.value = 0x0069
+        self.version = {1.1}
 
 
 class DheDssWithAes256CbcSha256(CipherSuite):
@@ -503,12 +684,13 @@ class DheDssWithAes256CbcSha256(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_DHE_DSS_WITH_AES_256_CBC_SHA256"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "DHE_DSS"
+        self.hash_type = "HMAC-SHA256"
+        self.cipher_type = "Block"
+        self.key_length = 32
+        self.mac_key_length = 32
         self.value = 0x006A
+        self.version = {1.1}
 
 
 class DheRsaWithAes256CbcSha256(CipherSuite):
@@ -519,12 +701,13 @@ class DheRsaWithAes256CbcSha256(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_DHE_RSA_WITH_AES_256_CBC_SHA256"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "DHE_RSA"
+        self.hash_type = "HMAC-SHA256"
+        self.cipher_type = "Block"
+        self.key_length = 32
+        self.mac_key_length = 32
         self.value = 0x006B
+        self.version = {1.1}
 
 
 """
@@ -550,12 +733,30 @@ class DhAnonWithRc4128Md5(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_DH_anon_WITH_RC4_128_MD5"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "DH_anon"
+        self.hash_type = "HMAC-MD5"
+        self.cipher_type = "Stream"
+        self.key_length = 16
+        self.mac_key_length = 16
         self.value = 0x0018
+        self.version = {1.1, 1.2}
+
+
+class DhAnonWithDesCbcSha(CipherSuite):
+    """
+    CipherSuite TLS_DH_anon_WITH_DES_CBC_SHA           = { 0x00,0x1A };
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.name = "TLS_DH_anon_WITH_DES_CBC_SHA"
+        self.key_exchange_type = "DH_anon"
+        self.hash_type = "HMAC-SHA1"
+        self.cipher_type = "Block"
+        self.key_length = 8
+        self.mac_key_length = 20
+        self.value = 0x001A
+        self.version = {1.2}
 
 
 class DhAnonWith3DesEdeCbcSha(CipherSuite):
@@ -566,12 +767,13 @@ class DhAnonWith3DesEdeCbcSha(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_DH_anon_WITH_3DES_EDE_CBC_SHA"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "DH_anon"
+        self.hash_type = "HMAC-SHA1"
+        self.cipher_type = "Block"
+        self.key_length = 24
+        self.mac_key_length = 20
         self.value = 0x001B
+        self.version = {1.1, 1.2}
 
 
 class DhAnonWithAes128CbcSha(CipherSuite):
@@ -582,12 +784,13 @@ class DhAnonWithAes128CbcSha(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_DH_anon_WITH_AES_128_CBC_SHA"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "DH_anon"
+        self.hash_type = "HMAC-SHA1"
+        self.cipher_type = "Block"
+        self.key_length = 16
+        self.mac_key_length = 20
         self.value = 0x0034
+        self.version = {1.1, 1.2}
 
 
 class DhAnonWithAes256CbcSha(CipherSuite):
@@ -598,12 +801,13 @@ class DhAnonWithAes256CbcSha(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_DH_anon_WITH_AES_256_CBC_SHA"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "DH_anon"
+        self.hash_type = "HMAC-SHA1"
+        self.cipher_type = "Block"
+        self.key_length = 32
+        self.mac_key_length = 20
         self.value = 0x003A
+        self.version = {1.1, 1.2}
 
 
 class DhAnonWithAes128CbcSha256(CipherSuite):
@@ -614,12 +818,13 @@ class DhAnonWithAes128CbcSha256(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_DH_anon_WITH_AES_128_CBC_SHA256"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "DH_anon"
+        self.hash_type = "HMAC-SHA256"
+        self.cipher_type = "Block"
+        self.key_length = 16
+        self.mac_key_length = 32
         self.value = 0x006C
+        self.version = {1.1}
 
 
 class DhAnonWithAes256CbcSha256(CipherSuite):
@@ -630,12 +835,13 @@ class DhAnonWithAes256CbcSha256(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_DH_anon_WITH_AES_256_CBC_SHA256"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "DH_anon"
+        self.hash_type = "HMAC-SHA256"
+        self.cipher_type = "Block"
+        self.key_length = 32
+        self.mac_key_length = 32
         self.value = 0x006D
+        self.version = {1.1}
 
 
 """
@@ -762,12 +968,13 @@ class Aes128GcmSha256(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_AES_128_GCM_SHA256"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "AES"
+        self.hash_type = "HMAC-SHA256"
+        self.cipher_type = "Block"
+        self.key_length = 16
+        self.mac_key_length = 32
         self.value = 0x1301
+        self.version = {1.3}
 
 
 class Aes256GcmSha384(CipherSuite):
@@ -813,12 +1020,13 @@ class Aes256GcmSha384(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_AES_256_GCM_SHA384"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "AES"
+        self.hash_type = "HMAC-SHA384"
+        self.cipher_type = "Block"
+        self.key_length = 32
+        self.mac_key_length = 48
         self.value = 0x1302
+        self.version = {1.3}
 
 
 class ChaCha20Poly1305Sha256(CipherSuite):
@@ -829,12 +1037,13 @@ class ChaCha20Poly1305Sha256(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_CHACHA20_POLY1305_SHA256"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
+        self.key_exchange_type = "AEAD"
+        self.hash_type = "HMAC-SHA256"
+        self.cipher_type = "Block"
+        self.key_length = 32
         self.mac_key_length = None
         self.value = 0x1303
+        self.version = {1.3}
 
 
 class Aes128CcmSha256(CipherSuite):
@@ -880,12 +1089,13 @@ class Aes128CcmSha256(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_AES_128_CCM_SHA256"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "AES"
+        self.hash_type = "HMAC-SHA256"
+        self.cipher_type = "Block"
+        self.key_length = 16
+        self.mac_key_length = 32
         self.value = 0x1304
+        self.version = {1.3}
 
 
 class Aes128Ccm8Sha256(CipherSuite):
@@ -896,12 +1106,13 @@ class Aes128Ccm8Sha256(CipherSuite):
     def __init__(self):
         super().__init__()
         self.name = "TLS_AES_128_CCM_8_SHA256"
-        self.key_exchange_type = ""
-        self.hash_type = ""
-        self.cipher_type = ""
-        self.key_length = None
-        self.mac_key_length = None
+        self.key_exchange_type = "AES"
+        self.hash_type = "HMAC-SHA256"
+        self.cipher_type = "Block"
+        self.key_length = 16
+        self.mac_key_length = 32
         self.value = 0x1305
+        self.version = {1.3}
 
 
 # AEAD_AES_256_CCM
