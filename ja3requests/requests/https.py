@@ -38,8 +38,13 @@ class HttpsRequest(BaseRequest):
 
         return sock.new_conn()
 
-    def send(self):
-        context = HTTPSContext()
+    def send(self, **kwargs):
+
+        if kwargs.get("h1", False) is True:
+            context = HTTPSContext(protocol="HTTP/1.1")
+        else:
+            context = HTTPSContext()
+
         context.set_payload(
             method=self.method,
             start_line=self.url,
@@ -55,6 +60,6 @@ class HttpsRequest(BaseRequest):
         sock = self.create_connection(context)
         sock.send()
         response = HTTPSResponse(sock.conn)
-        response.begin()
+        response.handle()
 
         return response

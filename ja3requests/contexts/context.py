@@ -9,22 +9,14 @@ HTTP Context and HTTPS Context
 from ja3requests.base import BaseContext
 
 
-DEFAULT_HTTP_CONTEXT_PROTOCOL = 11
-DEFAULT_HTTPS_CONTEXT_PROTOCOL = 20
-
-DEFAULT_HTTP_VERSION = "HTTP/1.1"
-DEFAULT_HTTPS_VERSION = "HTTP/2.0"
-
-
 class HTTPContext(BaseContext):
     """
     HTTPContext
     """
 
-    def __init__(self):
+    def __init__(self, protocol: str = "HTTP/1.1"):
         super().__init__()
-        self.protocol = DEFAULT_HTTP_CONTEXT_PROTOCOL
-        self.version = DEFAULT_HTTP_VERSION
+        self.protocol_version = protocol
 
     def set_payload(self, **kwargs):
         """
@@ -40,10 +32,9 @@ class HTTPSContext(BaseContext):
     HTTPS Context
     """
 
-    def __init__(self):
+    def __init__(self, protocol: str = "HTTP/2.0"):
         super().__init__()
-        self.protocol = DEFAULT_HTTPS_CONTEXT_PROTOCOL
-        self.version = DEFAULT_HTTPS_VERSION
+        self.protocol_version = protocol
 
     def set_payload(self, **kwargs):
         """

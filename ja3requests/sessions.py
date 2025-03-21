@@ -170,7 +170,7 @@ class Session(BaseSession):
         if not isinstance(request, BaseRequest):
             raise ValueError("You can only send HttpRequest/HttpsRequest.")
 
-        rep = request.send()
+        rep = request.send(**kwargs)
         response = Response(request, rep)
         allow_redirects = kwargs.get("allow_redirects", True)
         if allow_redirects and response.is_redirected:

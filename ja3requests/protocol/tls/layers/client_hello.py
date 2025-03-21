@@ -127,7 +127,7 @@ class ClientHello(HandShake):
         SSL 3.
     """
 
-    def __init__(self, cipher_suites, extensions):
+    def __init__(self, cipher_suites=None, extensions=None):
         # TODO: cipher_suites, extensions
         super().__init__()
         self._client_version = None

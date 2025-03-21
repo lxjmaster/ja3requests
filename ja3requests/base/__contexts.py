@@ -11,14 +11,17 @@ from json import dumps
 import mimetypes
 
 
+PROTOCOL_VERSION_HTTP_1 = "HTTP/1.1"
+PROTOCOL_VERSION_HTTP_2 = "HTTP/2.0"    # h2
+
+
 class BaseContext(ABC):
     """
     Basic connection context.
     """
 
     def __init__(self):
-        self._protocol = None
-        self._version = None
+        self._protocol_version = None
         self._method = None
         self._destination_address = None
         self._path = None
@@ -36,38 +39,21 @@ class BaseContext(ABC):
         self._cookies = None
 
     @property
-    def protocol(self):
-        """
-        Protocol
-        :return:
-        """
-        return self._protocol
-
-    @protocol.setter
-    def protocol(self, attr):
-        """
-        Set protocol
-        :param attr:
-        :return:
-        """
-        self._protocol = attr
-
-    @property
-    def version(self):
+    def protocol_version(self):
         """
         Version
         :return:
         """
-        return self._version
+        return self._protocol_version
 
-    @version.setter
-    def version(self, attr):
+    @protocol_version.setter
+    def protocol_version(self, attr):
         """
         Set version
         :param attr:
         :return:
         """
-        self._version = attr
+        self._protocol_version = attr
 
     @property
     def method(self) -> AnyStr:
@@ -146,7 +132,7 @@ class BaseContext(ABC):
         return (
             self._start_line
             if self._start_line
-            else " ".join([self.method, self.path, self.version])
+            else " ".join([self.method, self.path, self.protocol_version])
         )
 
     @start_line.setter
@@ -166,7 +152,7 @@ class BaseContext(ABC):
             if parse.query != "":
                 self.path += "?" + parse.query
 
-        self._start_line = " ".join([self.method, self.path, self.version])
+        self._start_line = " ".join([self.method, self.path, self.protocol_version])
 
     @property
     def headers(self) -> Dict:

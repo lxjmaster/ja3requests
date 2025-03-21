@@ -38,7 +38,7 @@ class HttpRequest(BaseRequest):
 
         return sock.new_conn()
 
-    def send(self):
+    def send(self, **kwargs):
         context = HTTPContext()
         context.set_payload(
             method=self.method,
@@ -55,6 +55,6 @@ class HttpRequest(BaseRequest):
         sock = self.create_connection(context)
         sock.send()
         response = HTTPResponse(sock.conn)
-        response.begin()
+        response.handle()
 
         return response

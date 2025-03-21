@@ -147,9 +147,9 @@ class HTTPResponse(BaseResponse):
 
         return chunked_data
 
-    def begin(self):
+    def handle(self):
         """
-        Receive data from remote connection and begin parse message.
+        Receive data from remote connection and handle message.
         :return:
         """
         if self.headers is not None:
@@ -191,6 +191,7 @@ class HTTPResponse(BaseResponse):
 
 
 class HTTPSResponse(HTTPResponse):
+
     pass
 
 

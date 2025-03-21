@@ -19,9 +19,9 @@ class HttpsSocket(BaseSocket):
         # 建立链接
         self.conn = self._new_conn(self.context.destination_address, self.context.port)
 
-        # TLS握手
+        # # TLS握手
         tls = TLS(self.conn)
-        # 设置相关ja3参数等
+        # # 设置相关ja3参数等
         tls.set_payload(
             # TODO set tls payload
         )
@@ -34,6 +34,7 @@ class HttpsSocket(BaseSocket):
         Connection send message
         :return:
         """
+        # print(self.context.message)
         self.conn.sendall(self.context.message)
 
         return self.conn

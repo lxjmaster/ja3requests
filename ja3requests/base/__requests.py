@@ -406,7 +406,7 @@ class BaseRequest(ABC):
         return self.schema.lower() == "https"
 
     @abstractmethod
-    def send(self):
+    def send(self, *args, **kwargs):
         """
         Request send
         :return:
