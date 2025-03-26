@@ -204,6 +204,7 @@ class HandShake(ABC):
         self._cipher_suites = None
         self._compression_methods = None
         self._extensions = None
+        self.t = []
 
     def __len__(self):
 
@@ -240,11 +241,10 @@ class HandShake(ABC):
             A client-generated random structure.
         :return:
         """
-        _random = self._random
-        if not _random:
-            _random = bytes(Random())
+        if not self._random:
+            self._random = bytes(Random())
 
-        return _random
+        return self._random
 
     @random.setter
     def random(self, attr: bytes):
@@ -260,11 +260,11 @@ class HandShake(ABC):
             client wishes to generate new security parameters.
         :return:
         """
-        session_id = self._session_id
-        if not session_id:
-            session_id = os.urandom(32)
+        if not self._session_id:
+            self._session_id = struct.pack("B", 0)
+            # self._session_id = os.urandom(32)
 
-        return session_id
+        return self._session_id
 
     @session_id.setter
     def session_id(self, attr: bytes):
@@ -281,6 +281,8 @@ class HandShake(ABC):
             this vector MUST include at least the cipher_suite from that session.
         :return:
         """
+        if not self._cipher_suites:
+            self._cipher_suites = int.to_bytes(0x1301, 2, byteorder="big")
 
         return self._cipher_suites
 
@@ -302,11 +304,11 @@ class HandShake(ABC):
         :return:
         """
 
-        compression_methods = self._compression_methods
-        if not compression_methods:
-            compression_methods = struct.pack("B", 255)
+        if not self._compression_methods:
+            self._compression_methods = struct.pack("B", 0)
+            # self._compression_methods = struct.pack("B", 255)
 
-        return compression_methods
+        return self._compression_methods
 
     @compression_methods.setter
     def compression_methods(self, attr: bytes):
@@ -329,28 +331,53 @@ class HandShake(ABC):
 
         self._extensions = attr
 
-    def body(self):
+    def content(self):
 
-        body = b""
+        content = b""
         if self.version:
-            body += self.version
+            content += self.version
+            if "version" not in self.t:
+                print(f"version: {self.version}")
+                self.t.append("version")
 
         if self.random:
-            body += self.random
+            content += self.random
+            if "random" not in self.t:
+                print(f"random: {self.random}")
+                self.t.append("random")
 
         if self.session_id:
-            body += self.session_id
+            if self.session_id == b'\x00':
+                content += self.session_id
+            else:
+                content += struct.pack("B", len(self.session_id))
+                content += self.session_id
+
+            if "session_id" not in self.t:
+                print(f"session id: {self.session_id}")
+                self.t.append("session_id")
 
         if self.cipher_suites:
-            body += self.cipher_suites
+            content += struct.pack("!I", len(self.cipher_suites))[1:]
+            content += self.cipher_suites
+            if "cipher_suites" not in self.t:
+                print(f"cipher suites: {self.cipher_suites}")
+                self.t.append("cipher_suites")
 
         if self.compression_methods:
-            body += self.compression_methods
+            content += struct.pack("B", len(self.compression_methods))
+            content += self.compression_methods
+            if "compression_methods" not in self.t:
+                print(f"compression methods: {self.compression_methods}")
+                self.t.append("compression_methods")
 
         if self.extensions:
-            body += self.extensions
+            content += self.extensions
+            if "extensions" not in self.t:
+                print(f"extensions: {self.extensions}")
+                self.t.append("extensions")
 
-        return body
+        return content
 
     def length(self) -> bytes:
         """
@@ -358,10 +385,16 @@ class HandShake(ABC):
         :return:
         """
 
-        body = self.body()
-        return struct.pack("!I", len(body))[1:]
+        content = self.content()
+        return struct.pack("!I", len(content))[1:]
 
     @property
     def message(self):
 
-        return self.handshake_type + self.length() + self.body()
+        print(f"type: {self.handshake_type}")
+        print(f"length: {self.length()}")
+        return self.handshake_type + self.length() + self.content()
+
+
+if __name__ == '__main__':
+    print(Random().bytes())

@@ -1120,3 +1120,6 @@ class Aes128Ccm8Sha256(CipherSuite):
 
 
 # AEAD_AES_256_CCM
+
+if __name__ == '__main__':
+    print(int.to_bytes(0x1301, 2, byteorder='big'))

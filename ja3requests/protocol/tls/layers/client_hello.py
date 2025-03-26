@@ -130,7 +130,7 @@ class ClientHello(HandShake):
     def __init__(self, cipher_suites=None, extensions=None):
         # TODO: cipher_suites, extensions
         super().__init__()
-        self._client_version = None
+        self._version = None
         self._random = None
         self._session_id = None
         self._cipher_suites = None
@@ -146,7 +146,7 @@ class ClientHello(HandShake):
         return struct.pack("B", 1)
 
     @property
-    def client_version(self) -> bytes:
+    def version(self) -> bytes:
         """
         client_version
             The version of the TLS protocol by which the client wishes to
@@ -158,15 +158,14 @@ class ClientHello(HandShake):
         :return:
         """
 
-        client_version = self._version
-        if not client_version:
-            client_version = struct.pack("B", 3) + struct.pack("B", 3)
-            # client_version = struct.pack("I", 771)[:2]
+        if not self._version:
+            self._version = struct.pack("B", 3) + struct.pack("B", 3)
+            # self._version = struct.pack("I", 771)[:2]
 
-        return client_version
+        return self._version
 
-    @client_version.setter
-    def client_version(self, attr: bytes):
+    @version.setter
+    def version(self, attr: bytes):
 
         self._version = attr
 

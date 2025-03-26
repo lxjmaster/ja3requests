@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
 
-class CipherSuite:
+class CipherSuite(ABC):
 
     def __init__(self):
         self._name = None
@@ -15,9 +15,9 @@ class CipherSuite:
 
     def __repr__(self):
         if self.name:
-            return self.name
+            return f"<CipherSuite({self.name})>"
 
-        return "<CipherSuite()>"
+        return "<CipherSuite(NotImplemented)>"
 
     @property
     def name(self):
