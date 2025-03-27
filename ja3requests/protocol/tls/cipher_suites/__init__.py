@@ -1,4 +1,11 @@
-from abc import ABC, abstractmethod
+"""
+ja3requests.protocol.tls.cipher_suites
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The cipher suite base structure class.
+"""
+
+from abc import ABC
 
 
 class CipherSuite(ABC):

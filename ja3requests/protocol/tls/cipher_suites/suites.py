@@ -1,7 +1,9 @@
-from ja3requests.protocol.tls.cipher_suites import CipherSuite
-
-
 """
+ja3requests.protocol.tls.cipher_suites.suites
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This module contains suites for TLS cipher suites.
+
 When SSLv3 and TLS 1.0 were designed, the United States restricted
 the export of cryptographic software containing certain strong
 encryption algorithms.  A series of cipher suites were designed to
@@ -37,7 +39,7 @@ here for completeness.  See [TLSKRB] for details:
     CipherSuite    TLS_KRB5_WITH_3DES_EDE_CBC_MD5      = { 0x00,0x23 };
     CipherSuite    TLS_KRB5_WITH_RC4_128_MD5           = { 0x00,0x24 };
     CipherSuite    TLS_KRB5_WITH_IDEA_CBC_MD5          = { 0x00,0x25 };
-    
+
 The following exportable cipher suites were defined in [TLSKRB] and
 are included here for completeness.  TLS 1.1 implementations MUST NOT
 negotiate these cipher suites.
@@ -49,6 +51,8 @@ negotiate these cipher suites.
     CipherSuite  TLS_KRB5_EXPORT_WITH_RC2_CBC_40_MD5    = { 0x00,0x2A};
     CipherSuite  TLS_KRB5_EXPORT_WITH_RC4_40_MD5        = { 0x00,0x2B};
 """
+
+from ja3requests.protocol.tls.cipher_suites import CipherSuite
 
 
 class NullWithNullNull(CipherSuite):
