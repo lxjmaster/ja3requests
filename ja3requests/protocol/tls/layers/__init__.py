@@ -49,152 +49,185 @@ class Random:
 
 class HandShake(ABC):
     """
-        enum {
-            hello_request(0), client_hello(1), server_hello(2),
-            certificate(11), server_key_exchange (12),
-            certificate_request(13), server_hello_done(14),
-            certificate_verify(15), client_key_exchange(16),
-            finished(20)
-            (255)
-        } HandshakeType;
+    The TLS record layer receives uninterpreted data from higher layers
+    in non-empty blocks of arbitrary size.
+    The record layer fragments information blocks into TLSPlaintext
+    records carrying data in chunks of 2^14 bytes or less.  Client
+    message boundaries are not preserved in the record layer (i.e.,
+    multiple client messages of the same ContentType MAY be coalesced
+    into a single TLSPlaintext record, or a single message MAY be
+    fragmented across several records).
 
-        struct {
-            HandshakeType msg_type;
-            uint24 length;
-            select (HandshakeType) {
-                case hello_request:         HelloRequest;
-                case client_hello:          ClientHello;
-                case server_hello:          ServerHello;
-                case certificate:            Certificate;
-                case server_key_exchange:   ServerKeyExchange;
-                case certificate_request:    CertificateRequest;
-                case server_hello_done:     ServerHelloDone;
-                case certificate_verify:     CertificateVerify;
-                case client_key_exchange:   ClientKeyExchange;
-                case finished:               Finished;
-            } body;
-        } Handshake;
+    struct {
+      uint8 major;
+      uint8 minor;
+    } ProtocolVersion;
 
-        The ClientHello message includes a random structure, which is used later in the protocol.
+    enum {
+      change_cipher_spec(20), alert(21), handshake(22),
+      application_data(23), (255)
+    } ContentType;
 
-        opaque SessionID<0..32>;
-        uint8 CipherSuite[2];    /* Cryptographic suite selector */
-        enum { null(0), (255) } CompressionMethod;
+    struct {
+      ContentType type;
+      ProtocolVersion version;
+      uint16 length;
+      opaque fragment[TLSPlaintext.length];
+    } TLSPlaintext;
 
-        struct {
-            ExtensionType extension_type;
-            opaque extension_data<0..2^16-1>;
-        } Extension;
+    The TLS Handshake Protocol is one of the defined higher-level clients
+    of the TLS Record Protocol.  This protocol is used to negotiate the
+    secure attributes of a session.  Handshake messages are supplied to
+    the TLS record layer, where they are encapsulated within one or more
+    TLSPlaintext structures, which are processed and transmitted as
+    specified by the current active session state.
 
-        enum {
-            signature_algorithms(13), (65535)
-        } ExtensionType;
-        -  "extension_type" identifies the particular extension type.
-        -  "extension_data" contains information specific to the particular extension type.
+    enum {
+        hello_request(0), client_hello(1), server_hello(2),
+        certificate(11), server_key_exchange (12),
+        certificate_request(13), server_hello_done(14),
+        certificate_verify(15), client_key_exchange(16),
+        finished(20)
+        (255)
+    } HandshakeType;
 
-        struct {
-            uint8 major;
-            uint8 minor;
-        } ProtocolVersion;
+    struct {
+        HandshakeType msg_type;
+        uint24 length;
+        select (HandshakeType) {
+            case hello_request:         HelloRequest;
+            case client_hello:          ClientHello;
+            case server_hello:          ServerHello;
+            case certificate:            Certificate;
+            case server_key_exchange:   ServerKeyExchange;
+            case certificate_request:    CertificateRequest;
+            case server_hello_done:     ServerHelloDone;
+            case certificate_verify:     CertificateVerify;
+            case client_key_exchange:   ClientKeyExchange;
+            case finished:               Finished;
+        } body;
+    } Handshake;
 
-        ProtocolVersion version = { 3, 2 };     /* TLS v1.1*/
-        ProtocolVersion version = { 3, 3 };     /* TLS v1.2*/
+    The ClientHello message includes a random structure, which is used later in the protocol.
 
-        struct {
-            ProtocolVersion client_version;
-            Random random;
-            SessionID session_id;
-            CipherSuite cipher_suites<2..2^16-2>;
-            CompressionMethod compression_methods<1..2^8-1>;
-            select (extensions_present) {
-                case false:
-                    struct {};
-                case true:
-                    Extension extensions<0..2^16-1>;
-            };
-        } ClientHello;
+    opaque SessionID<0..32>;
+    uint8 CipherSuite[2];    /* Cryptographic suite selector */
+    enum { null(0), (255) } CompressionMethod;
 
-        cipher_suites
-            This is a list of the cryptographic options supported by the
-            client, with the client's first preference first.  If the
-            session_id field is not empty (implying a session resumption
-            request), this vector MUST include at least the cipher_suite from
-            that session.
+    struct {
+        ExtensionType extension_type;
+        opaque extension_data<0..2^16-1>;
+    } Extension;
 
-            A cipher suite defines a cipher specification supported in TLS
-            Version 1.2.
-                CipherSuite TLS_NULL_WITH_NULL_NULL               = { 0x00,0x00 };
+    enum {
+        signature_algorithms(13), (65535)
+    } ExtensionType;
+    -  "extension_type" identifies the particular extension type.
+    -  "extension_data" contains information specific to the particular extension type.
 
-            The following CipherSuite definitions require that the server provide
-            an RSA certificate that can be used for key exchange.  The server may
-            request any signature-capable certificate in the certificate request
-            message.
-                CipherSuite TLS_RSA_WITH_NULL_MD5                 = { 0x00,0x01 };
-                CipherSuite TLS_RSA_WITH_NULL_SHA                 = { 0x00,0x02 };
-                CipherSuite TLS_RSA_WITH_NULL_SHA256              = { 0x00,0x3B };
-                CipherSuite TLS_RSA_WITH_RC4_128_MD5              = { 0x00,0x04 };
-                CipherSuite TLS_RSA_WITH_RC4_128_SHA              = { 0x00,0x05 };
-                CipherSuite TLS_RSA_WITH_3DES_EDE_CBC_SHA         = { 0x00,0x0A };
-                CipherSuite TLS_RSA_WITH_AES_128_CBC_SHA          = { 0x00,0x2F };
-                CipherSuite TLS_RSA_WITH_AES_256_CBC_SHA          = { 0x00,0x35 };
-                CipherSuite TLS_RSA_WITH_AES_128_CBC_SHA256       = { 0x00,0x3C };
-                CipherSuite TLS_RSA_WITH_AES_256_CBC_SHA256       = { 0x00,0x3D };
+    struct {
+        uint8 major;
+        uint8 minor;
+    } ProtocolVersion;
 
-            The following cipher suite definitions are used for server-
-            authenticated (and optionally client-authenticated) Diffie-Hellman.
-            DH denotes cipher suites in which the server's certificate contains
-            the Diffie-Hellman parameters signed by the certificate authority
-            (CA).  DHE denotes ephemeral Diffie-Hellman, where the Diffie-Hellman
-            parameters are signed by a signature-capable certificate, which has
-            been signed by the CA.  The signing algorithm used by the server is
-            specified after the DHE component of the CipherSuite name.  The
-            server can request any signature-capable certificate from the client
-            for client authentication, or it may request a Diffie-Hellman
-            certificate.  Any Diffie-Hellman certificate provided by the client
-            must use the parameters (group and generator) described by the
-            server.
-                CipherSuite TLS_DH_DSS_WITH_3DES_EDE_CBC_SHA      = { 0x00,0x0D };
-                CipherSuite TLS_DH_RSA_WITH_3DES_EDE_CBC_SHA      = { 0x00,0x10 };
-                CipherSuite TLS_DHE_DSS_WITH_3DES_EDE_CBC_SHA     = { 0x00,0x13 };
-                CipherSuite TLS_DHE_RSA_WITH_3DES_EDE_CBC_SHA     = { 0x00,0x16 };
-                CipherSuite TLS_DH_DSS_WITH_AES_128_CBC_SHA       = { 0x00,0x30 };
-                CipherSuite TLS_DH_RSA_WITH_AES_128_CBC_SHA       = { 0x00,0x31 };
-                CipherSuite TLS_DHE_DSS_WITH_AES_128_CBC_SHA      = { 0x00,0x32 };
-                CipherSuite TLS_DHE_RSA_WITH_AES_128_CBC_SHA      = { 0x00,0x33 };
-                CipherSuite TLS_DH_DSS_WITH_AES_256_CBC_SHA       = { 0x00,0x36 };
-                CipherSuite TLS_DH_RSA_WITH_AES_256_CBC_SHA       = { 0x00,0x37 };
-                CipherSuite TLS_DHE_DSS_WITH_AES_256_CBC_SHA      = { 0x00,0x38 };
-                CipherSuite TLS_DHE_RSA_WITH_AES_256_CBC_SHA      = { 0x00,0x39 };
-                CipherSuite TLS_DH_DSS_WITH_AES_128_CBC_SHA256    = { 0x00,0x3E };
-                CipherSuite TLS_DH_RSA_WITH_AES_128_CBC_SHA256    = { 0x00,0x3F };
-                CipherSuite TLS_DHE_DSS_WITH_AES_128_CBC_SHA256   = { 0x00,0x40 };
-                CipherSuite TLS_DHE_RSA_WITH_AES_128_CBC_SHA256   = { 0x00,0x67 };
-                CipherSuite TLS_DH_DSS_WITH_AES_256_CBC_SHA256    = { 0x00,0x68 };
-                CipherSuite TLS_DH_RSA_WITH_AES_256_CBC_SHA256    = { 0x00,0x69 };
-                CipherSuite TLS_DHE_DSS_WITH_AES_256_CBC_SHA256   = { 0x00,0x6A };
-                CipherSuite TLS_DHE_RSA_WITH_AES_256_CBC_SHA256   = { 0x00,0x6B };
+    ProtocolVersion version = { 3, 2 };     /* TLS v1.1*/
+    ProtocolVersion version = { 3, 3 };     /* TLS v1.2*/
 
-            The following cipher suites are used for completely anonymous
-            Diffie-Hellman communications in which neither party is
-            authenticated.  Note that this mode is vulnerable to man-in-the-
-            middle attacks.  Using this mode therefore is of limited use: These
-            cipher suites MUST NOT be used by TLS 1.2 implementations unless the
-            application layer has specifically requested to allow anonymous key
-            exchange.  (Anonymous key exchange may sometimes be acceptable, for
-            example, to support opportunistic encryption when no set-up for
-            authentication is in place, or when TLS is used as part of more
-            complex security protocols that have other means to ensure
-            authentication.)
-                CipherSuite TLS_DH_anon_WITH_RC4_128_MD5          = { 0x00,0x18 };
-                CipherSuite TLS_DH_anon_WITH_3DES_EDE_CBC_SHA     = { 0x00,0x1B };
-                CipherSuite TLS_DH_anon_WITH_AES_128_CBC_SHA      = { 0x00,0x34 };
-                CipherSuite TLS_DH_anon_WITH_AES_256_CBC_SHA      = { 0x00,0x3A };
-                CipherSuite TLS_DH_anon_WITH_AES_128_CBC_SHA256   = { 0x00,0x6C };
-                CipherSuite TLS_DH_anon_WITH_AES_256_CBC_SHA256   = { 0x00,0x6D };
+    struct {
+        ProtocolVersion client_version;
+        Random random;
+        SessionID session_id;
+        CipherSuite cipher_suites<2..2^16-2>;
+        CompressionMethod compression_methods<1..2^8-1>;
+        select (extensions_present) {
+            case false:
+                struct {};
+            case true:
+                Extension extensions<0..2^16-1>;
+        };
+    } ClientHello;
 
-            Note: The cipher suite values { 0x00, 0x1C } and { 0x00, 0x1D } are
-            reserved to avoid collision with Fortezza-based cipher suites in
-            SSL 3.
+    cipher_suites
+        This is a list of the cryptographic options supported by the
+        client, with the client's first preference first.  If the
+        session_id field is not empty (implying a session resumption
+        request), this vector MUST include at least the cipher_suite from
+        that session.
+
+        A cipher suite defines a cipher specification supported in TLS
+        Version 1.2.
+            CipherSuite TLS_NULL_WITH_NULL_NULL               = { 0x00,0x00 };
+
+        The following CipherSuite definitions require that the server provide
+        an RSA certificate that can be used for key exchange.  The server may
+        request any signature-capable certificate in the certificate request
+        message.
+            CipherSuite TLS_RSA_WITH_NULL_MD5                 = { 0x00,0x01 };
+            CipherSuite TLS_RSA_WITH_NULL_SHA                 = { 0x00,0x02 };
+            CipherSuite TLS_RSA_WITH_NULL_SHA256              = { 0x00,0x3B };
+            CipherSuite TLS_RSA_WITH_RC4_128_MD5              = { 0x00,0x04 };
+            CipherSuite TLS_RSA_WITH_RC4_128_SHA              = { 0x00,0x05 };
+            CipherSuite TLS_RSA_WITH_3DES_EDE_CBC_SHA         = { 0x00,0x0A };
+            CipherSuite TLS_RSA_WITH_AES_128_CBC_SHA          = { 0x00,0x2F };
+            CipherSuite TLS_RSA_WITH_AES_256_CBC_SHA          = { 0x00,0x35 };
+            CipherSuite TLS_RSA_WITH_AES_128_CBC_SHA256       = { 0x00,0x3C };
+            CipherSuite TLS_RSA_WITH_AES_256_CBC_SHA256       = { 0x00,0x3D };
+
+        The following cipher suite definitions are used for server-
+        authenticated (and optionally client-authenticated) Diffie-Hellman.
+        DH denotes cipher suites in which the server's certificate contains
+        the Diffie-Hellman parameters signed by the certificate authority
+        (CA).  DHE denotes ephemeral Diffie-Hellman, where the Diffie-Hellman
+        parameters are signed by a signature-capable certificate, which has
+        been signed by the CA.  The signing algorithm used by the server is
+        specified after the DHE component of the CipherSuite name.  The
+        server can request any signature-capable certificate from the client
+        for client authentication, or it may request a Diffie-Hellman
+        certificate.  Any Diffie-Hellman certificate provided by the client
+        must use the parameters (group and generator) described by the
+        server.
+            CipherSuite TLS_DH_DSS_WITH_3DES_EDE_CBC_SHA      = { 0x00,0x0D };
+            CipherSuite TLS_DH_RSA_WITH_3DES_EDE_CBC_SHA      = { 0x00,0x10 };
+            CipherSuite TLS_DHE_DSS_WITH_3DES_EDE_CBC_SHA     = { 0x00,0x13 };
+            CipherSuite TLS_DHE_RSA_WITH_3DES_EDE_CBC_SHA     = { 0x00,0x16 };
+            CipherSuite TLS_DH_DSS_WITH_AES_128_CBC_SHA       = { 0x00,0x30 };
+            CipherSuite TLS_DH_RSA_WITH_AES_128_CBC_SHA       = { 0x00,0x31 };
+            CipherSuite TLS_DHE_DSS_WITH_AES_128_CBC_SHA      = { 0x00,0x32 };
+            CipherSuite TLS_DHE_RSA_WITH_AES_128_CBC_SHA      = { 0x00,0x33 };
+            CipherSuite TLS_DH_DSS_WITH_AES_256_CBC_SHA       = { 0x00,0x36 };
+            CipherSuite TLS_DH_RSA_WITH_AES_256_CBC_SHA       = { 0x00,0x37 };
+            CipherSuite TLS_DHE_DSS_WITH_AES_256_CBC_SHA      = { 0x00,0x38 };
+            CipherSuite TLS_DHE_RSA_WITH_AES_256_CBC_SHA      = { 0x00,0x39 };
+            CipherSuite TLS_DH_DSS_WITH_AES_128_CBC_SHA256    = { 0x00,0x3E };
+            CipherSuite TLS_DH_RSA_WITH_AES_128_CBC_SHA256    = { 0x00,0x3F };
+            CipherSuite TLS_DHE_DSS_WITH_AES_128_CBC_SHA256   = { 0x00,0x40 };
+            CipherSuite TLS_DHE_RSA_WITH_AES_128_CBC_SHA256   = { 0x00,0x67 };
+            CipherSuite TLS_DH_DSS_WITH_AES_256_CBC_SHA256    = { 0x00,0x68 };
+            CipherSuite TLS_DH_RSA_WITH_AES_256_CBC_SHA256    = { 0x00,0x69 };
+            CipherSuite TLS_DHE_DSS_WITH_AES_256_CBC_SHA256   = { 0x00,0x6A };
+            CipherSuite TLS_DHE_RSA_WITH_AES_256_CBC_SHA256   = { 0x00,0x6B };
+
+        The following cipher suites are used for completely anonymous
+        Diffie-Hellman communications in which neither party is
+        authenticated.  Note that this mode is vulnerable to man-in-the-
+        middle attacks.  Using this mode therefore is of limited use: These
+        cipher suites MUST NOT be used by TLS 1.2 implementations unless the
+        application layer has specifically requested to allow anonymous key
+        exchange.  (Anonymous key exchange may sometimes be acceptable, for
+        example, to support opportunistic encryption when no set-up for
+        authentication is in place, or when TLS is used as part of more
+        complex security protocols that have other means to ensure
+        authentication.)
+            CipherSuite TLS_DH_anon_WITH_RC4_128_MD5          = { 0x00,0x18 };
+            CipherSuite TLS_DH_anon_WITH_3DES_EDE_CBC_SHA     = { 0x00,0x1B };
+            CipherSuite TLS_DH_anon_WITH_AES_128_CBC_SHA      = { 0x00,0x34 };
+            CipherSuite TLS_DH_anon_WITH_AES_256_CBC_SHA      = { 0x00,0x3A };
+            CipherSuite TLS_DH_anon_WITH_AES_128_CBC_SHA256   = { 0x00,0x6C };
+            CipherSuite TLS_DH_anon_WITH_AES_256_CBC_SHA256   = { 0x00,0x6D };
+
+        Note: The cipher suite values { 0x00, 0x1C } and { 0x00, 0x1D } are
+        reserved to avoid collision with Fortezza-based cipher suites in
+        SSL 3.
         """
 
     def __init__(self):
@@ -391,9 +424,18 @@ class HandShake(ABC):
     @property
     def message(self):
 
-        print(f"type: {self.handshake_type}")
-        print(f"length: {self.length()}")
-        return self.handshake_type + self.length() + self.content()
+        message = (
+            self.handshake_type +
+            self.length() +
+            self.content()
+        )
+        message = (
+            b'\x16' +
+            b'\x03\x01' +
+            struct.pack("!I", len(message))[2:] +
+            message
+        )
+        return message
 
 
 if __name__ == '__main__':

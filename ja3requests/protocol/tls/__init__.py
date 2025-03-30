@@ -14,11 +14,10 @@ class TLS:
 
     @property
     def tls_version(self) -> bytes:
-        tls_version = self._tls_version
-        if not tls_version:
-            tls_version = struct.pack("I", 771)[:2]
+        if not self._tls_version:
+            self._tls_version = struct.pack("I", 771)[:2]
 
-        return tls_version
+        return self._tls_version
 
     @tls_version.setter
     def tls_version(self, attr: bytes):
@@ -27,13 +26,13 @@ class TLS:
 
     @property
     def body(self) -> HandShake:
-        body = self._body
-        if not body:
-            body = ClientHello(
+        if not self._body:
+            self._body = ClientHello(
+                self.tls_version,
                 # TODO: cipher suites, extensions
             )
 
-        return body
+        return self._body
 
     @body.setter
     def body(self, attr: HandShake):
@@ -73,3 +72,4 @@ class TLS:
         :return:
         """
         print(f"Body-{self.body.message}")
+        self.conn.sendall(self.body.message)

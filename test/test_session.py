@@ -126,7 +126,7 @@ class TestSession(unittest.TestCase):
 
     def test_https(self):
 
-        response = self.session.get("https://127.0.0.1:8443")
+        response = self.session.get("https://127.0.0.1:443")
         print(response)
 
     def test_https_h1(self):
