@@ -16,6 +16,7 @@ from ja3requests.const import DEFAULT_REDIRECT_LIMIT
 from ja3requests.base import BaseRequest
 from ja3requests.requests.request import Request
 from ja3requests.exceptions import MaxRetriedException
+from ja3requests.protocol.tls.config import TlsConfig
 
 # Preferred clock, based on which one is more accurate on a given system.
 if sys.platform == "win32":
@@ -29,6 +30,20 @@ class Session(BaseSession):
 
     Provides cookie persistence, connection-pooling, and configuration.
     """
+    
+    def __init__(self, tls_config: TlsConfig = None):
+        super().__init__()
+        self._tls_config = tls_config or TlsConfig()
+    
+    @property
+    def tls_config(self) -> TlsConfig:
+        """Get TLS configuration"""
+        return self._tls_config
+    
+    @tls_config.setter
+    def tls_config(self, config: TlsConfig):
+        """Set TLS configuration"""
+        self._tls_config = config
 
     def request(
         self,
@@ -72,6 +87,7 @@ class Session(BaseSession):
             auth=auth,
             json=json,
             proxies=proxies,
+            tls_config=self._tls_config,
         )
 
         kwargs.setdefault("timeout", None)

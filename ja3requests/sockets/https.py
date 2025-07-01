@@ -21,10 +21,15 @@ class HttpsSocket(BaseSocket):
 
         # # TLS握手
         tls = TLS(self.conn)
+        
+        # 获取TLS配置并设置默认server_name
+        tls_config = getattr(self.context, 'tls_config', None)
+        if tls_config and not getattr(tls_config, 'server_name', None):
+            # 如果没有设置server_name，使用destination_address作为SNI
+            tls_config.server_name = self.context.destination_address
+        
         # # 设置相关ja3参数等
-        tls.set_payload(
-            # TODO set tls payload
-        )
+        tls.set_payload(tls_config=tls_config)
         tls.handshake()
 
         return self
