@@ -46,6 +46,7 @@ class Request:
         json: Dict[AnyStr, AnyStr] = None,
         proxies: Dict[AnyStr, AnyStr] = None,
         timeout: float = None,
+        tls_config = None,
     ):
         self.method = method
         self.url = url
@@ -58,6 +59,7 @@ class Request:
         self.json = json
         self.proxies = proxies
         self.timeout = timeout
+        self.tls_config = tls_config
 
     def __repr__(self):
         return f"<Request [{self.method}]>"
@@ -109,6 +111,7 @@ class Request:
                 json=_json,
                 proxy=proxies,
                 timeout=self.timeout,
+                tls_config=self.tls_config,
             )
             return req
 

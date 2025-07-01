@@ -41,6 +41,7 @@ class BaseRequest(ABC):
         self._json = None
         self._proxy = None
         self._timeout = None
+        self._tls_config = None
 
     @property
     def schema(self) -> AnyStr:
@@ -375,6 +376,23 @@ class BaseRequest(ABC):
         :return:
         """
         self._timeout = attr
+
+    @property
+    def tls_config(self):
+        """
+        Request property tls_config
+        :return:
+        """
+        return self._tls_config
+
+    @tls_config.setter
+    def tls_config(self, attr):
+        """
+        Request property tls_config set
+        :param attr:
+        :return:
+        """
+        self._tls_config = attr
 
     def set_payload(self, **kwargs):
         """

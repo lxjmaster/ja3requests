@@ -56,6 +56,7 @@ class HttpsRequest(BaseRequest):
             json=self.json,
             proxy=self.proxy,
             cookies=self.cookies,
+            tls_config=self.tls_config,
         )
         sock = self.create_connection(context)
         sock.send()

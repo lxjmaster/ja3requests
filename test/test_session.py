@@ -1,8 +1,8 @@
+from io import BufferedRandom, TextIOWrapper, BytesIO, IOBase
 import unittest
 from ja3requests.sessions import Session
-import requests
-from io import BufferedRandom, TextIOWrapper, BytesIO, IOBase
 import mimetypes
+import requests
 
 
 class TestSession(unittest.TestCase):
@@ -125,9 +125,13 @@ class TestSession(unittest.TestCase):
         # print(response.text)
 
     def test_https(self):
-
-        response = self.session.get("https://127.0.0.1:443")
-        print(response)
+        """Test HTTPS functionality - skip if no local server"""
+        
+        response = self.session.get("https://baidu.com", headers=self.headers)
+        print(response.status_code)
+        print(response.headers)
+        print(response.text)
+        assert response.status_code == 200
 
     def test_https_h1(self):
 
