@@ -49,7 +49,9 @@ class HTTPResponse(BaseResponse):
 
         if not line:
             raise InvalidStatusLine(
-                f"The remote servers return an invalid response status line: {line!r}"
+                f"The remote server closed the connection without sending a response. "
+                f"This may indicate TLS handshake failure or server rejection of the connection. "
+                f"Status line received: {line!r}"
             )
 
         try:
@@ -121,16 +123,20 @@ class HTTPResponse(BaseResponse):
         if self._content_length > 0:
             body = self.fp.read(self._content_length)
 
-        if self._content_encoding is not None or self._content_encoding != b"":
-            if self._content_encoding == b"gzip":
-                body = gzip.decompress(body)
-            elif self._content_encoding == b"deflate":
-                try:
-                    body = zlib.decompress(body, -zlib.MAX_WBITS)
-                except zlib.error:
-                    body = zlib.decompress(body)
-            elif self._content_encoding == b"br":
-                body = brotli.decompress(body)
+        if self._content_encoding and self._content_encoding != b"":
+            try:
+                if self._content_encoding == b"gzip":
+                    body = gzip.decompress(body)
+                elif self._content_encoding == b"deflate":
+                    try:
+                        body = zlib.decompress(body, -zlib.MAX_WBITS)
+                    except zlib.error:
+                        body = zlib.decompress(body)
+                elif self._content_encoding == b"br":
+                    body = brotli.decompress(body)
+            except Exception as e:
+                print(f"Warning: Failed to decompress content with {self._content_encoding}: {e}")
+                # Return original body if decompression fails
 
         return body
 
@@ -142,8 +148,20 @@ class HTTPResponse(BaseResponse):
                 continue
             if chunked_size == b"0":
                 break
-            size = int(chunked_size, 16)
-            chunked_data += self.fp.read(size)
+            try:
+                size = int(chunked_size, 16)
+                chunked_data += self.fp.read(size)
+                # Read the trailing CRLF after chunk data
+                self.fp.readline(MAX_LINE + 1)
+            except ValueError:
+                # If we can't parse as hex, this might not be chunked encoding
+                # Read the line as regular content and break
+                print(f"Warning: Expected hex chunk size, got: {chunked_size}")
+                chunked_data += chunked_size + b"\n"
+                # Read remaining content
+                remaining = self.fp.read()
+                chunked_data += remaining
+                break
 
         return chunked_data
 
@@ -162,12 +180,12 @@ class HTTPResponse(BaseResponse):
         self._content_encoding = headers.get(b"content-encoding", b"")
 
         transfer_encoding = headers.get(b"transfer-encoding", b"")
-        if transfer_encoding == b"chunked":
+        if transfer_encoding and b"chunked" in transfer_encoding.lower():
             self._chunked = True
-        elif transfer_encoding != b"":
-            raise IssueError(
-                "This situation may not be considered yet, please issue it"
-            )
+        elif transfer_encoding and transfer_encoding != b"":
+            # Handle other transfer encodings gracefully
+            print(f"Warning: Unsupported transfer encoding: {transfer_encoding}")
+            self._chunked = False
 
         self._content_length = int(headers.get(b"content-length", 0))
 

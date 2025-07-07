@@ -137,8 +137,8 @@ class ClientHello(HandShake):
         self._cipher_suites = None
         self._extensions = None
         self._server_name = server_name
-        self._supported_groups = supported_groups or [23, 24, 25]  # Default curves
-        self._signature_algorithms = signature_algorithms or [0x0601, 0x0603, 0x0501, 0x0503]
+        self._supported_groups = supported_groups  # Don't set defaults
+        self._signature_algorithms = signature_algorithms  # Don't set defaults
         self._alpn_protocols = alpn_protocols or []
         self._use_grease = use_grease
         
@@ -187,12 +187,14 @@ class ClientHello(HandShake):
         Set cipher suites from TlsConfig
         """
         cipher_bytes = b""
+        
         if self._use_grease:
             # Add GREASE value at the beginning
             from ja3requests.protocol.tls.cipher_suites.suites import ReservedGrease
             grease = ReservedGrease()
             cipher_bytes += struct.pack("!H", grease.value)
         
+        # Add only the specified cipher suites
         for suite in cipher_suites:
             if hasattr(suite, 'value'):
                 cipher_bytes += struct.pack("!H", suite.value)
@@ -215,14 +217,14 @@ class ClientHello(HandShake):
             extensions += sni_data
         
         # Supported Groups (Elliptic Curves) - Extension Type 10
-        if self._supported_groups:
+        if self._supported_groups and len(self._supported_groups) > 0:
             groups_data = self._build_supported_groups_extension()
             extensions += struct.pack("!H", 10)  # Extension type
             extensions += struct.pack("!H", len(groups_data))  # Extension length
             extensions += groups_data
         
         # Signature Algorithms - Extension Type 13
-        if self._signature_algorithms:
+        if self._signature_algorithms and len(self._signature_algorithms) > 0:
             sig_algs_data = self._build_signature_algorithms_extension()
             extensions += struct.pack("!H", 13)  # Extension type
             extensions += struct.pack("!H", len(sig_algs_data))  # Extension length
@@ -235,13 +237,8 @@ class ClientHello(HandShake):
             extensions += struct.pack("!H", len(alpn_data))  # Extension length
             extensions += alpn_data
         
-        # Extended Master Secret - Extension Type 23
-        extensions += struct.pack("!H", 23)  # Extension type
-        extensions += struct.pack("!H", 0)   # Extension length (empty)
-        
-        # Session Ticket - Extension Type 35
-        extensions += struct.pack("!H", 35)  # Extension type
-        extensions += struct.pack("!H", 0)   # Extension length (empty)
+        # For compatibility, only include basic extensions
+        # Extended Master Secret and Session Ticket can cause issues with some servers
         
         if extensions:
             # Add extensions length header

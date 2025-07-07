@@ -21,24 +21,19 @@ class TlsConfig:
         # TLS Version
         self._tls_version = 0x0303  # TLS 1.2 by default
         
-        # Cipher Suites
+        # Cipher Suites - use minimal, most compatible set by default
         self._cipher_suites = [
-            RsaWithAes128CbcSha(),
-            RsaWithAes256CbcSha(),
-            DheRsaWithAes128CbcSha(),
-            DheRsaWithAes256CbcSha(),
+            RsaWithAes128CbcSha(),  # Most widely supported
         ]
         
         # Extensions
         self._extensions = []
         
-        # Supported Groups (for Elliptic Curve)
-        self._supported_groups = [23, 24, 25]  # secp256r1, secp384r1, secp521r1
+        # Supported Groups (for Elliptic Curve) - minimal for compatibility
+        self._supported_groups = []  # Empty for maximum compatibility
         
-        # Signature Algorithms
-        self._signature_algorithms = [
-            0x0601, 0x0603, 0x0501, 0x0503, 0x0401, 0x0403, 0x0301, 0x0303
-        ]
+        # Signature Algorithms - minimal for compatibility
+        self._signature_algorithms = []  # Empty for maximum compatibility
         
         # Compression Methods
         self._compression_methods = [0]  # null compression
@@ -57,7 +52,7 @@ class TlsConfig:
         self._server_name = None
         
         # Other configurations
-        self._use_grease = True
+        self._use_grease = False  # Disable GREASE for compatibility
         self._max_fragment_length = None
         
     @property

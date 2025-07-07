@@ -59,8 +59,8 @@ class HttpsRequest(BaseRequest):
             tls_config=self.tls_config,
         )
         sock = self.create_connection(context)
-        sock.send()
-        response = HTTPSResponse(sock.conn)
+        conn = sock.send()
+        response = HTTPSResponse(conn)
         response.handle()
 
         return response

@@ -107,8 +107,20 @@ class Session(BaseSession):
         :param kwargs:
         :return:
         """
-
-        return self.request("GET", url, params=params, headers=headers, **kwargs)
+        # Extract tls_config from kwargs if provided
+        tls_config = kwargs.pop('tls_config', None)
+        if tls_config:
+            # Use the provided tls_config for this request
+            original_config = self._tls_config
+            self._tls_config = tls_config
+            try:
+                result = self.request("GET", url, params=params, headers=headers, **kwargs)
+                return result
+            finally:
+                # Restore original config
+                self._tls_config = original_config
+        else:
+            return self.request("GET", url, params=params, headers=headers, **kwargs)
 
     def options(self, url, **kwargs):
         """

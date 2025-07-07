@@ -391,7 +391,7 @@ class HandShake(ABC):
                 self.t.append("session_id")
 
         if self.cipher_suites:
-            content += struct.pack("!I", len(self.cipher_suites))[1:]
+            content += struct.pack("!H", len(self.cipher_suites))  # 2 bytes for cipher suites length
             content += self.cipher_suites
             if "cipher_suites" not in self.t:
                 print(f"cipher suites: {self.cipher_suites}")
@@ -422,18 +422,28 @@ class HandShake(ABC):
         return struct.pack("!I", len(content))[1:]
 
     @property
-    def message(self):
-
-        message = (
+    def handshake_message(self):
+        """
+        Raw handshake message without TLS record layer wrapper
+        Used for handshake hash calculation
+        """
+        return (
             self.handshake_type +
             self.length() +
             self.content()
         )
+    
+    @property
+    def message(self):
+        """
+        Complete TLS record containing the handshake message
+        """
+        handshake_msg = self.handshake_message
         message = (
             b'\x16' +
-            b'\x03\x01' +
-            struct.pack("!I", len(message))[2:] +
-            message
+            b'\x03\x01' +  # Use TLS 1.0 version for record layer (for compatibility)
+            struct.pack("!H", len(handshake_msg)) +
+            handshake_msg
         )
         return message
 
