@@ -111,14 +111,16 @@ class BaseRequest(ABC):
         if self._url:
             parse = urlparse(self._url)
             self.schema = parse.scheme
-            if self.schema == "https":
-                self.port = 443
 
             if parse.netloc != "" and ":" in parse.netloc:
                 port = parse.netloc.split(":")[-1]
                 self.port = int(port)
             else:
-                self.port = 80
+                # Set default port based on schema
+                if self.schema == "https":
+                    self.port = 443
+                else:
+                    self.port = 80
 
     @property
     def params(self):
