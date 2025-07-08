@@ -52,28 +52,38 @@ class ClientKeyExchange(HandShake):
         :return: Client key exchange content
         """
         # For RSA key exchange
-        if self._cipher_suite in [b'\x00\x2F', b'\x00\x35', b'\x00\x3C', b'\x00\x3D']:  # RSA cipher suites
+        if self._cipher_suite in [
+            b'\x00\x2f',
+            b'\x00\x35',
+            b'\x00\x3c',
+            b'\x00\x3d',
+        ]:  # RSA cipher suites
             # Generate PreMasterSecret
             client_version = struct.pack("!H", 0x0303)  # TLS 1.2
             random = struct.pack("!46B", *[0] * 46)  # 46 bytes of random data
             pre_master_secret = client_version + random
-            
+
             # TODO: Encrypt PreMasterSecret with server's public key
             # For now, just return the PreMasterSecret
             self._exchange_keys = pre_master_secret
             return self._exchange_keys
-            
+
         # For DHE key exchange
-        elif self._cipher_suite in [b'\x00\x33', b'\x00\x39', b'\x00\x67', b'\x00\x6B']:  # DHE cipher suites
+        elif self._cipher_suite in [
+            b'\x00\x33',
+            b'\x00\x39',
+            b'\x00\x67',
+            b'\x00\x6b',
+        ]:  # DHE cipher suites
             # Generate client's DH public key
             # TODO: Implement proper DH key generation
             dh_Yc = struct.pack("!H", 0)  # Placeholder for DH public key
             self._exchange_keys = dh_Yc
             return self._exchange_keys
-            
+
         else:
             raise ValueError(f"Unsupported cipher suite: {self._cipher_suite}")
 
     @property
     def exchange_keys(self) -> bytes:
-        return self._exchange_keys 
+        return self._exchange_keys

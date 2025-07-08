@@ -77,7 +77,7 @@ class ReservedGrease(CipherSuite):
         0xCACA,
         0xDADA,
         0xEAEA,
-        0xFAFA
+        0xFAFA,
     ]
 
     def __init__(self):
@@ -86,7 +86,7 @@ class ReservedGrease(CipherSuite):
         self.key_exchange_type = None
         self.hash_type = None
         self.cipher_type = None
-        self.key_length  = None
+        self.key_length = None
         self.mac_key_length = None
         self.value = random.choice(self.value_list)
         self.version = {1.1, 1.2, 1.3}
@@ -819,7 +819,7 @@ class DhAnonWith3DesEdeCbcSha(CipherSuite):
 
 class DhAnonWithAes128CbcSha(CipherSuite):
     """
-      CipherSuite TLS_DH_anon_WITH_AES_128_CBC_SHA      = { 0x00,0x34 };
+    CipherSuite TLS_DH_anon_WITH_AES_128_CBC_SHA      = { 0x00,0x34 };
     """
 
     def __init__(self):
@@ -836,7 +836,7 @@ class DhAnonWithAes128CbcSha(CipherSuite):
 
 class DhAnonWithAes256CbcSha(CipherSuite):
     """
-      CipherSuite TLS_DH_anon_WITH_AES_256_CBC_SHA      = { 0x00,0x3A };
+    CipherSuite TLS_DH_anon_WITH_AES_256_CBC_SHA      = { 0x00,0x3A };
     """
 
     def __init__(self):
@@ -1168,16 +1168,13 @@ if __name__ == '__main__':
     from cryptography.hazmat.backends import default_backend
     import os
 
-
     def aes_128_gcm_encrypt(plaintext, key):
         # 生成随机 nonce（12字节，GCM 标准）
         nonce = os.urandom(12)
 
         # 初始化 AES-GCM 加密器
         cipher = Cipher(
-            algorithms.AES(key),
-            modes.GCM(nonce),
-            backend=default_backend()
+            algorithms.AES(key), modes.GCM(nonce), backend=default_backend()
         )
         encryptor = cipher.encryptor()
 
@@ -1186,7 +1183,6 @@ if __name__ == '__main__':
         tag = encryptor.tag
 
         return nonce + ciphertext + tag
-
 
     # 示例用法
     key = os.urandom(16)  # AES-128 密钥（16字节）

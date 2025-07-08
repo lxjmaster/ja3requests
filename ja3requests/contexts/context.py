@@ -5,7 +5,6 @@ Ja3Requests.contexts.context
 HTTP Context and HTTPS Context
 """
 
-
 from ja3requests.base import BaseContext
 
 

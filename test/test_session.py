@@ -126,8 +126,12 @@ class TestSession(unittest.TestCase):
 
     def test_https(self):
         """Test HTTPS functionality - skip if no local server"""
-        
-        response = self.session.get("https://baidu.com", headers=self.headers)
+
+        proxies = {
+            "http": "127.0.0.1:7897",
+            "https": "127.0.0.1:7897"
+        }
+        response = self.session.get("https://google.com", headers=self.headers, proxies=proxies)
         print(response.status_code)
         print(response.headers)
         print(response.text)

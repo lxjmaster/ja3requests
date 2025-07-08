@@ -5,7 +5,6 @@ Ja3Requests.requests.request
 This module of Request.
 """
 
-
 import os
 import warnings
 from io import IOBase
@@ -46,7 +45,7 @@ class Request:
         json: Dict[AnyStr, AnyStr] = None,
         proxies: Dict[AnyStr, AnyStr] = None,
         timeout: float = None,
-        tls_config = None,
+        tls_config=None,
     ):
         self.method = method
         self.url = url

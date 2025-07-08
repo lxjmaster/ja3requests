@@ -25,8 +25,8 @@ class ServerHelloDone(HandShake):
         """
         # Skip TLS record header (5 bytes)
         data = data[5:]
-        
+
         # Skip handshake header (4 bytes)
         data = data[4:]
-        
-        # ServerHelloDone has no body 
+
+        # ServerHelloDone has no body

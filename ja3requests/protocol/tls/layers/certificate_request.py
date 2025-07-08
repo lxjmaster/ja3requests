@@ -38,16 +38,16 @@ class CertificateRequest(HandShake):
         """
         # Skip TLS record header (5 bytes)
         data = data[5:]
-        
+
         # Skip handshake header (4 bytes)
         data = data[4:]
-        
+
         # Parse certificate types length and types
         cert_types_length = data[0]
         data = data[1:]
         self._certificate_types = data[:cert_types_length]
         data = data[cert_types_length:]
-        
+
         # Parse certificate authorities length and authorities
         if len(data) > 0:
             auth_length = struct.unpack("!H", data[:2])[0]
@@ -60,4 +60,4 @@ class CertificateRequest(HandShake):
 
     @property
     def certificate_authorities(self) -> bytes:
-        return self._certificate_authorities 
+        return self._certificate_authorities

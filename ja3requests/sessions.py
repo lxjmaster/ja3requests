@@ -5,6 +5,7 @@ Ja3Requests.sessions
 This module provides a Session object to manage and persist settings across
 ja3Requests.
 """
+
 import sys
 import time
 from io import IOBase
@@ -30,16 +31,16 @@ class Session(BaseSession):
 
     Provides cookie persistence, connection-pooling, and configuration.
     """
-    
+
     def __init__(self, tls_config: TlsConfig = None):
         super().__init__()
         self._tls_config = tls_config or TlsConfig()
-    
+
     @property
     def tls_config(self) -> TlsConfig:
         """Get TLS configuration"""
         return self._tls_config
-    
+
     @tls_config.setter
     def tls_config(self, config: TlsConfig):
         """Set TLS configuration"""
@@ -114,7 +115,9 @@ class Session(BaseSession):
             original_config = self._tls_config
             self._tls_config = tls_config
             try:
-                result = self.request("GET", url, params=params, headers=headers, **kwargs)
+                result = self.request(
+                    "GET", url, params=params, headers=headers, **kwargs
+                )
                 return result
             finally:
                 # Restore original config

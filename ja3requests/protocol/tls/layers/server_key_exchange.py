@@ -61,36 +61,32 @@ class ServerKeyExchange(HandShake):
         """
         # Skip TLS record header (5 bytes)
         data = data[5:]
-        
+
         # Skip handshake header (4 bytes)
         data = data[4:]
-        
+
         # Parse DH parameters
         # Parse dh_p length and value
         dh_p_length = struct.unpack("!H", data[:2])[0]
         data = data[2:]
         dh_p = data[:dh_p_length]
         data = data[dh_p_length:]
-        
+
         # Parse dh_g length and value
         dh_g_length = struct.unpack("!H", data[:2])[0]
         data = data[2:]
         dh_g = data[:dh_g_length]
         data = data[dh_g_length:]
-        
+
         # Parse dh_Ys length and value
         dh_Ys_length = struct.unpack("!H", data[:2])[0]
         data = data[2:]
         dh_Ys = data[:dh_Ys_length]
         data = data[dh_Ys_length:]
-        
+
         # Store DH parameters
-        self._params = {
-            'dh_p': dh_p,
-            'dh_g': dh_g,
-            'dh_Ys': dh_Ys
-        }
-        
+        self._params = {'dh_p': dh_p, 'dh_g': dh_g, 'dh_Ys': dh_Ys}
+
         # Parse signed parameters if present
         if len(data) > 0:
             self._signed_params = data
@@ -101,4 +97,4 @@ class ServerKeyExchange(HandShake):
 
     @property
     def signed_params(self) -> bytes:
-        return self._signed_params 
+        return self._signed_params

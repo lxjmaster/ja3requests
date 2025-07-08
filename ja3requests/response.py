@@ -5,7 +5,6 @@ Ja3Requests.response
 This module contains response.
 """
 
-
 import json
 import gzip
 import zlib
@@ -98,7 +97,7 @@ class HTTPResponse(BaseResponse):
         self.headers = b""
         for header in headers_list[1:]:
             self.headers += header
-            name, value = header.strip().split(b": ")
+            name, value = header.strip().split(b": ", 1)
             headers.setdefault(name.lower(), value)
 
         return headers
@@ -135,7 +134,9 @@ class HTTPResponse(BaseResponse):
                 elif self._content_encoding == b"br":
                     body = brotli.decompress(body)
             except Exception as e:
-                print(f"Warning: Failed to decompress content with {self._content_encoding}: {e}")
+                print(
+                    f"Warning: Failed to decompress content with {self._content_encoding}: {e}"
+                )
                 # Return original body if decompression fails
 
         return body

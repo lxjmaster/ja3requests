@@ -35,4 +35,4 @@ class CertificateVerify(HandShake):
 
     @property
     def signature(self) -> bytes:
-        return self._signature 
+        return self._signature

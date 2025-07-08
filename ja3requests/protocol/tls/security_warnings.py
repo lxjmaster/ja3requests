@@ -10,6 +10,7 @@ import warnings
 
 class TLSSecurityWarning(UserWarning):
     """Warning for TLS security issues"""
+
     pass
 
 
@@ -20,7 +21,7 @@ def warn_insecure_implementation():
         "This library should NOT be used in production environments. "
         "Key security features are missing or use placeholder implementations.",
         TLSSecurityWarning,
-        stacklevel=3
+        stacklevel=3,
     )
 
 
@@ -30,7 +31,7 @@ def warn_no_certificate_verification():
         "Certificate verification is not implemented. "
         "Connections are vulnerable to man-in-the-middle attacks.",
         TLSSecurityWarning,
-        stacklevel=3
+        stacklevel=3,
     )
 
 
@@ -40,7 +41,7 @@ def warn_unencrypted_key_exchange():
         "Key exchange is using unencrypted premaster secret. "
         "This makes the connection completely insecure.",
         TLSSecurityWarning,
-        stacklevel=3
+        stacklevel=3,
     )
 
 
@@ -50,7 +51,7 @@ def warn_invalid_finished_message():
         "Finished message is using random verify_data instead of proper PRF calculation. "
         "Handshake integrity cannot be verified.",
         TLSSecurityWarning,
-        stacklevel=3
+        stacklevel=3,
     )
 
 
