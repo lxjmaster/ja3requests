@@ -5,7 +5,6 @@ Ja3Requests.base.__requests
 Basic of Request.
 """
 
-
 import os
 from io import IOBase
 from abc import ABC, abstractmethod

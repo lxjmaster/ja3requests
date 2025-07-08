@@ -45,33 +45,33 @@ class ServerHello(HandShake):
         print(data)
         # Skip TLS record header (5 bytes)
         data = data[5:]
-        
+
         # Skip handshake header (4 bytes)
         data = data[4:]
-        
+
         # Parse server version (2 bytes)
         self._version = data[:2]
         data = data[2:]
-        
+
         # Parse random (32 bytes)
         self._random = data[:32]
         data = data[32:]
-        
+
         # Parse session ID length and session ID
         session_id_length = data[0]
         data = data[1:]
         if session_id_length > 0:
             self._session_id = data[:session_id_length]
             data = data[session_id_length:]
-        
+
         # Parse cipher suite (2 bytes)
         self._cipher_suite = data[:2]
         data = data[2:]
-        
+
         # Parse compression method (1 byte)
         self._compression_method = data[0]
         data = data[1:]
-        
+
         # Parse extensions if present
         if len(data) > 0:
             self._extensions = data
@@ -98,4 +98,4 @@ class ServerHello(HandShake):
 
     @property
     def extensions(self) -> bytes:
-        return self._extensions 
+        return self._extensions

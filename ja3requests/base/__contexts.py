@@ -1,9 +1,10 @@
-""""
+""" "
 Ja3Requests.base.__contexts
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Basic of Context.
 """
+
 from urllib.parse import urlparse, urlencode, parse_qsl
 from abc import ABC, abstractmethod
 from typing import AnyStr, Dict
@@ -12,7 +13,7 @@ import mimetypes
 
 
 PROTOCOL_VERSION_HTTP_1 = "HTTP/1.1"
-PROTOCOL_VERSION_HTTP_2 = "HTTP/2.0"    # h2
+PROTOCOL_VERSION_HTTP_2 = "HTTP/2.0"  # h2
 
 
 class BaseContext(ABC):

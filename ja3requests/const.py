@@ -5,7 +5,6 @@ Ja3Requests.const
 A constant module.
 """
 
-
 MAX_LINE = 65536
 MAX_HEADERS = 100
 DEFAULT_CHUNKED_SIZE = 2048

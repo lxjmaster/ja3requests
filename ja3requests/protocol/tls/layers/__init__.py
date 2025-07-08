@@ -42,7 +42,7 @@ class Random:
     def get_unix_time():
 
         current_time_unix = int(time.time())
-        current_time_unix_32bit = current_time_unix % (2 ** 32)
+        current_time_unix_32bit = current_time_unix % (2**32)
 
         return current_time_unix_32bit
 
@@ -228,7 +228,7 @@ class HandShake(ABC):
         Note: The cipher suite values { 0x00, 0x1C } and { 0x00, 0x1D } are
         reserved to avoid collision with Fortezza-based cipher suites in
         SSL 3.
-        """
+    """
 
     def __init__(self):
         self._version = None
@@ -247,7 +247,9 @@ class HandShake(ABC):
     @abstractmethod
     def handshake_type(self) -> bytes:
 
-        raise NotImplementedError("handshake_type method must be implemented by subclass.")
+        raise NotImplementedError(
+            "handshake_type method must be implemented by subclass."
+        )
 
     @property
     def version(self) -> bytes:
@@ -391,7 +393,9 @@ class HandShake(ABC):
                 self.t.append("session_id")
 
         if self.cipher_suites:
-            content += struct.pack("!H", len(self.cipher_suites))  # 2 bytes for cipher suites length
+            content += struct.pack(
+                "!H", len(self.cipher_suites)
+            )  # 2 bytes for cipher suites length
             content += self.cipher_suites
             if "cipher_suites" not in self.t:
                 print(f"cipher suites: {self.cipher_suites}")
@@ -427,12 +431,8 @@ class HandShake(ABC):
         Raw handshake message without TLS record layer wrapper
         Used for handshake hash calculation
         """
-        return (
-            self.handshake_type +
-            self.length() +
-            self.content()
-        )
-    
+        return self.handshake_type + self.length() + self.content()
+
     @property
     def message(self):
         """
@@ -440,10 +440,10 @@ class HandShake(ABC):
         """
         handshake_msg = self.handshake_message
         message = (
-            b'\x16' +
-            b'\x03\x01' +  # Use TLS 1.0 version for record layer (for compatibility)
-            struct.pack("!H", len(handshake_msg)) +
-            handshake_msg
+            b'\x16'
+            + b'\x03\x01'  # Use TLS 1.0 version for record layer (for compatibility)
+            + struct.pack("!H", len(handshake_msg))
+            + handshake_msg
         )
         return message
 

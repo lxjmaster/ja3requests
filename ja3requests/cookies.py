@@ -5,7 +5,6 @@ Ja3Requests.cookies
 This module contains Request or Response Cookies.
 """
 
-
 from http.cookiejar import CookieJar, Cookie
 from http import cookies
 from typing import MutableMapping

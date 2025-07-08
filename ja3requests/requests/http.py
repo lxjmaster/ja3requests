@@ -5,7 +5,6 @@ Ja3Requests.requests.http
 This module of HTTP Request.
 """
 
-
 from ja3requests.base import BaseRequest
 from ja3requests.contexts.context import HTTPContext
 from ja3requests.sockets.http import HttpSocket

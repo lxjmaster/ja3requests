@@ -13,7 +13,12 @@ class Finished(HandShake):
         PRF(master_secret, finished_label, Hash(handshake_messages))[0..11];
     """
 
-    def __init__(self, master_secret: bytes = None, client_random: bytes = None, server_random: bytes = None):
+    def __init__(
+        self,
+        master_secret: bytes = None,
+        client_random: bytes = None,
+        server_random: bytes = None,
+    ):
         super().__init__()
         self._master_secret = master_secret
         self._client_random = client_random
@@ -33,7 +38,11 @@ class Finished(HandShake):
         Generate finished message content
         :return: Finished message content
         """
-        if not self._master_secret or not self._client_random or not self._server_random:
+        if (
+            not self._master_secret
+            or not self._client_random
+            or not self._server_random
+        ):
             # For parsing received Finished message
             return self._verify_data
 
@@ -49,13 +58,13 @@ class Finished(HandShake):
         """
         # Skip TLS record header (5 bytes)
         data = data[5:]
-        
+
         # Skip handshake header (4 bytes)
         data = data[4:]
-        
+
         # Parse verify_data (12 bytes)
         self._verify_data = data[:12]
 
     @property
     def verify_data(self) -> bytes:
-        return self._verify_data 
+        return self._verify_data

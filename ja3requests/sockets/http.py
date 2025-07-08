@@ -5,7 +5,6 @@ Ja3Requests.sockets.http
 This module of HTTP Socket.
 """
 
-
 from ja3requests.base import BaseSocket
 
 
