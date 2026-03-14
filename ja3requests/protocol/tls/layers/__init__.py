@@ -2,6 +2,7 @@ import os
 import time
 import struct
 from abc import ABC, abstractmethod
+from ja3requests.protocol.tls.debug import debug
 
 
 class Random:
@@ -372,13 +373,13 @@ class HandShake(ABC):
         if self.version:
             content += self.version
             if "version" not in self.t:
-                print(f"version: {self.version}")
+                debug(f"version: {self.version}", level=2)
                 self.t.append("version")
 
         if self.random:
             content += self.random
             if "random" not in self.t:
-                print(f"random: {self.random}")
+                debug(f"random: {self.random}", level=2)
                 self.t.append("random")
 
         if self.session_id:
@@ -389,7 +390,7 @@ class HandShake(ABC):
                 content += self.session_id
 
             if "session_id" not in self.t:
-                print(f"session id: {self.session_id}")
+                debug(f"session id: {self.session_id}", level=2)
                 self.t.append("session_id")
 
         if self.cipher_suites:
@@ -398,20 +399,20 @@ class HandShake(ABC):
             )  # 2 bytes for cipher suites length
             content += self.cipher_suites
             if "cipher_suites" not in self.t:
-                print(f"cipher suites: {self.cipher_suites}")
+                debug(f"cipher suites: {self.cipher_suites}", level=2)
                 self.t.append("cipher_suites")
 
         if self.compression_methods:
             content += struct.pack("B", len(self.compression_methods))
             content += self.compression_methods
             if "compression_methods" not in self.t:
-                print(f"compression methods: {self.compression_methods}")
+                debug(f"compression methods: {self.compression_methods}", level=2)
                 self.t.append("compression_methods")
 
         if self.extensions:
             content += self.extensions
             if "extensions" not in self.t:
-                print(f"extensions: {self.extensions}")
+                debug(f"extensions: {self.extensions}", level=2)
                 self.t.append("extensions")
 
         return content

@@ -21,7 +21,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Architecture Overview
 
-Ja3Requests is a custom HTTP request library that allows customization of JA3 and H2 fingerprints for TLS connections. The library mimics the requests library API while providing low-level TLS control.
+Ja3Requests is a custom HTTP request library that allows customization of JA3 and H2 fingerprints for TLS connections. The library mimics the requests library API while providing low-level TLS control. Supports Python 3.7+.
 
 ### Core Components
 
@@ -29,12 +29,19 @@ Ja3Requests is a custom HTTP request library that allows customization of JA3 an
 - `Session` class extends `BaseSession` and provides the main API
 - Handles cookie persistence, connection pooling, and configuration
 - Entry point through `ja3requests.session()` factory function
+- Accepts `TlsConfig` for JA3 fingerprint customization
 
-**Protocol Implementation (`ja3requests/protocol/`)**
-- Custom TLS implementation in `tls/` directory
-- Cipher suites configuration in `cipher_suites/suites.py`
-- TLS layers for handshake messages (client_hello, server_hello, etc.)
-- Extensions handling for TLS negotiation
+**TLS/JA3 Fingerprinting (`ja3requests/protocol/tls/`)**
+- `TLS` class in `__init__.py` - orchestrates the complete TLS handshake
+- `TlsConfig` in `config.py` - configures cipher suites, extensions, supported groups for custom JA3 fingerprints
+- Browser presets: `TlsConfig().create_firefox_config()` and `create_chrome_config()`
+- Handshake layers in `layers/` - client_hello, server_hello, certificate, key_exchange, finished
+- `crypto.py` - AES-CBC encryption, HMAC-SHA1, PRF for key derivation
+
+**TLS Handshake Flow**
+1. `HttpsSocket.new_conn()` creates TCP connection and initiates TLS
+2. `TLS.set_payload()` configures ClientHello based on TlsConfig
+3. `TLS.handshake()` performs full handshake: ClientHello → ServerHello/Certificate/KeyExchange → ClientKeyExchange/ChangeCipherSpec/Finished
 
 **Request/Response Handling**
 - `ja3requests/requests/` - HTTP/HTTPS request implementations
@@ -48,13 +55,13 @@ Ja3Requests is a custom HTTP request library that allows customization of JA3 an
 ### Key Design Patterns
 
 - Factory pattern for session creation
-- Inheritance hierarchy with base classes for extensibility  
+- Inheritance hierarchy with base classes for extensibility
 - Context managers for resource management
 - Custom socket implementations to control TLS handshake details
 
 ## Dependencies
 
-- Runtime: `brotli` for compression support
+- Runtime: `brotli` for compression, `cryptography` for TLS operations
 - Development: `black`, `pylint`, `pytest`, `twine`
 
 ## Testing Strategy

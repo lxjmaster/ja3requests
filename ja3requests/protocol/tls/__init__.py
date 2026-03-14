@@ -1,6 +1,7 @@
 import os
 import struct
 from ja3requests.protocol.tls.layers import HandShake
+from ja3requests.protocol.tls.debug import debug, debug_hex
 from ja3requests.protocol.tls.layers.client_hello import ClientHello
 from ja3requests.protocol.tls.layers.server_hello import ServerHello
 from ja3requests.protocol.tls.layers.certificate import Certificate
@@ -16,6 +17,21 @@ from ja3requests.protocol.tls.security_warnings import (
     warn_unencrypted_key_exchange,
     warn_invalid_finished_message,
 )
+
+# ECDHE Cipher Suite Constants
+# These cipher suites use Elliptic Curve Diffie-Hellman Ephemeral key exchange
+ECDHE_CIPHER_SUITES = frozenset({
+    0xC02F,  # TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+    0xC030,  # TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+    0xC013,  # TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA
+    0xC014,  # TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA
+    0xC027,  # TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256
+    0xC028,  # TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384
+    0xC009,  # TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA
+    0xC00A,  # TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA
+    0xC02B,  # TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+    0xC02C,  # TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+})
 
 
 class TLS:
@@ -35,6 +51,11 @@ class TLS:
         self._supported_groups = None
         self._signature_algorithms = None
         self._cipher_suites = None
+
+        # Sequence numbers for record layer encryption/decryption
+        # These are reset to 0 after ChangeCipherSpec
+        self._client_seq_num = 0  # For encrypting client -> server messages
+        self._server_seq_num = 0  # For decrypting server -> client messages
 
     @property
     def tls_version(self) -> bytes:
@@ -116,9 +137,9 @@ class TLS:
             # Step 1: Send Client Hello
             client_hello = self.body
             self._client_random = client_hello.random
-            print("Sending Client Hello...")
-            print(f"Client Hello message hex: {client_hello.message.hex()}")
-            print(f"Client Hello length: {len(client_hello.message)} bytes")
+            debug("Sending Client Hello...")
+            debug(f"Client Hello message hex: {client_hello.message.hex()}")
+            debug(f"Client Hello length: {len(client_hello.message)} bytes")
             self.conn.sendall(client_hello.message)
 
             # Add Client Hello to handshake messages (without TLS record header)
@@ -143,25 +164,25 @@ class TLS:
                 # Try to properly handle server's Change Cipher Spec + Finished
                 success = self._wait_for_server_handshake_completion()
                 if success:
-                    print("✅ Full TLS handshake completed successfully!")
+                    debug("✅ Full TLS handshake completed successfully!")
                     self.conn.settimeout(None)
                     return True
                 else:
                     # Server might have sent alert or closed connection
-                    print("Server did not complete handshake as expected")
+                    debug("Server did not complete handshake as expected")
                     # For many implementations, this is still considered working
                     # as long as we can establish the basic handshake protocol
                     return True
 
             except Exception as e:
-                print(f"Error during handshake completion: {e}")
+                debug(f"Error during handshake completion: {e}")
                 # Even if completion fails, if we got this far, the basic TLS is working
                 return True
             finally:
                 self.conn.settimeout(None)
 
         except Exception as e:
-            print(f"TLS Handshake failed: {e}")
+            debug(f"TLS Handshake failed: {e}")
             return False
 
     def _parse_server_handshake_messages(self):
@@ -183,14 +204,14 @@ class TLS:
                 if not data:
                     timeout_count += 1
                     if timeout_count >= max_timeout:
-                        print("Timeout waiting for server handshake messages")
+                        debug("Timeout waiting for server handshake messages")
                         break
                     continue
 
                 timeout_count = 0  # Reset timeout counter
                 buffer += data
-                print(f"Received {len(data)} bytes from server")
-                print(f"Buffer now has {len(buffer)} bytes: {buffer[:50].hex()}...")
+                debug(f"Received {len(data)} bytes from server")
+                debug(f"Buffer now has {len(buffer)} bytes: {buffer[:50].hex()}...")
 
                 # Parse TLS records from buffer
                 while len(buffer) >= 5:  # Minimum TLS record header size
@@ -210,7 +231,7 @@ class TLS:
                     record_data = buffer[5 : 5 + record_length]
                     buffer = buffer[5 + record_length :]
 
-                    print(
+                    debug(
                         f"Processing TLS record: type={record_type}, length={record_length}"
                     )
 
@@ -220,7 +241,7 @@ class TLS:
                         if len(record_data) >= 2:
                             alert_level = record_data[0]
                             alert_description = record_data[1]
-                            print(
+                            debug(
                                 f"Received TLS Alert: level={alert_level}, description={alert_description}"
                             )
                             if alert_level == 2:  # Fatal alert
@@ -231,7 +252,7 @@ class TLS:
                         hasattr(self, '_server_hello_done_received')
                         and self._server_hello_done_received
                     ):
-                        print("Received ServerHelloDone, handshake messages complete")
+                        debug("Received ServerHelloDone, handshake messages complete")
                         self.conn.settimeout(None)  # Reset timeout
                         return
 
@@ -239,11 +260,11 @@ class TLS:
                 if "timed out" in str(e):
                     timeout_count += 1
                     if timeout_count >= max_timeout:
-                        print("Timeout waiting for server handshake messages")
+                        debug("Timeout waiting for server handshake messages")
                         break
                     continue
                 else:
-                    print(f"Error parsing server messages: {e}")
+                    debug(f"Error parsing server messages: {e}")
                     self.conn.settimeout(None)  # Reset timeout
                     raise e
 
@@ -282,19 +303,19 @@ class TLS:
 
             if msg_type == 2:  # ServerHello
                 self._parse_server_hello(msg_data)
-                print("Received Server Hello")
+                debug("Received Server Hello")
             elif msg_type == 11:  # Certificate
                 self._parse_certificate(msg_data)
-                print("Received Certificate")
+                debug("Received Certificate")
             elif msg_type == 12:  # ServerKeyExchange
                 self._parse_server_key_exchange(msg_data)
-                print("Received Server Key Exchange")
+                debug("Received Server Key Exchange")
             elif msg_type == 13:  # CertificateRequest
                 self._parse_certificate_request(msg_data)
-                print("Received Certificate Request")
+                debug("Received Certificate Request")
             elif msg_type == 14:  # ServerHelloDone
                 self._parse_server_hello_done(msg_data)
-                print("Received Server Hello Done")
+                debug("Received Server Hello Done")
                 self._server_hello_done_received = True
                 return
 
@@ -303,7 +324,7 @@ class TLS:
     def _parse_server_hello(self, data):
         """Parse ServerHello message"""
         if len(data) < 38:  # Minimum size for ServerHello
-            print(f"ServerHello data too short: {len(data)} bytes")
+            debug(f"ServerHello data too short: {len(data)} bytes")
             return
 
         offset = 0
@@ -336,7 +357,7 @@ class TLS:
         cipher_bytes = data[offset : offset + 2]
         if len(cipher_bytes) == 2:
             self._selected_cipher_suite = struct.unpack("!H", cipher_bytes)[0]
-            print(f"Server selected cipher suite: 0x{self._selected_cipher_suite:04X}")
+            debug(f"Server selected cipher suite: 0x{self._selected_cipher_suite:04X}")
         offset += 2
 
         # Compression method (1 byte)
@@ -351,19 +372,38 @@ class TLS:
             self._server_public_key = self._extract_server_public_key(data)
 
             if self._server_public_key:
-                print("Successfully extracted server public key from certificate")
+                debug("Successfully extracted server public key from certificate")
             else:
-                print("Failed to extract server public key from certificate")
+                debug("Failed to extract server public key from certificate")
                 warn_no_certificate_verification()
 
         except Exception as e:
-            print(f"Error parsing certificate: {e}")
+            debug(f"Error parsing certificate: {e}")
             warn_no_certificate_verification()
 
     def _parse_server_key_exchange(self, data):
-        """Parse ServerKeyExchange message"""
-        # For now, just acknowledge receipt
-        pass
+        """Parse ServerKeyExchange message for ECDHE or DHE key exchange"""
+        from .crypto import ECDHEKeyExchange
+
+        # Determine key exchange type based on cipher suite
+        cipher_suite = getattr(self, '_selected_cipher_suite', 0)
+
+        if cipher_suite in ECDHE_CIPHER_SUITES:
+            # Parse ECDHE ServerKeyExchange
+            self._key_exchange_type = 'ECDHE'
+            ecdhe_params = ECDHEKeyExchange.parse_server_ecdhe_params(data)
+
+            if ecdhe_params:
+                self._ecdhe_curve_id = ecdhe_params['curve_id']
+                self._ecdhe_server_pubkey = ecdhe_params['public_key']
+                debug(f"ECDHE key exchange: curve_id={self._ecdhe_curve_id}")
+                debug(f"Server ECDHE public key length: {len(self._ecdhe_server_pubkey)}")
+            else:
+                debug("Failed to parse ECDHE parameters")
+        else:
+            # DHE or RSA key exchange (existing handling)
+            self._key_exchange_type = 'RSA'
+            debug(f"RSA key exchange for cipher suite 0x{cipher_suite:04X}")
 
     def _parse_certificate_request(self, data):
         """Parse CertificateRequest message"""
@@ -373,7 +413,7 @@ class TLS:
         """Parse ServerHelloDone message"""
         # This message has no content, just set the flag
         self._server_hello_done_received = True
-        print("Received ServerHelloDone - ready to send client finishing messages")
+        debug("Received ServerHelloDone - ready to send client finishing messages")
 
     def _send_client_finishing_messages(self):
         """
@@ -383,26 +423,29 @@ class TLS:
         if hasattr(self, '_client_cert_requested'):
             empty_cert = self._build_empty_certificate()
             self.conn.sendall(empty_cert)
-            print("Sent empty Certificate")
+            debug("Sent empty Certificate")
 
         # Send ClientKeyExchange
         client_key_exchange = self._build_client_key_exchange()
         self.conn.sendall(client_key_exchange)
-        print("Sent Client Key Exchange")
+        debug("Sent Client Key Exchange")
 
         # Send ChangeCipherSpec
         change_cipher_spec = b'\x14\x03\x03\x00\x01\x01'
         self.conn.sendall(change_cipher_spec)
-        print("Sent Change Cipher Spec")
+        debug("Sent Change Cipher Spec")
 
-        # Reset sequence number for encrypted messages
+        # Reset sequence numbers for encrypted messages
+        # Client sequence number resets after we send ChangeCipherSpec
         self._client_seq_num = 0
-        print("Reset client sequence number to 0 for encrypted messages")
+        # Server sequence number will reset when we receive their ChangeCipherSpec
+        self._server_seq_num = 0
+        debug("Reset sequence numbers for encrypted messages")
 
         # Send Finished (first encrypted message with seq num 0)
         finished_message = self._build_finished_message()
         self.conn.sendall(finished_message)
-        print("Sent Finished")
+        debug("Sent Finished")
 
     def _wait_for_server_handshake_completion(self):
         """
@@ -420,12 +463,12 @@ class TLS:
                 data = self.conn.recv(4096)
                 if data:
                     buffer += data
-                    print(f"Received {len(data)} bytes from server after our Finished")
+                    debug(f"Received {len(data)} bytes from server after our Finished")
                 else:
-                    print("No response from server after our Finished")
+                    debug("No response from server after our Finished")
                     return False
             except Exception as recv_error:
-                print(f"Error receiving server response: {recv_error}")
+                debug(f"Error receiving server response: {recv_error}")
                 return False
 
             # Parse TLS records from buffer
@@ -443,35 +486,39 @@ class TLS:
 
                 record_data = buffer[offset + 5 : offset + 5 + record_length]
 
-                print(
+                debug(
                     f"Processing server record: type={record_type}, length={record_length}"
                 )
 
                 if record_type == 20:  # ChangeCipherSpec
-                    print("✅ Received server ChangeCipherSpec")
+                    debug("✅ Received server ChangeCipherSpec")
                     received_change_cipher_spec = True
+                    # Reset server sequence number for encrypted messages
+                    self._server_seq_num = 0
                 elif record_type == 22:  # Handshake (encrypted Finished)
-                    print("✅ Received server encrypted Finished")
+                    debug("✅ Received server encrypted Finished")
                     received_finished = True
+                    # Server's Finished message uses seq=0, increment for next message
+                    self._server_seq_num = 1
                 elif record_type == 21:  # Alert
                     if len(record_data) >= 2:
                         alert_level = record_data[0]
                         alert_description = record_data[1]
-                        print(
+                        debug(
                             f"Received TLS Alert: level={alert_level}, description={alert_description}"
                         )
                         if alert_level == 2:  # Fatal alert
                             if alert_description == 20:  # bad_record_mac
-                                print(
+                                debug(
                                     "Server rejected our Finished message (bad_record_mac)"
                                 )
                                 # This is expected with our current implementation
                                 return False
                             else:
-                                print(f"Server sent fatal alert: {alert_description}")
+                                debug(f"Server sent fatal alert: {alert_description}")
                                 return False
                         else:
-                            print(f"Server sent warning alert: {alert_description}")
+                            debug(f"Server sent warning alert: {alert_description}")
 
                 offset += 5 + record_length
 
@@ -479,13 +526,13 @@ class TLS:
             if received_change_cipher_spec and received_finished:
                 return True
             else:
-                print(
+                debug(
                     f"Incomplete handshake: ChangeCipherSpec={received_change_cipher_spec}, Finished={received_finished}"
                 )
                 return False
 
         except Exception as e:
-            print(f"Failed to wait for server handshake completion: {e}")
+            debug(f"Failed to wait for server handshake completion: {e}")
             return False
 
     def _build_empty_certificate(self):
@@ -499,7 +546,87 @@ class TLS:
         return record
 
     def _build_client_key_exchange(self):
-        """Build ClientKeyExchange message with proper RSA encryption"""
+        """Build ClientKeyExchange message with RSA or ECDHE key exchange"""
+        from .crypto import TLSCrypto, RSAKeyExchange, ECDHEKeyExchange
+
+        key_exchange_type = getattr(self, '_key_exchange_type', 'RSA')
+
+        if key_exchange_type == 'ECDHE':
+            # ECDHE key exchange
+            return self._build_ecdhe_client_key_exchange()
+        else:
+            # RSA key exchange (default)
+            return self._build_rsa_client_key_exchange()
+
+    def _build_ecdhe_client_key_exchange(self):
+        """Build ClientKeyExchange message for ECDHE key exchange.
+
+        Raises:
+            ValueError: If no server ECDHE public key is available
+            ImportError: If cryptography library is not available (falls back to RSA)
+        """
+        from .crypto import TLSCrypto, ECDHEKeyExchange
+
+        curve_id = getattr(self, '_ecdhe_curve_id', 23)  # Default to secp256r1
+        server_pubkey = getattr(self, '_ecdhe_server_pubkey', None)
+
+        if not server_pubkey:
+            # This is a protocol error - server selected ECDHE but didn't send key
+            raise ValueError(
+                "Server selected ECDHE cipher suite but did not provide public key"
+            )
+
+        try:
+            # Generate our ECDHE keypair
+            private_key, public_key = ECDHEKeyExchange.generate_keypair(curve_id)
+            self._ecdhe_private_key = private_key
+            self._ecdhe_public_key = public_key
+
+            debug(f"Generated ECDHE keypair: public_key length={len(public_key)}")
+
+            # Compute shared secret (premaster secret)
+            self._premaster_secret = ECDHEKeyExchange.compute_shared_secret(
+                private_key, server_pubkey, curve_id
+            )
+            debug(f"Computed ECDHE shared secret: {len(self._premaster_secret)} bytes")
+
+            # Generate master secret
+            if hasattr(self, '_server_random') and self._server_random:
+                self._master_secret = TLSCrypto.generate_master_secret(
+                    self._premaster_secret, self._client_random, self._server_random
+                )
+                debug(f"Generated master secret: {len(self._master_secret)} bytes")
+            else:
+                debug("Warning: No server random, using fallback master secret")
+                self._master_secret = os.urandom(48)
+
+            # Generate session keys
+            self._generate_session_keys()
+
+            # Build ClientKeyExchange message for ECDHE
+            # Format: length (1 byte) + public_key
+            key_exchange_data = bytes([len(public_key)]) + public_key
+            msg = b'\x10' + struct.pack("!I", len(key_exchange_data))[1:] + key_exchange_data
+
+            # Store for handshake hash calculation
+            if not hasattr(self, '_handshake_messages'):
+                self._handshake_messages = b''
+            self._handshake_messages += msg
+
+            # Wrap in TLS record
+            record = b'\x16\x03\x03' + struct.pack("!H", len(msg)) + msg
+            return record
+
+        except ImportError as e:
+            # Fall back to RSA only if cryptography library is not available
+            debug(f"ECDHE unavailable (missing cryptography library), falling back to RSA: {e}")
+            return self._build_rsa_client_key_exchange()
+        except ValueError:
+            # Re-raise ValueError (unsupported curve, etc.)
+            raise
+
+    def _build_rsa_client_key_exchange(self):
+        """Build ClientKeyExchange message with RSA encryption"""
         from .crypto import TLSCrypto, RSAKeyExchange
 
         # Generate proper premaster secret
@@ -511,14 +638,14 @@ class TLS:
                 encrypted_premaster = RSAKeyExchange.encrypt_premaster_secret(
                     self._premaster_secret, self._server_public_key
                 )
-                print("Successfully encrypted premaster secret")
+                debug("Successfully encrypted premaster secret")
             except Exception as e:
-                print(f"Failed to encrypt premaster secret: {e}")
+                debug(f"Failed to encrypt premaster secret: {e}")
                 # Fall back to unencrypted (still insecure but better than random)
                 warn_unencrypted_key_exchange()
                 encrypted_premaster = self._premaster_secret
         else:
-            print(
+            debug(
                 "Warning: No server public key available, using unencrypted premaster secret"
             )
             warn_unencrypted_key_exchange()
@@ -529,11 +656,11 @@ class TLS:
             self._master_secret = TLSCrypto.generate_master_secret(
                 self._premaster_secret, self._client_random, self._server_random
             )
-            print(
+            debug(
                 f"Generated master secret from premaster: {len(self._master_secret)} bytes"
             )
         else:
-            print(
+            debug(
                 "Warning: No server random available, cannot generate proper master secret"
             )
             # Use a fallback master secret (insecure)
@@ -564,10 +691,10 @@ class TLS:
 
         if hasattr(self, '_master_secret') and hasattr(self, '_handshake_messages'):
             # Calculate proper verify data using PRF
-            print(
+            debug(
                 f"Handshake messages for verify data: {len(self._handshake_messages)} bytes"
             )
-            print(f"Handshake messages hex: {self._handshake_messages.hex()}")
+            debug(f"Handshake messages hex: {self._handshake_messages.hex()}")
             cipher_suite = getattr(self, '_selected_cipher_suite', 0x002F)
             verify_data = TLSCrypto.compute_verify_data(
                 self._master_secret,
@@ -575,9 +702,9 @@ class TLS:
                 is_client=True,
                 cipher_suite=cipher_suite,
             )
-            print(f"Generated verify data: {verify_data.hex()}")
+            debug(f"Generated verify data: {verify_data.hex()}")
         else:
-            print(
+            debug(
                 "Warning: Missing master secret or handshake messages, using random verify data"
             )
             warn_invalid_finished_message()
@@ -599,17 +726,17 @@ class TLS:
             try:
                 # Use proper TLS record layer encryption
                 encrypted_record = self._encrypt_finished_message(msg)
-                print(
+                debug(
                     f"Successfully encrypted Finished message: {len(encrypted_record)} bytes"
                 )
                 return encrypted_record
             except Exception as e:
-                print(f"Encryption failed, falling back to unencrypted: {e}")
+                debug(f"Encryption failed, falling back to unencrypted: {e}")
                 # If encryption fails, send unencrypted (for debugging)
                 record = b'\x16\x03\x03' + struct.pack("!H", len(msg)) + msg
                 return record
         else:
-            print("Warning: No encryption keys, sending Finished unencrypted")
+            debug("Warning: No encryption keys, sending Finished unencrypted")
             record = b'\x16\x03\x03' + struct.pack("!H", len(msg)) + msg
             return record
 
@@ -618,7 +745,7 @@ class TLS:
         from .crypto import TLSCrypto
 
         if not hasattr(self, '_master_secret'):
-            print("Warning: No master secret available for key generation")
+            debug("Warning: No master secret available for key generation")
             return
 
         # Determine key block length based on selected cipher suite
@@ -652,7 +779,7 @@ class TLS:
                 key_block_length,
             )
         else:
-            print("Warning: No server random for key generation, using fallback")
+            debug("Warning: No server random for key generation, using fallback")
             # Fallback key block (insecure)
             key_block = os.urandom(key_block_length)
 
@@ -667,7 +794,7 @@ class TLS:
         self._client_write_iv = keys.get('client_iv', b'')
         self._server_write_iv = keys.get('server_iv', b'')
 
-        print(f"Generated session keys for cipher suite 0x{cipher_suite:04X}")
+        debug(f"Generated session keys for cipher suite 0x{cipher_suite:04X}")
 
     def _encrypt_handshake_message(self, handshake_msg: bytes) -> bytes:
         """
@@ -717,7 +844,10 @@ class TLS:
         # Encrypt using AES-CBC
         # Generate random IV for this record
         iv = os.urandom(16)
-        ciphertext = AESCipher.encrypt_cbc(plaintext_padded, self._client_write_key, iv)
+        # Use add_padding=False since we already added TLS-specific padding above
+        ciphertext = AESCipher.encrypt_cbc(
+            plaintext_padded, self._client_write_key, iv, add_padding=False
+        )
 
         # TLS record: type + version + length + IV + ciphertext
         encrypted_data = iv + ciphertext
@@ -728,9 +858,7 @@ class TLS:
             + encrypted_data
         )
 
-        # Increment sequence number
-        if not hasattr(self, '_client_seq_num'):
-            self._client_seq_num = 0
+        # Increment sequence number for next message
         self._client_seq_num += 1
 
         return record
@@ -752,7 +880,7 @@ class TLS:
         # Don't reinitialize it here to avoid overriding the correct value
         if not hasattr(self, '_client_seq_num'):
             # This should not happen if called correctly after Change Cipher Spec
-            print("Warning: _client_seq_num not initialized, setting to 0")
+            debug("Warning: _client_seq_num not initialized, setting to 0")
             self._client_seq_num = 0
 
         # For TLS 1.2 with AES-CBC, MAC is calculated EXACTLY as per RFC 5246:
@@ -776,16 +904,16 @@ class TLS:
         # Combine exactly as specified in RFC
         mac_input = seq_num_bytes + type_byte + version_bytes + length_bytes + fragment
 
-        print(f"MAC input length: {len(mac_input)} bytes")
-        print(f"Seq num: {seq_num_bytes.hex()}")
-        print(f"Type: {type_byte.hex()}")
-        print(f"Version: {version_bytes.hex()}")
-        print(f"Length: {length_bytes.hex()}")
-        print(f"Fragment length: {len(fragment)}")
+        debug(f"MAC input length: {len(mac_input)} bytes")
+        debug(f"Seq num: {seq_num_bytes.hex()}")
+        debug(f"Type: {type_byte.hex()}")
+        debug(f"Version: {version_bytes.hex()}")
+        debug(f"Length: {length_bytes.hex()}")
+        debug(f"Fragment length: {len(fragment)}")
 
         # Calculate HMAC-SHA1 (for cipher suite 0x002F)
         mac = hmac.new(self._client_write_mac_key, mac_input, hashlib.sha1).digest()
-        print(f"Calculated MAC: {mac.hex()}")
+        debug(f"Calculated MAC: {mac.hex()}")
 
         # Concatenate message and MAC
         plaintext = handshake_msg + mac
@@ -800,8 +928,8 @@ class TLS:
         padding = bytes([padding_value] * padding_length)
         padded_plaintext = plaintext + padding
 
-        print(f"Padding: {padding_length} bytes, value: {padding_value}")
-        print(
+        debug(f"Padding: {padding_length} bytes, value: {padding_value}")
+        debug(
             f"Plaintext: {len(plaintext)} -> {len(padded_plaintext)} bytes after padding"
         )
 
@@ -822,10 +950,10 @@ class TLS:
             encryptor = cipher.encryptor()
             ciphertext = encryptor.update(padded_plaintext) + encryptor.finalize()
         except Exception as e:
-            print(f"AES-CBC encryption failed: {e}")
-            # Fallback to original method if cryptography fails
+            debug(f"AES-CBC encryption failed: {e}")
+            # Fallback to AESCipher with add_padding=False since we already added TLS padding
             ciphertext = AESCipher.encrypt_cbc(
-                padded_plaintext, self._client_write_key, explicit_iv
+                padded_plaintext, self._client_write_key, explicit_iv, add_padding=False
             )
 
         # Construct TLS record: type + version + length + explicit_iv + ciphertext
@@ -840,7 +968,7 @@ class TLS:
         # Increment sequence number for next message
         self._client_seq_num += 1
 
-        print(f"Encrypted record length: {len(record)} bytes")
+        debug(f"Encrypted record length: {len(record)} bytes")
         return record
 
     def _extract_server_public_key(self, certificate_data):
@@ -850,24 +978,24 @@ class TLS:
             from cryptography.hazmat.backends import default_backend
             from cryptography.hazmat.primitives import serialization
 
-            print(f"Certificate data length: {len(certificate_data)}")
-            print(f"First 20 bytes: {certificate_data[:20].hex()}")
+            debug(f"Certificate data length: {len(certificate_data)}")
+            debug(f"First 20 bytes: {certificate_data[:20].hex()}")
 
             # Parse the certificates list
             # Format: [certificates_length (3 bytes)][certificate_1][certificate_2]...
             if len(certificate_data) < 3:
-                print("Certificate data too short for length header")
+                debug("Certificate data too short for length header")
                 return None
 
             # Read total certificates length
             certificates_length = struct.unpack("!I", b'\x00' + certificate_data[0:3])[
                 0
             ]
-            print(f"Total certificates length: {certificates_length}")
+            debug(f"Total certificates length: {certificates_length}")
 
             offset = 3
             if len(certificate_data) < offset + 3:
-                print("Certificate data too short for first certificate length")
+                debug("Certificate data too short for first certificate length")
                 return None
 
             # Get first certificate length
@@ -875,26 +1003,26 @@ class TLS:
                 "!I", b'\x00' + certificate_data[offset : offset + 3]
             )[0]
             offset += 3
-            print(f"First certificate length: {cert_length}")
+            debug(f"First certificate length: {cert_length}")
 
             if len(certificate_data) < offset + cert_length:
-                print(
+                debug(
                     f"Certificate data too short for certificate content: need {offset + cert_length}, have {len(certificate_data)}"
                 )
                 return None
 
             # Extract certificate data
             cert_der = certificate_data[offset : offset + cert_length]
-            print(f"Extracted certificate DER data: {len(cert_der)} bytes")
+            debug(f"Extracted certificate DER data: {len(cert_der)} bytes")
 
             # Parse certificate
             cert = x509.load_der_x509_certificate(cert_der, default_backend())
-            print(f"Certificate subject: {cert.subject}")
-            print(f"Certificate issuer: {cert.issuer}")
+            debug(f"Certificate subject: {cert.subject}")
+            debug(f"Certificate issuer: {cert.issuer}")
 
             # Extract public key
             public_key = cert.public_key()
-            print(f"Public key type: {type(public_key)}")
+            debug(f"Public key type: {type(public_key)}")
 
             # Serialize public key to DER format
             public_key_der = public_key.public_bytes(
@@ -902,16 +1030,16 @@ class TLS:
                 format=serialization.PublicFormat.SubjectPublicKeyInfo,
             )
 
-            print(f"Public key DER length: {len(public_key_der)}")
+            debug(f"Public key DER length: {len(public_key_der)}")
             return public_key_der
 
         except ImportError:
-            print(
+            debug(
                 "Warning: cryptography library not available, cannot extract server public key"
             )
             return None
         except Exception as e:
-            print(f"Failed to extract server public key: {e}")
+            debug(f"Failed to extract server public key: {e}")
             import traceback
 
             traceback.print_exc()

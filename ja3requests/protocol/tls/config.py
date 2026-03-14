@@ -242,13 +242,16 @@ class TlsConfig:
         """Create a TLS config that mimics Firefox"""
         self._tls_version = 0x0303  # TLS 1.2
         self._cipher_suites = [
-            Aes128GcmSha256(),
-            ChaCha20Poly1305Sha256(),
-            Aes256GcmSha384(),
+            EcdheRsaWithAes128GcmSha256(),
+            EcdheRsaWithAes256GcmSha384(),
+            EcdheEcdsaWithAes128GcmSha256(),
+            EcdheEcdsaWithAes256GcmSha384(),
+            EcdheRsaWithAes128CbcSha256(),
+            EcdheRsaWithAes256CbcSha384(),
             RsaWithAes128CbcSha(),
             RsaWithAes256CbcSha(),
         ]
-        self._supported_groups = [23, 24, 25, 256, 257]
+        self._supported_groups = [23, 24, 25]  # secp256r1, secp384r1, secp521r1
         self._alpn_protocols = ['h2', 'http/1.1']
         return self
 
@@ -256,13 +259,16 @@ class TlsConfig:
         """Create a TLS config that mimics Chrome"""
         self._tls_version = 0x0303  # TLS 1.2
         self._cipher_suites = [
-            Aes128GcmSha256(),
-            Aes256GcmSha384(),
-            ChaCha20Poly1305Sha256(),
+            EcdheRsaWithAes128GcmSha256(),
+            EcdheRsaWithAes256GcmSha384(),
+            EcdheEcdsaWithAes128GcmSha256(),
+            EcdheEcdsaWithAes256GcmSha384(),
+            EcdheRsaWithAes128CbcSha256(),
+            EcdheRsaWithAes256CbcSha384(),
             RsaWithAes128CbcSha(),
             RsaWithAes256CbcSha(),
         ]
-        self._supported_groups = [23, 24, 25]
+        self._supported_groups = [23, 24, 25]  # secp256r1, secp384r1, secp521r1
         self._alpn_protocols = ['h2', 'http/1.1']
         return self
 
