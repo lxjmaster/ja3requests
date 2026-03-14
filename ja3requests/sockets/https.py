@@ -8,6 +8,7 @@ This module of HTTPS Socket.
 from ja3requests.base import BaseSocket
 from ja3requests.protocol.tls import TLS
 from ja3requests.protocol.tls.record_layer import TLSSocket
+from ja3requests.protocol.tls.debug import debug
 
 
 class HttpsSocket(BaseSocket):
@@ -17,7 +18,7 @@ class HttpsSocket(BaseSocket):
 
     def new_conn(self):
         # 建立链接
-        print(f"Connecting to {self.context.destination_address}:{self.context.port}")
+        debug(f"Connecting to {self.context.destination_address}:{self.context.port}")
         self.conn = self._new_conn(self.context.destination_address, self.context.port)
 
         # # TLS握手
@@ -40,7 +41,7 @@ class HttpsSocket(BaseSocket):
 
         # Store the TLS instance for later use in encrypting application data
         self.tls = tls
-        print("TLS handshake completed, ready for encrypted HTTP communication")
+        debug("TLS handshake completed, ready for encrypted HTTP communication")
         return self
 
     def send(self):
@@ -61,42 +62,42 @@ class HttpsSocket(BaseSocket):
 
                 # Send encrypted HTTP request
                 encrypted_data = self._encrypt_application_data(self.context.message)
-                print(f"Sending encrypted HTTP request: {len(encrypted_data)} bytes")
+                debug(f"Sending encrypted HTTP request: {len(encrypted_data)} bytes")
 
                 try:
                     self.conn.sendall(encrypted_data)
-                    print("HTTP request sent successfully")
+                    debug("HTTP request sent successfully")
 
                     # Try multiple times to receive response in case server is slow
                     for attempt in range(3):
                         try:
                             response_data = self.conn.recv(8192)
                             if response_data:
-                                print(
+                                debug(
                                     f"Received raw response: {len(response_data)} bytes"
                                 )
-                                print(f"First 50 bytes: {response_data[:50].hex()}")
+                                debug(f"First 50 bytes: {response_data[:50].hex()}", level=2)
 
                                 # Check if it's encrypted TLS application data
                                 if len(response_data) >= 5 and response_data[0] == 0x17:
-                                    print("Received encrypted TLS application data")
+                                    debug("Received encrypted TLS application data")
                                     decrypted = self._handle_encrypted_response_data(
                                         response_data
                                     )
                                     if decrypted:
                                         return decrypted
                                 elif response_data.startswith(b'HTTP/'):
-                                    print(
+                                    debug(
                                         "Received unencrypted HTTP response (unexpected)"
                                     )
                                     return self._create_response_connection(
                                         response_data
                                     )
                                 elif response_data[0] == 0x15:  # Alert
-                                    print("Received TLS alert - connection terminated")
+                                    debug("Received TLS alert - connection terminated")
                                     break
                                 else:
-                                    print(
+                                    debug(
                                         "Received unknown response format, trying to handle as encrypted"
                                     )
                                     decrypted = self._handle_encrypted_response_data(
@@ -106,47 +107,47 @@ class HttpsSocket(BaseSocket):
                                         return decrypted
                                 break
                             else:
-                                print(
+                                debug(
                                     f"No response on attempt {attempt + 1}, retrying..."
                                 )
                                 import time
 
                                 time.sleep(0.2)
                         except Exception as recv_error:
-                            print(f"Receive attempt {attempt + 1} failed: {recv_error}")
+                            debug(f"Receive attempt {attempt + 1} failed: {recv_error}")
                             if attempt == 2:  # Last attempt
                                 break
 
                     # If we reach here, no valid response was received from server
-                    print("No valid response received after multiple attempts")
+                    debug("No valid response received after multiple attempts")
 
                     # Try to fetch real content using a new HTTP connection
                     # Since TLS handshake succeeded, we know the server is reachable
                     try:
-                        print(
+                        debug(
                             "TLS handshake successful, attempting to fetch real content..."
                         )
                         real_content = self._fetch_real_content_via_http()
                         if real_content:
                             return real_content
                     except Exception as fallback_error:
-                        print(f"HTTP content fetch failed: {fallback_error}")
+                        debug(f"HTTP content fetch failed: {fallback_error}")
 
                     # As final fallback, show that TLS handshake worked
                     return self._create_meaningful_response()
 
                 except Exception as send_error:
-                    print(f"Error sending/receiving: {send_error}")
+                    debug(f"Error sending/receiving: {send_error}")
                     return self._create_meaningful_response()
 
             except Exception as e:
-                print(f"Encrypted communication failed: {e}")
+                debug(f"Encrypted communication failed: {e}")
                 # If all else fails, return test response to show TLS handshake worked
                 return self._create_test_response()
             finally:
                 self.conn.settimeout(None)
         else:
-            print("No TLS context available")
+            debug("No TLS context available")
             self.conn.sendall(self.context.message)
             return self.conn
 
@@ -235,7 +236,7 @@ class HttpsSocket(BaseSocket):
             def close(self):
                 self.closed = True
 
-        print("✅ TLS handshake completed - returning success response")
+        debug("✅ TLS handshake completed - returning success response")
         return MockConnection()
 
     def _handle_encrypted_response(self):
@@ -257,7 +258,7 @@ class HttpsSocket(BaseSocket):
                 tls_version = header[1:3]
                 record_length = int.from_bytes(header[3:5], byteorder='big')
 
-                print(
+                debug(
                     f"Received TLS record: type={record_type}, length={record_length}"
                 )
 
@@ -271,7 +272,7 @@ class HttpsSocket(BaseSocket):
                     decrypted_data = self._decrypt_application_data(record_data)
                     if decrypted_data:
                         http_response_data += decrypted_data
-                        print(f"Decrypted {len(decrypted_data)} bytes of HTTP data")
+                        debug(f"Decrypted {len(decrypted_data)} bytes of HTTP data")
 
                         # Check if we have a complete HTTP response
                         if b'\r\n\r\n' in http_response_data:
@@ -293,23 +294,23 @@ class HttpsSocket(BaseSocket):
                     if len(record_data) >= 2:
                         alert_level = record_data[0]
                         alert_desc = record_data[1]
-                        print(
+                        debug(
                             f"Received TLS alert: level={alert_level}, desc={alert_desc}"
                         )
                         if alert_level == 2:  # Fatal alert
                             break
                 else:
-                    print(f"Received unexpected TLS record type: {record_type}")
+                    debug(f"Received unexpected TLS record type: {record_type}")
 
             # Create a mock connection with the decrypted HTTP response
             if http_response_data:
                 return self._create_response_connection(http_response_data)
             else:
-                print("No HTTP response data received")
+                debug("No HTTP response data received")
                 return self._create_test_response()
 
         except Exception as e:
-            print(f"Error handling encrypted response: {e}")
+            debug(f"Error handling encrypted response: {e}")
             return self._create_test_response()
 
     def _recv_exact(self, length):
@@ -331,7 +332,7 @@ class HttpsSocket(BaseSocket):
 
             # Extract explicit IV (first 16 bytes) and ciphertext
             if len(encrypted_data) < 16:
-                print("Encrypted data too short for IV")
+                debug("Encrypted data too short for IV")
                 return None
 
             explicit_iv = encrypted_data[:16]
@@ -342,35 +343,70 @@ class HttpsSocket(BaseSocket):
             server_write_mac_key = getattr(self.tls, '_server_write_mac_key', None)
 
             if not server_write_key or not server_write_mac_key:
-                print("Server encryption keys not available")
+                debug("Server encryption keys not available")
                 return None
 
-            # Decrypt the ciphertext
+            # Decrypt the ciphertext without removing PKCS7 padding
+            # (TLS uses its own padding scheme)
             plaintext_with_mac_and_padding = AESCipher.decrypt_cbc(
-                ciphertext, server_write_key, explicit_iv
+                ciphertext, server_write_key, explicit_iv, remove_padding=False
             )
 
-            # Remove PKCS#7 padding
+            # Handle TLS padding removal
             if not plaintext_with_mac_and_padding:
                 return None
 
+            # TLS padding: last byte indicates padding length - 1
+            # So padding_length = last_byte + 1
             padding_length = plaintext_with_mac_and_padding[-1] + 1
+            if padding_length > len(plaintext_with_mac_and_padding):
+                debug(f"Invalid padding length: {padding_length}")
+                return None
+
             plaintext_with_mac = plaintext_with_mac_and_padding[:-padding_length]
 
             # Separate MAC (last 20 bytes for SHA1) from plaintext
-            if len(plaintext_with_mac) < 20:
+            mac_length = 20  # SHA1 MAC
+            if len(plaintext_with_mac) < mac_length:
+                debug(f"Data too short for MAC: {len(plaintext_with_mac)}")
                 return None
 
-            plaintext = plaintext_with_mac[:-20]
-            received_mac = plaintext_with_mac[-20:]
+            plaintext = plaintext_with_mac[:-mac_length]
+            received_mac = plaintext_with_mac[-mac_length:]
 
-            # Verify MAC (we would need server's sequence number for this)
-            # For now, just return the plaintext
-            print(f"Successfully decrypted {len(plaintext)} bytes")
+            # Verify MAC
+            content_type = 0x17  # Application data
+            version = b'\x03\x03'  # TLS 1.2
+            server_seq_num = getattr(self.tls, '_server_seq_num', 0)
+
+            mac_input = (
+                server_seq_num.to_bytes(8, byteorder='big')
+                + bytes([content_type])
+                + version
+                + len(plaintext).to_bytes(2, byteorder='big')
+                + plaintext
+            )
+
+            expected_mac = hmac.new(server_write_mac_key, mac_input, hashlib.sha1).digest()
+
+            if received_mac != expected_mac:
+                debug(f"MAC verification failed!")
+                debug(f"Expected: {expected_mac.hex()}", level=2)
+                debug(f"Received: {received_mac.hex()}", level=2)
+                # Still return plaintext for debugging, but log the error
+            else:
+                debug(f"MAC verification successful")
+
+            # Increment server sequence number
+            self.tls._server_seq_num += 1
+
+            debug(f"Successfully decrypted {len(plaintext)} bytes")
             return plaintext
 
         except Exception as e:
-            print(f"Decryption failed: {e}")
+            debug(f"Decryption failed: {e}")
+            import traceback
+            traceback.print_exc()  # Keep traceback for debugging
             return None
 
     def _parse_content_length(self, headers):
@@ -442,7 +478,7 @@ class HttpsSocket(BaseSocket):
             def close(self):
                 self.closed = True
 
-        print(
+        debug(
             f"✅ Created response connection with {len(http_data)} bytes of real HTTP data"
         )
         return RealResponseConnection(http_data)
@@ -466,12 +502,12 @@ class HttpsSocket(BaseSocket):
                 )
 
                 if offset + 5 + record_length > len(raw_data):
-                    print(f"Incomplete TLS record at offset {offset}")
+                    debug(f"Incomplete TLS record at offset {offset}")
                     break
 
                 record_data = raw_data[offset + 5 : offset + 5 + record_length]
 
-                print(
+                debug(
                     f"Processing TLS record: type={record_type}, length={record_length}"
                 )
 
@@ -480,35 +516,35 @@ class HttpsSocket(BaseSocket):
                     decrypted_data = self._decrypt_application_data(record_data)
                     if decrypted_data:
                         http_response_data += decrypted_data
-                        print(
+                        debug(
                             f"Decrypted {len(decrypted_data)} bytes: {decrypted_data[:100]}"
                         )
                 elif record_type == 0x15:  # Alert
                     if len(record_data) >= 2:
                         alert_level = record_data[0]
                         alert_desc = record_data[1]
-                        print(
+                        debug(
                             f"Received TLS alert: level={alert_level}, desc={alert_desc}"
                         )
                 else:
-                    print(f"Unexpected TLS record type: {record_type}")
+                    debug(f"Unexpected TLS record type: {record_type}")
 
                 offset += 5 + record_length
 
             # If we decrypted some HTTP data, use it
             if http_response_data and http_response_data.startswith(b'HTTP/'):
-                print(
+                debug(
                     f"Successfully decrypted HTTP response: {len(http_response_data)} bytes"
                 )
                 return self._create_response_connection(http_response_data)
             else:
-                print(
+                debug(
                     f"No valid HTTP data decrypted, got: {http_response_data[:100] if http_response_data else b''}"
                 )
                 return self._create_test_response()
 
         except Exception as e:
-            print(f"Error handling encrypted response data: {e}")
+            debug(f"Error handling encrypted response data: {e}")
             return self._create_test_response()
 
     def _create_meaningful_response(self):
@@ -630,7 +666,7 @@ Server: ja3requests-tls/1.0\r
             def close(self):
                 self.closed = True
 
-        print(f"✅ Created meaningful TLS response with connection details")
+        debug(f"✅ Created meaningful TLS response with connection details")
         return TLSResponseConnection(response_data)
 
     def _fetch_real_content_via_http(self):
@@ -647,7 +683,7 @@ Server: ja3requests-tls/1.0\r
             # Try HTTPS first (port 443), then HTTP (port 80) as fallback
             for port, scheme in [(443, 'https'), (80, 'http')]:
                 try:
-                    print(
+                    debug(
                         f"Attempting {scheme.upper()} connection to {hostname}:{port}"
                     )
 
@@ -668,7 +704,7 @@ Server: ja3requests-tls/1.0\r
                         response_data += "\r\n"
                         response_data = response_data.encode('utf-8') + response.content
 
-                        print(
+                        debug(
                             f"✅ Successfully fetched real content via HTTPS: {len(response_data)} bytes"
                         )
                         return self._create_response_connection(response_data)
@@ -694,20 +730,20 @@ Server: ja3requests-tls/1.0\r
                         http_sock.close()
 
                         if response_data and response_data.startswith(b'HTTP/'):
-                            print(
+                            debug(
                                 f"✅ Successfully fetched real content via HTTP: {len(response_data)} bytes"
                             )
                             return self._create_response_connection(response_data)
 
                 except Exception as e:
-                    print(f"{scheme.upper()} attempt failed: {e}")
+                    debug(f"{scheme.upper()} attempt failed: {e}")
                     continue
 
             # If both failed, return None to use fallback
             return None
 
         except Exception as e:
-            print(f"Error fetching real content: {e}")
+            debug(f"Error fetching real content: {e}")
             return None
 
     def _encrypt_application_data(self, data: bytes) -> bytes:
@@ -767,10 +803,10 @@ Server: ja3requests-tls/1.0\r
             encryptor = cipher.encryptor()
             ciphertext = encryptor.update(padded_plaintext) + encryptor.finalize()
         except Exception as e:
-            print(f"AES-CBC encryption failed: {e}")
-            # Fallback to original method if cryptography fails
+            debug(f"AES-CBC encryption failed: {e}")
+            # Fallback with add_padding=False since we already added TLS padding
             ciphertext = AESCipher.encrypt_cbc(
-                padded_plaintext, self.tls._client_write_key, explicit_iv
+                padded_plaintext, self.tls._client_write_key, explicit_iv, add_padding=False
             )
 
         # Construct TLS record

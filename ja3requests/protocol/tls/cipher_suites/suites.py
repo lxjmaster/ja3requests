@@ -1162,6 +1162,178 @@ class Aes128Ccm8Sha256(CipherSuite):
 
 # AEAD_AES_256_CCM
 
+
+# ECDHE Cipher Suites
+class EcdheRsaWithAes128CbcSha(CipherSuite):
+    """
+    CipherSuite TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA = { 0xC0, 0x13 };
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.name = "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA"
+        self.key_exchange_type = "ECDHE"
+        self.hash_type = "HMAC-SHA1"
+        self.cipher_type = "Block"
+        self.key_length = 16
+        self.mac_key_length = 20
+        self.value = 0xC013
+        self.version = {1.2}
+
+
+class EcdheRsaWithAes256CbcSha(CipherSuite):
+    """
+    CipherSuite TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA = { 0xC0, 0x14 };
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.name = "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA"
+        self.key_exchange_type = "ECDHE"
+        self.hash_type = "HMAC-SHA1"
+        self.cipher_type = "Block"
+        self.key_length = 32
+        self.mac_key_length = 20
+        self.value = 0xC014
+        self.version = {1.2}
+
+
+class EcdheRsaWithAes128CbcSha256(CipherSuite):
+    """
+    CipherSuite TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256 = { 0xC0, 0x27 };
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.name = "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256"
+        self.key_exchange_type = "ECDHE"
+        self.hash_type = "HMAC-SHA256"
+        self.cipher_type = "Block"
+        self.key_length = 16
+        self.mac_key_length = 32
+        self.value = 0xC027
+        self.version = {1.2}
+
+
+class EcdheRsaWithAes256CbcSha384(CipherSuite):
+    """
+    CipherSuite TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384 = { 0xC0, 0x28 };
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.name = "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384"
+        self.key_exchange_type = "ECDHE"
+        self.hash_type = "HMAC-SHA384"
+        self.cipher_type = "Block"
+        self.key_length = 32
+        self.mac_key_length = 48
+        self.value = 0xC028
+        self.version = {1.2}
+
+
+class EcdheRsaWithAes128GcmSha256(CipherSuite):
+    """
+    CipherSuite TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 = { 0xC0, 0x2F };
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.name = "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"
+        self.key_exchange_type = "ECDHE"
+        self.hash_type = "HMAC-SHA256"
+        self.cipher_type = "AEAD"
+        self.key_length = 16
+        self.mac_key_length = 0  # GCM doesn't use separate MAC
+        self.value = 0xC02F
+        self.version = {1.2}
+
+
+class EcdheRsaWithAes256GcmSha384(CipherSuite):
+    """
+    CipherSuite TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 = { 0xC0, 0x30 };
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.name = "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
+        self.key_exchange_type = "ECDHE"
+        self.hash_type = "HMAC-SHA384"
+        self.cipher_type = "AEAD"
+        self.key_length = 32
+        self.mac_key_length = 0  # GCM doesn't use separate MAC
+        self.value = 0xC030
+        self.version = {1.2}
+
+
+class EcdheEcdsaWithAes128CbcSha(CipherSuite):
+    """
+    CipherSuite TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA = { 0xC0, 0x09 };
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.name = "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA"
+        self.key_exchange_type = "ECDHE"
+        self.hash_type = "HMAC-SHA1"
+        self.cipher_type = "Block"
+        self.key_length = 16
+        self.mac_key_length = 20
+        self.value = 0xC009
+        self.version = {1.2}
+
+
+class EcdheEcdsaWithAes256CbcSha(CipherSuite):
+    """
+    CipherSuite TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA = { 0xC0, 0x0A };
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.name = "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA"
+        self.key_exchange_type = "ECDHE"
+        self.hash_type = "HMAC-SHA1"
+        self.cipher_type = "Block"
+        self.key_length = 32
+        self.mac_key_length = 20
+        self.value = 0xC00A
+        self.version = {1.2}
+
+
+class EcdheEcdsaWithAes128GcmSha256(CipherSuite):
+    """
+    CipherSuite TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 = { 0xC0, 0x2B };
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.name = "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"
+        self.key_exchange_type = "ECDHE"
+        self.hash_type = "HMAC-SHA256"
+        self.cipher_type = "AEAD"
+        self.key_length = 16
+        self.mac_key_length = 0
+        self.value = 0xC02B
+        self.version = {1.2}
+
+
+class EcdheEcdsaWithAes256GcmSha384(CipherSuite):
+    """
+    CipherSuite TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384 = { 0xC0, 0x2C };
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.name = "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384"
+        self.key_exchange_type = "ECDHE"
+        self.hash_type = "HMAC-SHA384"
+        self.cipher_type = "AEAD"
+        self.key_length = 32
+        self.mac_key_length = 0
+        self.value = 0xC02C
+        self.version = {1.2}
+
+
 if __name__ == '__main__':
     print(int.to_bytes(ReservedGrease().value, 2, byteorder='big'))
     from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes

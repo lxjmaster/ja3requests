@@ -9,6 +9,7 @@ import os
 import hashlib
 import hmac
 from typing import Tuple, Optional
+from ja3requests.protocol.tls.debug import debug
 
 
 class TLSCrypto:
@@ -162,21 +163,19 @@ class TLSCrypto:
         cipher_suite: int = 0x002F,
     ) -> bytes:
         """
-        Compute verify data for Finished message
-        For cipher suite 0x002F (AES128-SHA), we need to use SHA1, not SHA256
+        Compute verify data for Finished message.
+
+        According to RFC 5246 (TLS 1.2), Section 7.4.9:
+        verify_data = PRF(master_secret, finished_label, Hash(handshake_messages))[0..verify_data_length-1]
+
+        For TLS 1.2, both the PRF and the Hash function always use SHA-256,
+        regardless of the cipher suite's MAC algorithm.
         """
         label = b"client finished" if is_client else b"server finished"
 
-        # For TLS 1.2, even with SHA1-based cipher suites, the PRF uses SHA256
-        # But the handshake hash should use SHA1 for consistency with the cipher suite
-        if cipher_suite == 0x002F or cipher_suite == 0x0035:  # AES-SHA variants
-            # Use SHA1 for handshake hash but SHA256 PRF (TLS 1.2 standard)
-            message_hash = hashlib.sha1(handshake_messages).digest()
-            return TLSCrypto.prf(master_secret, label, message_hash, 12)
-        else:
-            # SHA256 for both handshake hash and PRF
-            message_hash = hashlib.sha256(handshake_messages).digest()
-            return TLSCrypto.prf(master_secret, label, message_hash, 12)
+        # TLS 1.2: Always use SHA-256 for handshake hash and PRF
+        message_hash = hashlib.sha256(handshake_messages).digest()
+        return TLSCrypto.prf(master_secret, label, message_hash, 12)
 
 
 class RSAKeyExchange:
@@ -205,13 +204,13 @@ class RSAKeyExchange:
             encrypted = public_key.encrypt(premaster_secret, padding.PKCS1v15())
             return encrypted
         except ImportError:
-            # Fallback if cryptography library is not available
-            print(
+            # Fallback if cryptography library not available
+            debug(
                 "Warning: cryptography library not available, using insecure fallback"
             )
             return premaster_secret
         except Exception as e:
-            print(f"RSA encryption failed: {e}")
+            debug(f"RSA encryption failed: {e}")
             return premaster_secret
 
 
@@ -256,47 +255,184 @@ class DHEKeyExchange:
 class ECDHEKeyExchange:
     """
     Elliptic Curve Diffie-Hellman Ephemeral key exchange implementation
+    using the cryptography library.
+
+    Supported curves:
+    - 23: secp256r1 (P-256)
+    - 24: secp384r1 (P-384)
+    - 25: secp521r1 (P-521)
+    - 29: x25519
+
+    Raises:
+        ImportError: If cryptography library is not available
+        ValueError: If unsupported curve ID is specified
     """
 
-    @staticmethod
-    def generate_keypair(curve_id: int = 23) -> Tuple[bytes, bytes]:
-        """
-        Generate ECDHE keypair for given curve
-        curve_id 23 = secp256r1
-        This is a placeholder implementation
-        """
-        # In real implementation, would use cryptography library:
-        # from cryptography.hazmat.primitives.asymmetric import ec
-        # from cryptography.hazmat.primitives import serialization
+    # TLS named curve IDs
+    CURVE_SECP256R1 = 23
+    CURVE_SECP384R1 = 24
+    CURVE_SECP521R1 = 25
+    CURVE_X25519 = 29
 
-        # private_key = ec.generate_private_key(ec.SECP256R1())
-        # public_key = private_key.public_key()
-
-        # private_bytes = private_key.private_bytes(
-        #     encoding=serialization.Encoding.Raw,
-        #     format=serialization.PrivateFormat.Raw,
-        #     encryption_algorithm=serialization.NoEncryption()
-        # )
-
-        # public_bytes = public_key.public_bytes(
-        #     encoding=serialization.Encoding.X962,
-        #     format=serialization.PublicFormat.UncompressedPoint
-        # )
-
-        # return private_bytes, public_bytes
-
-        # Placeholder implementation
-        private_key = os.urandom(32)
-        public_key = os.urandom(65)  # Uncompressed point for secp256r1
-        return private_key, public_key
+    # Supported curve IDs
+    SUPPORTED_CURVES = {CURVE_SECP256R1, CURVE_SECP384R1, CURVE_SECP521R1, CURVE_X25519}
 
     @staticmethod
-    def compute_shared_secret(private_key: bytes, peer_public_key: bytes) -> bytes:
+    def get_curve(curve_id: int):
         """
-        Compute ECDH shared secret
+        Get the cryptography curve object for the given curve ID.
+
+        Args:
+            curve_id: TLS named curve ID
+
+        Returns:
+            Curve object for NIST curves, or 'x25519' string for X25519
+
+        Raises:
+            ImportError: If cryptography library is not available
+            ValueError: If curve_id is not supported
         """
-        # Placeholder - in real implementation would use proper ECDH
-        return hashlib.sha256(private_key + peer_public_key).digest()
+        try:
+            from cryptography.hazmat.primitives.asymmetric import ec
+        except ImportError as e:
+            raise ImportError("cryptography library is required for ECDHE") from e
+
+        if curve_id == ECDHEKeyExchange.CURVE_SECP256R1:
+            return ec.SECP256R1()
+        elif curve_id == ECDHEKeyExchange.CURVE_SECP384R1:
+            return ec.SECP384R1()
+        elif curve_id == ECDHEKeyExchange.CURVE_SECP521R1:
+            return ec.SECP521R1()
+        elif curve_id == ECDHEKeyExchange.CURVE_X25519:
+            return 'x25519'  # Special case for X25519
+        else:
+            raise ValueError(
+                f"Unsupported curve ID: {curve_id}. "
+                f"Supported: {ECDHEKeyExchange.SUPPORTED_CURVES}"
+            )
+
+    @staticmethod
+    def generate_keypair(curve_id: int = 23) -> Tuple[any, bytes]:
+        """
+        Generate ECDHE keypair for given curve.
+
+        Args:
+            curve_id: TLS named curve ID (23=secp256r1, 24=secp384r1, 25=secp521r1, 29=x25519)
+
+        Returns:
+            Tuple of (private_key_object, public_key_bytes)
+            The private key object is needed for computing the shared secret.
+
+        Raises:
+            ImportError: If cryptography library is not available
+            ValueError: If curve_id is not supported
+        """
+        try:
+            from cryptography.hazmat.primitives.asymmetric import ec, x25519
+            from cryptography.hazmat.primitives import serialization
+            from cryptography.hazmat.backends import default_backend
+        except ImportError as e:
+            raise ImportError("cryptography library is required for ECDHE") from e
+
+        if curve_id == ECDHEKeyExchange.CURVE_X25519:
+            # X25519 curve
+            private_key = x25519.X25519PrivateKey.generate()
+            public_key_bytes = private_key.public_key().public_bytes(
+                encoding=serialization.Encoding.Raw,
+                format=serialization.PublicFormat.Raw
+            )
+            return private_key, public_key_bytes
+        else:
+            # NIST curves (secp256r1, secp384r1, secp521r1)
+            curve = ECDHEKeyExchange.get_curve(curve_id)
+            private_key = ec.generate_private_key(curve, default_backend())
+            public_key_bytes = private_key.public_key().public_bytes(
+                encoding=serialization.Encoding.X962,
+                format=serialization.PublicFormat.UncompressedPoint
+            )
+            return private_key, public_key_bytes
+
+    @staticmethod
+    def compute_shared_secret(private_key, peer_public_key: bytes, curve_id: int = 23) -> bytes:
+        """
+        Compute ECDH shared secret.
+
+        Args:
+            private_key: The private key object returned from generate_keypair()
+            peer_public_key: The server's public key bytes
+            curve_id: TLS named curve ID
+
+        Returns:
+            The raw shared secret bytes (premaster secret for TLS)
+
+        Raises:
+            ImportError: If cryptography library is not available
+            ValueError: If curve_id is not supported or key exchange fails
+        """
+        try:
+            from cryptography.hazmat.primitives.asymmetric import ec, x25519
+        except ImportError as e:
+            raise ImportError("cryptography library is required for ECDHE") from e
+
+        if curve_id == ECDHEKeyExchange.CURVE_X25519:
+            # X25519 curve
+            peer_public = x25519.X25519PublicKey.from_public_bytes(peer_public_key)
+            shared_secret = private_key.exchange(peer_public)
+            return shared_secret
+        else:
+            # NIST curves - load peer public key from uncompressed point
+            curve = ECDHEKeyExchange.get_curve(curve_id)
+            peer_public = ec.EllipticCurvePublicKey.from_encoded_point(
+                curve, peer_public_key
+            )
+            shared_secret = private_key.exchange(ec.ECDH(), peer_public)
+            return shared_secret
+
+    @staticmethod
+    def parse_server_ecdhe_params(data: bytes) -> dict:
+        """
+        Parse ServerKeyExchange ECDHE parameters.
+
+        Format:
+        - ECCurveType (1 byte): 3 = named_curve
+        - Named Curve (2 bytes): curve ID
+        - Public Key Length (1 byte)
+        - Public Key (variable)
+        - [Signature follows but we don't verify it here]
+
+        Returns:
+            dict with keys: curve_type, curve_id, public_key
+        """
+        offset = 0
+
+        # ECCurveType (1 byte)
+        curve_type = data[offset]
+        offset += 1
+
+        if curve_type != 3:  # named_curve
+            debug(f"Unsupported EC curve type: {curve_type}")
+            return None
+
+        # Named Curve (2 bytes)
+        curve_id = int.from_bytes(data[offset:offset+2], byteorder='big')
+        offset += 2
+
+        # Public Key Length (1 byte)
+        pubkey_len = data[offset]
+        offset += 1
+
+        # Public Key
+        public_key = data[offset:offset+pubkey_len]
+        offset += pubkey_len
+
+        debug(f"Parsed ECDHE params: curve_id={curve_id}, pubkey_len={pubkey_len}")
+
+        return {
+            'curve_type': curve_type,
+            'curve_id': curve_id,
+            'public_key': public_key,
+            'remaining_offset': offset
+        }
 
 
 class AESCipher:
@@ -305,40 +441,68 @@ class AESCipher:
     """
 
     @staticmethod
-    def encrypt_cbc(plaintext: bytes, key: bytes, iv: bytes) -> bytes:
+    def encrypt_cbc(
+        plaintext: bytes, key: bytes, iv: bytes, add_padding: bool = True
+    ) -> bytes:
         """
-        AES-CBC encryption with PKCS#7 padding
+        AES-CBC encryption.
+
+        Args:
+            plaintext: Data to encrypt
+            key: AES key (16, 24, or 32 bytes)
+            iv: Initialization vector (16 bytes)
+            add_padding: If True, add PKCS#7 padding. If False, plaintext must
+                        already be a multiple of 16 bytes (used for TLS where
+                        padding is added manually according to TLS spec).
         """
         try:
             from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
             from cryptography.hazmat.backends import default_backend
             from cryptography.hazmat.primitives import padding
 
-            # Add PKCS#7 padding
-            padder = padding.PKCS7(128).padder()
-            padded_data = padder.update(plaintext) + padder.finalize()
+            if add_padding:
+                # Add PKCS#7 padding
+                padder = padding.PKCS7(128).padder()
+                data_to_encrypt = padder.update(plaintext) + padder.finalize()
+            else:
+                # Plaintext must already be padded to block size
+                if len(plaintext) % 16 != 0:
+                    raise ValueError(
+                        f"Plaintext length ({len(plaintext)}) must be multiple of 16 when add_padding=False"
+                    )
+                data_to_encrypt = plaintext
 
             # Encrypt with AES-CBC
             cipher = Cipher(
                 algorithms.AES(key), modes.CBC(iv), backend=default_backend()
             )
             encryptor = cipher.encryptor()
-            ciphertext = encryptor.update(padded_data) + encryptor.finalize()
+            ciphertext = encryptor.update(data_to_encrypt) + encryptor.finalize()
 
             return ciphertext
         except ImportError:
-            print(
+            debug(
                 "Warning: cryptography library not available, using insecure fallback"
             )
             return plaintext
         except Exception as e:
-            print(f"AES-CBC encryption failed: {e}")
+            debug(f"AES-CBC encryption failed: {e}")
             return plaintext
 
     @staticmethod
-    def decrypt_cbc(ciphertext: bytes, key: bytes, iv: bytes) -> bytes:
+    def decrypt_cbc(
+        ciphertext: bytes, key: bytes, iv: bytes, remove_padding: bool = True
+    ) -> bytes:
         """
-        AES-CBC decryption with PKCS#7 padding removal
+        AES-CBC decryption.
+
+        Args:
+            ciphertext: Data to decrypt
+            key: AES key (16, 24, or 32 bytes)
+            iv: Initialization vector (16 bytes)
+            remove_padding: If True, remove PKCS#7 padding after decryption.
+                           If False, return raw decrypted data (used for TLS
+                           where padding is handled manually).
         """
         try:
             from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -350,20 +514,24 @@ class AESCipher:
                 algorithms.AES(key), modes.CBC(iv), backend=default_backend()
             )
             decryptor = cipher.decryptor()
-            padded_data = decryptor.update(ciphertext) + decryptor.finalize()
+            decrypted_data = decryptor.update(ciphertext) + decryptor.finalize()
 
-            # Remove PKCS#7 padding
-            unpadder = padding.PKCS7(128).unpadder()
-            plaintext = unpadder.update(padded_data) + unpadder.finalize()
+            if remove_padding:
+                # Remove PKCS#7 padding
+                unpadder = padding.PKCS7(128).unpadder()
+                plaintext = unpadder.update(decrypted_data) + unpadder.finalize()
+                return plaintext
+            else:
+                # Return raw decrypted data, caller handles padding
+                return decrypted_data
 
-            return plaintext
         except ImportError:
-            print(
+            debug(
                 "Warning: cryptography library not available, using insecure fallback"
             )
             return ciphertext
         except Exception as e:
-            print(f"AES-CBC decryption failed: {e}")
+            debug(f"AES-CBC decryption failed: {e}")
             return ciphertext
 
     @staticmethod
@@ -396,12 +564,12 @@ class AESCipher:
 
             return ciphertext, auth_tag
         except ImportError:
-            print(
+            debug(
                 "Warning: cryptography library not available, using insecure fallback"
             )
             return plaintext, os.urandom(16)
         except Exception as e:
-            print(f"AES-GCM encryption failed: {e}")
+            debug(f"AES-GCM encryption failed: {e}")
             return plaintext, os.urandom(16)
 
     @staticmethod
@@ -434,12 +602,12 @@ class AESCipher:
 
             return plaintext
         except ImportError:
-            print(
+            debug(
                 "Warning: cryptography library not available, using insecure fallback"
             )
             return ciphertext
         except Exception as e:
-            print(f"AES-GCM decryption failed: {e}")
+            debug(f"AES-GCM decryption failed: {e}")
             return ciphertext
 
 

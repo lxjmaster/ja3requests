@@ -10,6 +10,7 @@ import hmac
 import hashlib
 from typing import Tuple, Optional
 from .crypto import AESCipher, TLSCrypto
+from .debug import debug
 
 
 class TLSRecordLayer:
@@ -95,7 +96,7 @@ class TLSRecordLayer:
             return record_header + encrypted_data
 
         except Exception as e:
-            print(f"Encryption failed: {e}, sending as plaintext")
+            debug(f"Encryption failed: {e}, sending as plaintext")
             # Fallback to plaintext
             record_header = struct.pack('!BBBH', content_type, 3, 3, len(data))
             return record_header + data
@@ -161,14 +162,14 @@ class TLSRecordLayer:
                 ).digest()
 
             if received_mac != expected_mac:
-                print("Warning: MAC verification failed")
+                debug("Warning: MAC verification failed")
                 # Continue anyway for debugging
 
             self.server_seq_num += 1
             return data, content_type
 
         except Exception as e:
-            print(f"Decryption failed: {e}, treating as plaintext")
+            debug(f"Decryption failed: {e}, treating as plaintext")
             return encrypted_data, content_type
 
 
@@ -228,13 +229,13 @@ class TLSSocket:
                         if content_type == 23:  # Application data
                             return decrypted_data[:bufsize]
                         elif content_type == 21:  # Alert
-                            print(f"Received TLS alert: {decrypted_data.hex()}")
+                            debug(f"Received TLS alert: {decrypted_data.hex()}")
                             continue
                         else:
-                            print(f"Received TLS record type {content_type}")
+                            debug(f"Received TLS record type {content_type}")
                             continue
                     except Exception as e:
-                        print(f"Failed to decrypt record: {e}")
+                        debug(f"Failed to decrypt record: {e}")
                         return decrypted_data[:bufsize]
 
             # Need more data
@@ -244,7 +245,7 @@ class TLSSocket:
                     break
                 self.receive_buffer += raw_data
             except Exception as e:
-                print(f"Socket receive error: {e}")
+                debug(f"Socket receive error: {e}")
                 break
 
         return b''

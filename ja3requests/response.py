@@ -14,6 +14,7 @@ from ja3requests.cookies import Ja3RequestsCookieJar
 from ja3requests.utils import add_dict_to_cookiejar
 from ja3requests.const import MAX_LINE, MAX_HEADERS
 from ja3requests.exceptions import InvalidStatusLine, InvalidResponseHeaders, IssueError
+from ja3requests.protocol.tls.debug import debug
 
 
 class HTTPResponse(BaseResponse):
@@ -95,7 +96,7 @@ class HTTPResponse(BaseResponse):
             raise ValueError("Required headers to parse.")
 
         self.headers = b""
-        for header in headers_list[1:]:
+        for header in headers_list:
             self.headers += header
             name, value = header.strip().split(b": ", 1)
             headers.setdefault(name.lower(), value)
@@ -134,7 +135,7 @@ class HTTPResponse(BaseResponse):
                 elif self._content_encoding == b"br":
                     body = brotli.decompress(body)
             except Exception as e:
-                print(
+                debug(
                     f"Warning: Failed to decompress content with {self._content_encoding}: {e}"
                 )
                 # Return original body if decompression fails
@@ -157,7 +158,7 @@ class HTTPResponse(BaseResponse):
             except ValueError:
                 # If we can't parse as hex, this might not be chunked encoding
                 # Read the line as regular content and break
-                print(f"Warning: Expected hex chunk size, got: {chunked_size}")
+                debug(f"Warning: Expected hex chunk size, got: {chunked_size}")
                 chunked_data += chunked_size + b"\n"
                 # Read remaining content
                 remaining = self.fp.read()
@@ -185,7 +186,7 @@ class HTTPResponse(BaseResponse):
             self._chunked = True
         elif transfer_encoding and transfer_encoding != b"":
             # Handle other transfer encodings gracefully
-            print(f"Warning: Unsupported transfer encoding: {transfer_encoding}")
+            debug(f"Warning: Unsupported transfer encoding: {transfer_encoding}")
             self._chunked = False
 
         self._content_length = int(headers.get(b"content-length", 0))
