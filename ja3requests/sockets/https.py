@@ -7,7 +7,6 @@ This module of HTTPS Socket.
 
 from ja3requests.base import BaseSocket
 from ja3requests.protocol.tls import TLS
-from ja3requests.protocol.tls.record_layer import TLSSocket
 from ja3requests.protocol.tls.debug import debug
 
 

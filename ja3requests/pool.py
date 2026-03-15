@@ -5,21 +5,29 @@ Ja3Requests.pool
 Thread-safe connection pooling for HTTP/HTTPS connections.
 """
 
+import socket
 import threading
 import time
 from collections import deque
 from typing import Dict, Optional, Tuple, Any
 
+from ja3requests.protocol.tls.debug import debug
+
 
 class PooledConnection:
     """Wrapper for pooled connections with metadata"""
 
-    def __init__(self, conn: Any, scheme: str, created_at: float = None):
+    def __init__(self, conn: Any, scheme: str, host: str = "", port: int = 0, created_at: float = None):
         self.conn = conn
         self.scheme = scheme
+        self.host = host
+        self.port = port
         self.created_at = created_at or time.time()
         self.last_used_at = self.created_at
         self.tls = None  # TLS context for HTTPS connections
+
+    def __repr__(self) -> str:
+        return f"<PooledConnection {self.scheme}://{self.host}:{self.port} alive={self.is_alive()}>"
 
     def is_expired(self, idle_timeout: float) -> bool:
         """Check if connection has been idle too long"""
@@ -34,18 +42,20 @@ class PooledConnection:
             self.conn.setblocking(False)
             try:
                 # Peek at socket - if recv returns empty, connection is closed
-                data = self.conn.recv(1, 0x02)  # MSG_PEEK
+                data = self.conn.recv(1, socket.MSG_PEEK)
                 if data == b'':
                     return False
             except BlockingIOError:
                 # No data available but connection is alive
                 pass
-            except (OSError, ConnectionError):
+            except (OSError, ConnectionError) as e:
+                debug(f"Connection check failed: {e}", level=2)
                 return False
             finally:
                 self.conn.setblocking(True)
             return True
-        except Exception:
+        except Exception as e:
+            debug(f"Connection alive check error: {e}", level=2)
             return False
 
     def touch(self):
@@ -57,8 +67,8 @@ class PooledConnection:
         try:
             if self.conn:
                 self.conn.close()
-        except Exception:
-            pass
+        except Exception as e:
+            debug(f"Error closing connection: {e}", level=2)
         self.conn = None
 
 
@@ -91,9 +101,8 @@ class ConnectionPool:
         self._max_pool_size = max_pool_size
         self._total_connections = 0
 
-        # Start cleanup thread
-        self._cleanup_thread = None
-        self._shutdown = False
+    def __repr__(self) -> str:
+        return f"<ConnectionPool connections={self._total_connections} pools={len(self._pools)}>"
 
     def _get_pool_key(self, host: str, port: int, scheme: str) -> Tuple[str, int, str]:
         """Generate pool key from connection parameters"""
@@ -152,7 +161,7 @@ class ConnectionPool:
         scheme: str,
         conn: Any,
         tls: Any = None,
-        pooled_conn: 'PooledConnection' = None
+        pooled_conn: Optional['PooledConnection'] = None
     ) -> bool:
         """
         Return a connection to the pool for reuse.
@@ -184,13 +193,15 @@ class ConnectionPool:
 
             # Check pool limits for new connections
             if self._total_connections >= self._max_pool_size:
+                debug(f"Pool full ({self._total_connections}/{self._max_pool_size}), rejecting connection")
                 return False
 
             if len(pool) >= self._max_per_host:
+                debug(f"Host pool full ({len(pool)}/{self._max_per_host}), rejecting connection")
                 return False
 
             # Create new pooled connection wrapper
-            new_pooled_conn = PooledConnection(conn, scheme)
+            new_pooled_conn = PooledConnection(conn, scheme, host, port)
             new_pooled_conn.tls = tls
             new_pooled_conn.touch()
 
