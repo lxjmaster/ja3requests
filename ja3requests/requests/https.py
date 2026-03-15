@@ -24,20 +24,22 @@ class HttpsRequest(BaseRequest):
         self.port = DEFAULT_HTTPS_PORT
 
     @staticmethod
-    def create_connection(context: HTTPSContext):
+    def create_connection(context: HTTPSContext, pool=None):
         """
         create a new connection by context
         :param context:
+        :param pool: Connection pool for reuse
         :return:
         """
         if context.proxy:
             sock = ProxySocket(context)
         else:
-            sock = HttpsSocket(context)
+            sock = HttpsSocket(context, pool=pool)
 
         return sock.new_conn()
 
     def send(self, **kwargs):
+        pool = kwargs.pop('pool', None)
 
         if kwargs.get("h1", False) is True:
             context = HTTPSContext(protocol="HTTP/1.1")
@@ -57,9 +59,13 @@ class HttpsRequest(BaseRequest):
             cookies=self.cookies,
             tls_config=self.tls_config,
         )
-        sock = self.create_connection(context)
+        sock = self.create_connection(context, pool=pool)
         conn = sock.send()
         response = HTTPSResponse(conn)
         response.handle()
+
+        # Return connection to pool if available
+        if pool and hasattr(sock, 'return_to_pool'):
+            sock.return_to_pool()
 
         return response

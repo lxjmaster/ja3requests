@@ -13,36 +13,88 @@ from ja3requests.protocol.tls.debug import debug
 
 class HttpsSocket(BaseSocket):
     """
-    HTTPS Socket
+    HTTPS Socket with connection pooling support
     """
 
-    def new_conn(self):
-        # 建立链接
-        debug(f"Connecting to {self.context.destination_address}:{self.context.port}")
-        self.conn = self._new_conn(self.context.destination_address, self.context.port)
+    def __init__(self, context, pool=None):
+        super().__init__(context)
+        self._pool = pool
+        self._pooled_conn = None  # Reference to pooled connection wrapper
+        self._reused = False  # Whether connection was reused from pool
 
-        # # TLS握手
+    def new_conn(self):
+        host = self.context.destination_address
+        port = self.context.port
+
+        # Try to get connection from pool
+        if self._pool:
+            pooled_conn = self._pool.get_connection(host, port, "https")
+            if pooled_conn and pooled_conn.conn and pooled_conn.tls:
+                debug(f"Reusing pooled connection to {host}:{port}")
+                self.conn = pooled_conn.conn
+                self.tls = pooled_conn.tls
+                self._pooled_conn = pooled_conn
+                self._reused = True
+                return self
+
+        # Create new connection
+        debug(f"Connecting to {host}:{port}")
+        self.conn = self._new_conn(host, port)
+
+        # TLS handshake
         tls = TLS(self.conn)
 
-        # 获取TLS配置并设置默认server_name
+        # Get TLS config and set default server_name
         tls_config = getattr(self.context, 'tls_config', None)
         if tls_config and not getattr(tls_config, 'server_name', None):
-            # 如果没有设置server_name，使用destination_address作为SNI
-            tls_config.server_name = self.context.destination_address
+            tls_config.server_name = host
 
-        # # 设置相关ja3参数等
+        # Set JA3 parameters
         tls.set_payload(tls_config=tls_config)
         handshake_success = tls.handshake()
 
         if not handshake_success:
-            # Close the connection if handshake failed
             self.conn.close()
             raise Exception("TLS handshake failed - server rejected the connection")
 
-        # Store the TLS instance for later use in encrypting application data
         self.tls = tls
+        self._reused = False
         debug("TLS handshake completed, ready for encrypted HTTP communication")
         return self
+
+    def return_to_pool(self):
+        """Return connection to pool for reuse"""
+        if self._pool and self.conn and self.tls:
+            host = self.context.destination_address
+            port = self.context.port
+
+            # If this was a reused connection, return the original wrapper
+            if self._reused and self._pooled_conn:
+                success = self._pool.put_connection(
+                    host, port, "https", self.conn, self.tls,
+                    pooled_conn=self._pooled_conn
+                )
+            else:
+                success = self._pool.put_connection(host, port, "https", self.conn, self.tls)
+
+            if success:
+                debug(f"Returned connection to pool: {host}:{port}")
+                self.conn = None
+                self.tls = None
+                self._pooled_conn = None
+            else:
+                debug(f"Pool full, closing connection: {host}:{port}")
+                self.close()
+
+    def close(self):
+        """Close the connection"""
+        try:
+            if self.conn:
+                self.conn.close()
+        except Exception:
+            pass
+        self.conn = None
+        self.tls = None
 
     def send(self):
         """
