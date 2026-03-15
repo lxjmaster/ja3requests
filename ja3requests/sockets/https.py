@@ -324,7 +324,66 @@ class HttpsSocket(BaseSocket):
         return data
 
     def _decrypt_application_data(self, encrypted_data):
-        """Decrypt TLS application data record"""
+        """Decrypt TLS application data record (supports both CBC and GCM)"""
+        # Check if using GCM cipher suite
+        if getattr(self.tls, '_is_gcm', False):
+            return self._decrypt_application_data_gcm(encrypted_data)
+        return self._decrypt_application_data_cbc(encrypted_data)
+
+    def _decrypt_application_data_gcm(self, encrypted_data):
+        """Decrypt TLS application data using AES-GCM"""
+        try:
+            from ja3requests.protocol.tls.crypto import AESCipher
+
+            # GCM record format: explicit_nonce (8) + ciphertext + auth_tag (16)
+            if len(encrypted_data) < 24:  # 8 + 16 minimum
+                debug("Encrypted data too short for GCM")
+                return None
+
+            # Extract components
+            explicit_nonce = encrypted_data[:8]
+            ciphertext = encrypted_data[8:-16]
+            auth_tag = encrypted_data[-16:]
+
+            # Build full nonce: implicit_iv (4) + explicit_nonce (8) = 12 bytes
+            server_write_iv = getattr(self.tls, '_server_write_iv', None)
+            server_write_key = getattr(self.tls, '_server_write_key', None)
+
+            if not server_write_key or not server_write_iv:
+                debug("Server GCM keys not available")
+                return None
+
+            nonce = server_write_iv + explicit_nonce
+
+            # Build AAD
+            content_type = 0x17  # Application data
+            version = b'\x03\x03'  # TLS 1.2
+            server_seq_num = getattr(self.tls, '_server_seq_num', 0)
+
+            aad = (
+                server_seq_num.to_bytes(8, byteorder='big')
+                + bytes([content_type])
+                + version
+                + len(ciphertext).to_bytes(2, byteorder='big')
+            )
+
+            # Decrypt with AES-GCM
+            plaintext = AESCipher.decrypt_gcm(
+                ciphertext, server_write_key, nonce, auth_tag, aad
+            )
+
+            self.tls._server_seq_num += 1
+            debug(f"GCM decrypted {len(plaintext)} bytes")
+            return plaintext
+
+        except Exception as e:
+            debug(f"GCM decryption failed: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
+    def _decrypt_application_data_cbc(self, encrypted_data):
+        """Decrypt TLS application data using AES-CBC with HMAC"""
         try:
             from ja3requests.protocol.tls.crypto import AESCipher
             import hmac
@@ -748,22 +807,64 @@ Server: ja3requests-tls/1.0\r
 
     def _encrypt_application_data(self, data: bytes) -> bytes:
         """
-        Encrypt HTTP data as TLS application data record
+        Encrypt HTTP data as TLS application data record (supports CBC and GCM)
         """
+        if getattr(self.tls, '_is_gcm', False):
+            return self._encrypt_application_data_gcm(data)
+        return self._encrypt_application_data_cbc(data)
+
+    def _encrypt_application_data_gcm(self, data: bytes) -> bytes:
+        """Encrypt application data using AES-GCM"""
+        from ja3requests.protocol.tls.crypto import AESCipher
+
+        content_type = 0x17  # Application data
+        version = b'\x03\x03'  # TLS 1.2
+
+        current_seq_num = getattr(self.tls, '_client_seq_num', 1)
+
+        # Generate explicit nonce (8 bytes)
+        explicit_nonce = current_seq_num.to_bytes(8, byteorder='big')
+
+        # Full nonce = implicit_iv (4) + explicit_nonce (8)
+        nonce = self.tls._client_write_iv + explicit_nonce
+
+        # Build AAD
+        aad = (
+            current_seq_num.to_bytes(8, byteorder='big')
+            + bytes([content_type])
+            + version
+            + len(data).to_bytes(2, byteorder='big')
+        )
+
+        # Encrypt with AES-GCM
+        ciphertext, auth_tag = AESCipher.encrypt_gcm(
+            data, self.tls._client_write_key, nonce, aad
+        )
+
+        # Record data = explicit_nonce + ciphertext + auth_tag
+        encrypted_data = explicit_nonce + ciphertext + auth_tag
+
+        record = (
+            bytes([content_type])
+            + version
+            + len(encrypted_data).to_bytes(2, byteorder='big')
+            + encrypted_data
+        )
+
+        self.tls._client_seq_num += 1
+        return record
+
+    def _encrypt_application_data_cbc(self, data: bytes) -> bytes:
+        """Encrypt application data using AES-CBC with HMAC"""
         from ja3requests.protocol.tls.crypto import AESCipher
         import hmac
         import hashlib
         import os
 
-        # TLS application data record type
         content_type = 0x17  # Application data
         version = b'\x03\x03'  # TLS 1.2
 
-        # Use the same sequence number as handshake messages
-        # Application data continues from where handshake finished
-        current_seq_num = getattr(
-            self.tls, '_client_seq_num', 1
-        )  # Should be 1 after Finished message
+        current_seq_num = getattr(self.tls, '_client_seq_num', 1)
 
         # Create MAC input for application data
         mac_input = (
@@ -789,12 +890,11 @@ Server: ja3requests-tls/1.0\r
         # Generate explicit IV
         explicit_iv = os.urandom(16)
 
-        # Encrypt (without additional padding since we already added TLS padding)
+        # Encrypt
         try:
             from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
             from cryptography.hazmat.backends import default_backend
 
-            # Encrypt directly without additional PKCS#7 padding (we already padded manually)
             cipher = Cipher(
                 algorithms.AES(self.tls._client_write_key),
                 modes.CBC(explicit_iv),
@@ -804,7 +904,6 @@ Server: ja3requests-tls/1.0\r
             ciphertext = encryptor.update(padded_plaintext) + encryptor.finalize()
         except Exception as e:
             debug(f"AES-CBC encryption failed: {e}")
-            # Fallback with add_padding=False since we already added TLS padding
             ciphertext = AESCipher.encrypt_cbc(
                 padded_plaintext, self.tls._client_write_key, explicit_iv, add_padding=False
             )
@@ -818,7 +917,5 @@ Server: ja3requests-tls/1.0\r
             + encrypted_data
         )
 
-        # Increment sequence number in TLS instance
         self.tls._client_seq_num += 1
-
         return record

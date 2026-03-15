@@ -716,13 +716,16 @@ class TLS:
         # The verify data is calculated from all handshake messages EXCLUDING this Finished message
 
         # Try to encrypt the Finished message properly
-        if (
-            hasattr(self, '_client_write_key')
-            and self._client_write_key
-            and hasattr(self, '_client_write_mac_key')
-            and self._client_write_mac_key
-        ):
+        # For GCM: need _client_write_key and _client_write_iv
+        # For CBC: need _client_write_key and _client_write_mac_key
+        is_gcm = getattr(self, '_is_gcm', False)
+        has_key = hasattr(self, '_client_write_key') and self._client_write_key
+        has_iv = hasattr(self, '_client_write_iv') and self._client_write_iv
+        has_mac = hasattr(self, '_client_write_mac_key') and self._client_write_mac_key
 
+        can_encrypt = has_key and (is_gcm and has_iv or not is_gcm and has_mac)
+
+        if can_encrypt:
             try:
                 # Use proper TLS record layer encryption
                 encrypted_record = self._encrypt_finished_message(msg)
@@ -736,7 +739,7 @@ class TLS:
                 record = b'\x16\x03\x03' + struct.pack("!H", len(msg)) + msg
                 return record
         else:
-            debug("Warning: No encryption keys, sending Finished unencrypted")
+            debug(f"Warning: No encryption keys (is_gcm={is_gcm}, has_key={has_key}, has_iv={has_iv}, has_mac={has_mac})")
             record = b'\x16\x03\x03' + struct.pack("!H", len(msg)) + msg
             return record
 
@@ -753,22 +756,24 @@ class TLS:
             self, '_selected_cipher_suite', 0x002F
         )  # Default to AES128-SHA
 
-        # Key lengths for different cipher suites
-        if cipher_suite in [0x002F, 0x003C]:  # AES128 variants
-            mac_key_length = 20 if cipher_suite == 0x002F else 32
-            enc_key_length = 16
-            iv_length = 16
-        elif cipher_suite in [0x0035, 0x003D]:  # AES256 variants
-            mac_key_length = 20 if cipher_suite == 0x0035 else 32
-            enc_key_length = 32
-            iv_length = 16
+        from .crypto import get_cipher_info, is_gcm_cipher_suite
+        cipher_info = get_cipher_info(cipher_suite)
+        is_gcm = is_gcm_cipher_suite(cipher_suite)
+
+        # Key lengths based on cipher info
+        if is_gcm:
+            # GCM: no MAC key, 4-byte implicit IV
+            mac_key_length = 0
+            enc_key_length = cipher_info["key_size"]
+            iv_length = 4  # implicit nonce for GCM
         else:
-            # Default values
-            mac_key_length = 20
-            enc_key_length = 16
+            # CBC: MAC key + 16-byte IV
+            mac_key_length = cipher_info["mac_size"]
+            enc_key_length = cipher_info["key_size"]
             iv_length = 16
 
         key_block_length = 2 * (mac_key_length + enc_key_length + iv_length)
+        self._is_gcm = is_gcm
 
         # Generate key block
         if hasattr(self, '_server_random') and self._server_random:
@@ -865,7 +870,74 @@ class TLS:
 
     def _encrypt_finished_message(self, handshake_msg: bytes) -> bytes:
         """
-        Properly encrypt Finished message according to TLS 1.2 specification
+        Properly encrypt Finished message according to TLS 1.2 specification.
+        Supports both AES-CBC and AES-GCM cipher suites.
+        """
+        # Check if using GCM cipher suite
+        if getattr(self, '_is_gcm', False):
+            return self._encrypt_finished_message_gcm(handshake_msg)
+
+        return self._encrypt_finished_message_cbc(handshake_msg)
+
+    def _encrypt_finished_message_gcm(self, handshake_msg: bytes) -> bytes:
+        """
+        Encrypt Finished message using AES-GCM (AEAD).
+
+        GCM record format:
+        - explicit_nonce (8 bytes)
+        - ciphertext (variable)
+        - auth_tag (16 bytes)
+
+        Nonce = implicit_iv (4 bytes from key derivation) + explicit_nonce (8 bytes)
+        AAD = seq_num (8) + type (1) + version (2) + length (2)
+        """
+        from .crypto import AESCipher
+        import os
+
+        content_type = 0x16  # Handshake
+        version = b'\x03\x03'  # TLS 1.2
+
+        if not hasattr(self, '_client_seq_num'):
+            self._client_seq_num = 0
+
+        # Generate explicit nonce (8 bytes, typically seq_num or random)
+        explicit_nonce = self._client_seq_num.to_bytes(8, byteorder='big')
+
+        # Full nonce = implicit_iv (4 bytes) + explicit_nonce (8 bytes) = 12 bytes
+        nonce = self._client_write_iv + explicit_nonce
+
+        # Build AAD (Additional Authenticated Data)
+        # AAD = seq_num (8) + type (1) + version (2) + length (2)
+        aad = (
+            self._client_seq_num.to_bytes(8, byteorder='big')
+            + bytes([content_type])
+            + version
+            + len(handshake_msg).to_bytes(2, byteorder='big')
+        )
+
+        # Encrypt with AES-GCM
+        ciphertext, auth_tag = AESCipher.encrypt_gcm(
+            handshake_msg, self._client_write_key, nonce, aad
+        )
+
+        # Record data = explicit_nonce + ciphertext + auth_tag
+        encrypted_data = explicit_nonce + ciphertext + auth_tag
+
+        # Build TLS record
+        record = (
+            bytes([content_type])
+            + version
+            + len(encrypted_data).to_bytes(2, byteorder='big')
+            + encrypted_data
+        )
+
+        self._client_seq_num += 1
+        debug(f"GCM encrypted record: {len(record)} bytes")
+        return record
+
+    def _encrypt_finished_message_cbc(self, handshake_msg: bytes) -> bytes:
+        """
+        Encrypt Finished message using AES-CBC with HMAC.
         """
         from .crypto import AESCipher
         import hmac
