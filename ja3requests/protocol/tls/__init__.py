@@ -114,6 +114,12 @@ class TLS:
             if hasattr(tls_config, 'signature_algorithms'):
                 self._signature_algorithms = tls_config.signature_algorithms
 
+            # Set certificate verification options
+            if hasattr(tls_config, 'verify_cert'):
+                self._verify_cert = tls_config.verify_cert
+            else:
+                self._verify_cert = False  # Default to False for backward compatibility
+
             # Update client hello with new configuration
             self._body = ClientHello(
                 self.tls_version,
@@ -366,8 +372,15 @@ class TLS:
             offset += 1
 
     def _parse_certificate(self, data):
-        """Parse Certificate message and extract server public key"""
+        """Parse Certificate message, verify certificate, and extract server public key"""
         try:
+            # Store raw certificate data for verification
+            self._certificate_data = data
+
+            # Verify certificate if verification is enabled
+            if getattr(self, '_verify_cert', True):
+                self._verify_server_certificate(data)
+
             # Extract server's public key from certificate
             self._server_public_key = self._extract_server_public_key(data)
 
@@ -1116,3 +1129,44 @@ class TLS:
 
             traceback.print_exc()
             return None
+
+    def _verify_server_certificate(self, certificate_data: bytes):
+        """
+        Verify server certificate chain.
+
+        Args:
+            certificate_data: Raw certificate data from Certificate message
+        """
+        try:
+            from .certificate_verify import CertificateVerifier
+
+            hostname = getattr(self, '_server_name', None)
+            if not hostname:
+                debug("No server name for certificate verification, skipping")
+                return
+
+            verifier = CertificateVerifier(verify=True)
+            is_valid, error = verifier.verify_certificate(
+                hostname=hostname,
+                certificate_data=certificate_data,
+                check_hostname=True,
+                check_expiry=True,
+            )
+
+            if is_valid:
+                debug(f"Certificate verification passed for {hostname}")
+                self._cert_verified = True
+            else:
+                debug(f"Certificate verification failed: {error}")
+                self._cert_verified = False
+                self._cert_error = error
+                # Don't raise exception - allow connection to continue
+                # Users can check _cert_verified to see the result
+
+        except ImportError as e:
+            debug(f"Certificate verification module not available: {e}")
+            self._cert_verified = False
+        except Exception as e:
+            debug(f"Certificate verification error: {e}")
+            self._cert_verified = False
+            self._cert_error = str(e)

@@ -55,6 +55,9 @@ class TlsConfig:
         self._use_grease = False  # Disable GREASE for compatibility
         self._max_fragment_length = None
 
+        # Certificate verification
+        self._verify_cert = False  # Default to False for backward compatibility
+
     @property
     def tls_version(self) -> int:
         """Get TLS version"""
@@ -202,6 +205,16 @@ class TlsConfig:
     def max_fragment_length(self, length: int):
         """Set max fragment length"""
         self._max_fragment_length = length
+
+    @property
+    def verify_cert(self) -> bool:
+        """Get certificate verification flag"""
+        return self._verify_cert
+
+    @verify_cert.setter
+    def verify_cert(self, verify: bool):
+        """Set certificate verification flag"""
+        self._verify_cert = verify
 
     def get_cipher_suite_values(self) -> List[int]:
         """Get cipher suite values as integers for JA3 fingerprint"""
