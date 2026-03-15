@@ -63,8 +63,22 @@ All HTTPS features tested and working:
 - `ja3requests/protocol/tls/certificate_verify.py` - New file
 - `ja3requests/protocol/tls/config.py` - verify_cert option
 
+### [x] Connection Pooling (Thread-Safe)
+- **File**: `ja3requests/pool.py` (new)
+- **Features**:
+  - `ConnectionPool` class with thread-safe RLock protection
+  - `PooledConnection` wrapper with metadata (created_at, last_used_at, TLS context)
+  - Connection reuse for same (host, port, scheme) combination
+  - Configurable max connections per host (default: 10)
+  - Idle timeout with automatic cleanup (default: 60s)
+  - Connection health check before reuse
+  - Global default pool with `get_default_pool()`
+- **Integration**:
+  - `Session` accepts `pool` and `use_pooling` parameters
+  - `HttpSocket` and `HttpsSocket` support pool-based connection reuse
+  - Context manager support for Session (`with session as s:`)
+
 ## Next Steps
 - [ ] TLS 1.3 support
 - [ ] HTTP/2 support
-- [ ] Connection pooling
 - [ ] Session persistence
