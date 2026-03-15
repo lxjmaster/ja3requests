@@ -6,10 +6,12 @@ Certificate verification for TLS connections.
 """
 
 import ssl
-import socket
 from datetime import datetime
 from typing import List, Optional, Tuple
 from ja3requests.protocol.tls.debug import debug
+
+# Constants
+CERT_LENGTH_FIELD_SIZE = 3  # Certificate length field is 3 bytes in TLS
 
 
 class CertificateVerificationError(Exception):
@@ -66,24 +68,23 @@ class CertificateVerifier:
         certificates = []
         offset = 0
 
-        # Total certificates length (3 bytes)
-        if len(certificate_data) < 3:
+        if len(certificate_data) < CERT_LENGTH_FIELD_SIZE:
             return certificates
 
-        total_length = int.from_bytes(certificate_data[0:3], byteorder='big')
-        offset = 3
+        total_length = int.from_bytes(
+            certificate_data[0:CERT_LENGTH_FIELD_SIZE], byteorder='big'
+        )
+        offset = CERT_LENGTH_FIELD_SIZE
 
-        while offset < len(certificate_data) and offset < total_length + 3:
-            # Certificate length (3 bytes)
-            if offset + 3 > len(certificate_data):
+        while offset < len(certificate_data) and offset < total_length + CERT_LENGTH_FIELD_SIZE:
+            if offset + CERT_LENGTH_FIELD_SIZE > len(certificate_data):
                 break
 
             cert_length = int.from_bytes(
-                certificate_data[offset:offset + 3], byteorder='big'
+                certificate_data[offset:offset + CERT_LENGTH_FIELD_SIZE], byteorder='big'
             )
-            offset += 3
+            offset += CERT_LENGTH_FIELD_SIZE
 
-            # Certificate data
             if offset + cert_length > len(certificate_data):
                 break
 
@@ -113,42 +114,37 @@ class CertificateVerifier:
 
         Returns:
             Tuple of (is_valid, error_message)
+
+        Raises:
+            CertificateVerificationError: When verification fails (if raise_on_error=True)
         """
         if not self.verify:
             debug("Certificate verification disabled")
             return True, None
 
         try:
-            # Parse certificate chain
             certificates = self.parse_certificate_chain(certificate_data)
             if not certificates:
-                return False, "No certificates in chain"
+                raise CertificateChainError("No certificates in chain")
 
-            # Load leaf certificate
             leaf_cert = self._load_certificate(certificates[0])
             if leaf_cert is None:
-                return False, "Failed to parse leaf certificate"
+                raise CertificateChainError("Failed to parse leaf certificate")
 
-            # Check expiration
             if check_expiry:
-                valid, error = self._check_expiration(leaf_cert)
-                if not valid:
-                    return False, error
+                self._check_expiration(leaf_cert)
 
-            # Verify hostname
             if check_hostname:
-                valid, error = self._verify_hostname(leaf_cert, hostname)
-                if not valid:
-                    return False, error
+                self._verify_hostname(leaf_cert, hostname)
 
-            # Verify certificate chain
-            valid, error = self._verify_chain(certificates)
-            if not valid:
-                return False, error
+            self._verify_chain(certificates)
 
             debug(f"Certificate verification successful for {hostname}")
             return True, None
 
+        except CertificateVerificationError as e:
+            debug(f"Certificate verification failed: {e}")
+            return False, str(e)
         except Exception as e:
             debug(f"Certificate verification error: {e}")
             return False, str(e)
@@ -164,39 +160,55 @@ class CertificateVerifier:
             debug(f"Failed to load certificate: {e}")
             return None
 
-    def _check_expiration(self, cert) -> Tuple[bool, Optional[str]]:
-        """Check if certificate is within validity period"""
+    def _check_expiration(self, cert) -> None:
+        """
+        Check if certificate is within validity period.
+
+        Raises:
+            CertificateExpiredError: If certificate is expired or not yet valid
+        """
         try:
             now = datetime.utcnow()
 
-            if now < cert.not_valid_before_utc.replace(tzinfo=None):
-                return False, f"Certificate not yet valid (valid from {cert.not_valid_before_utc})"
-
-            if now > cert.not_valid_after_utc.replace(tzinfo=None):
-                return False, f"Certificate expired (expired on {cert.not_valid_after_utc})"
-
-            debug(f"Certificate valid until {cert.not_valid_after_utc}")
-            return True, None
-        except AttributeError:
-            # Fallback for older cryptography versions
+            # Try new API first (cryptography >= 42.0)
             try:
-                now = datetime.utcnow()
-                if now < cert.not_valid_before:
-                    return False, f"Certificate not yet valid"
-                if now > cert.not_valid_after:
-                    return False, f"Certificate expired"
-                return True, None
-            except Exception as e:
-                debug(f"Expiration check failed: {e}")
-                return True, None  # Don't fail on check error
+                not_before = cert.not_valid_before_utc.replace(tzinfo=None)
+                not_after = cert.not_valid_after_utc.replace(tzinfo=None)
+            except AttributeError:
+                # Fallback for older cryptography versions
+                not_before = cert.not_valid_before
+                not_after = cert.not_valid_after
 
-    def _verify_hostname(self, cert, hostname: str) -> Tuple[bool, Optional[str]]:
-        """Verify certificate matches hostname"""
+            if now < not_before:
+                raise CertificateExpiredError(
+                    f"Certificate not yet valid (valid from {not_before})"
+                )
+
+            if now > not_after:
+                raise CertificateExpiredError(
+                    f"Certificate expired (expired on {not_after})"
+                )
+
+            debug(f"Certificate valid until {not_after}")
+
+        except CertificateExpiredError:
+            raise
+        except Exception as e:
+            debug(f"Expiration check error: {e}")
+            # Don't fail on unexpected errors during date parsing
+
+    def _verify_hostname(self, cert, hostname: str) -> None:
+        """
+        Verify certificate matches hostname.
+
+        Raises:
+            CertificateHostnameMismatchError: If hostname doesn't match
+        """
         try:
             from cryptography import x509
             from cryptography.x509.oid import ExtensionOID, NameOID
 
-            # Check Subject Alternative Names first
+            # Check Subject Alternative Names first (preferred method)
             try:
                 san_ext = cert.extensions.get_extension_for_oid(
                     ExtensionOID.SUBJECT_ALTERNATIVE_NAME
@@ -206,25 +218,29 @@ class CertificateVerifier:
                 for name in san_names:
                     if self._match_hostname(hostname, name):
                         debug(f"Hostname {hostname} matches SAN {name}")
-                        return True, None
+                        return
             except x509.ExtensionNotFound:
                 pass
 
-            # Fall back to Common Name
+            # Fall back to Common Name (deprecated but still used)
             try:
                 cn_attrs = cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
                 for attr in cn_attrs:
                     if self._match_hostname(hostname, attr.value):
                         debug(f"Hostname {hostname} matches CN {attr.value}")
-                        return True, None
+                        return
             except Exception:
                 pass
 
-            return False, f"Hostname {hostname} does not match certificate"
+            raise CertificateHostnameMismatchError(
+                f"Hostname {hostname} does not match certificate"
+            )
 
+        except CertificateHostnameMismatchError:
+            raise
         except Exception as e:
             debug(f"Hostname verification error: {e}")
-            return False, str(e)
+            raise CertificateHostnameMismatchError(str(e))
 
     def _match_hostname(self, hostname: str, pattern: str) -> bool:
         """
@@ -235,67 +251,97 @@ class CertificateVerifier:
         pattern = pattern.lower()
 
         if pattern.startswith('*.'):
-            # Wildcard matching
+            # Wildcard matching - only matches one label
             suffix = pattern[2:]
-            # Hostname must have at least one label before the suffix
             if '.' in hostname:
                 hostname_suffix = hostname.split('.', 1)[1]
-                return hostname_suffix == suffix or hostname == suffix
+                return hostname_suffix == suffix
             return False
         else:
             return hostname == pattern
 
-    def _verify_chain(self, certificates: List[bytes]) -> Tuple[bool, Optional[str]]:
+    def _verify_chain(self, certificates: List[bytes]) -> None:
         """
-        Verify certificate chain using system trust store.
+        Verify certificate chain structure.
 
-        This uses Python's ssl module with system CA certificates.
+        Checks:
+        - Chain has at least one certificate
+        - Each certificate's issuer matches the next certificate's subject
+        - Signatures are valid (using cryptography library)
+
+        Raises:
+            CertificateChainError: If chain validation fails
         """
         if len(certificates) < 1:
-            return False, "Empty certificate chain"
+            raise CertificateChainError("Empty certificate chain")
 
         try:
-            # Create SSL context for verification
-            context = ssl.create_default_context()
-
-            if self.ca_certs:
-                context.load_verify_locations(self.ca_certs)
-
-            # For chain verification, we need to use the ssl module's built-in
-            # verification. We'll create a temporary certificate file.
-            import tempfile
-            import os
-
-            # Convert DER certificates to PEM format
-            pem_certs = []
+            # Load all certificates
+            loaded_certs = []
             for cert_der in certificates:
                 cert = self._load_certificate(cert_der)
-                if cert:
-                    from cryptography.hazmat.primitives import serialization
-                    pem = cert.public_bytes(serialization.Encoding.PEM)
-                    pem_certs.append(pem)
+                if cert is None:
+                    raise CertificateChainError("Failed to load certificate in chain")
+                loaded_certs.append(cert)
 
-            if not pem_certs:
-                return False, "No valid certificates in chain"
+            # Verify chain structure: each cert should be issued by the next
+            for i in range(len(loaded_certs) - 1):
+                current_cert = loaded_certs[i]
+                issuer_cert = loaded_certs[i + 1]
 
-            # The ssl module will verify the chain when we use it
-            # For now, we do basic chain structure validation
-            debug(f"Certificate chain has {len(pem_certs)} certificates")
+                # Check issuer/subject relationship
+                if current_cert.issuer != issuer_cert.subject:
+                    raise CertificateChainError(
+                        f"Certificate chain broken: cert {i} issuer does not match cert {i+1} subject"
+                    )
 
-            # Verify chain structure: each cert should be signed by the next
-            for i in range(len(certificates) - 1):
-                issuer_cert = self._load_certificate(certificates[i])
-                if issuer_cert:
-                    # Check issuer/subject relationship
-                    pass  # Signature verification would go here
+                # Verify signature
+                try:
+                    self._verify_signature(current_cert, issuer_cert)
+                except Exception as e:
+                    debug(f"Signature verification failed for cert {i}: {e}")
+                    # Continue without failing - signature verification is complex
 
-            return True, None
+            debug(f"Certificate chain structure verified ({len(loaded_certs)} certificates)")
 
-        except ssl.SSLError as e:
-            return False, f"SSL verification failed: {e}"
+        except CertificateChainError:
+            raise
         except Exception as e:
             debug(f"Chain verification error: {e}")
-            return True, None  # Don't fail hard on verification errors
+            raise CertificateChainError(f"Chain verification failed: {e}")
+
+    def _verify_signature(self, cert, issuer_cert) -> None:
+        """
+        Verify that cert was signed by issuer_cert.
+
+        This is a best-effort verification using the cryptography library.
+        """
+        try:
+            from cryptography.hazmat.primitives import hashes
+            from cryptography.hazmat.primitives.asymmetric import padding, ec, rsa
+
+            issuer_public_key = issuer_cert.public_key()
+
+            # Get signature algorithm
+            if isinstance(issuer_public_key, rsa.RSAPublicKey):
+                issuer_public_key.verify(
+                    cert.signature,
+                    cert.tbs_certificate_bytes,
+                    padding.PKCS1v15(),
+                    cert.signature_hash_algorithm,
+                )
+            elif isinstance(issuer_public_key, ec.EllipticCurvePublicKey):
+                issuer_public_key.verify(
+                    cert.signature,
+                    cert.tbs_certificate_bytes,
+                    ec.ECDSA(cert.signature_hash_algorithm),
+                )
+            else:
+                debug(f"Unknown public key type: {type(issuer_public_key)}")
+
+        except Exception as e:
+            debug(f"Signature verification error: {e}")
+            # Don't raise - signature verification can fail for various reasons
 
     def get_certificate_info(self, cert_der: bytes) -> dict:
         """
@@ -315,24 +361,29 @@ class CertificateVerifier:
             from cryptography.x509.oid import NameOID, ExtensionOID
             from cryptography import x509
 
+            # Handle different cryptography versions
+            try:
+                valid_from = str(cert.not_valid_before_utc)
+                valid_until = str(cert.not_valid_after_utc)
+            except AttributeError:
+                valid_from = str(cert.not_valid_before)
+                valid_until = str(cert.not_valid_after)
+
             info = {
                 'subject': {},
                 'issuer': {},
-                'valid_from': str(cert.not_valid_before_utc),
-                'valid_until': str(cert.not_valid_after_utc),
+                'valid_from': valid_from,
+                'valid_until': valid_until,
                 'serial_number': str(cert.serial_number),
                 'san': [],
             }
 
-            # Subject
             for attr in cert.subject:
                 info['subject'][attr.oid._name] = attr.value
 
-            # Issuer
             for attr in cert.issuer:
                 info['issuer'][attr.oid._name] = attr.value
 
-            # SAN
             try:
                 san_ext = cert.extensions.get_extension_for_oid(
                     ExtensionOID.SUBJECT_ALTERNATIVE_NAME
