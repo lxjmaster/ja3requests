@@ -122,13 +122,13 @@ class Retry(metaclass=SingletonMeta):
         :param kwargs:
         :return:
         """
-        if obj not in self._tasks:
-            self._tasks[obj] = Task(
-                obj, DEFAULT_MAX_RETRY_LIMIT, exception, *args, **kwargs
-            )
+        # Always create a new task for each call to avoid stale state
+        # Previous implementation reused tasks which caused issues with
+        # different connection parameters and depleted retry counters
+        task = Task(obj, DEFAULT_MAX_RETRY_LIMIT, exception, *args, **kwargs)
 
-        while self._tasks[obj].times > 0:
-            result = self._tasks[obj].retry()
+        while task.times > 0:
+            result = task.retry()
             if result != 0:
                 return result
 

@@ -218,9 +218,17 @@ class Session(BaseSession):
         :param kwargs:
         :return:
         """
+        from urllib.parse import urljoin, urlparse
+
         send_kwargs = kwargs
+        # Get the original URL to resolve relative redirects
+        original_url = self.Request.url
 
         for _ in range(DEFAULT_REDIRECT_LIMIT):
+            # Handle relative URLs by joining with the original URL
+            if not urlparse(url).scheme:
+                url = urljoin(original_url, url)
+
             req = Request(
                 method="GET",
                 url=url,
@@ -233,6 +241,11 @@ class Session(BaseSession):
             response = self.send(req, **send_kwargs)
             if 400 <= response.status_code or response.status_code < 300:
                 break
+
+            # Update URL for next redirect and original_url for relative resolution
+            if response.is_redirected and response.location:
+                original_url = url
+                url = response.location
         else:
             raise MaxRetriedException("Too many redirects")
 
