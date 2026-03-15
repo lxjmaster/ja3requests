@@ -31,7 +31,7 @@ class HTTPSContext(BaseContext):
     HTTPS Context
     """
 
-    def __init__(self, protocol: str = "HTTP/2.0"):
+    def __init__(self, protocol: str = "HTTP/1.1"):
         super().__init__()
         self.protocol_version = protocol
 

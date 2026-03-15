@@ -227,6 +227,7 @@ class Session(BaseSession):
                 headers=self.Request.headers,
                 cookies=self.Request.cookies,
                 proxies=self.Request.proxies,
+                tls_config=self._tls_config,
             ).request()
 
             response = self.send(req, **send_kwargs)
