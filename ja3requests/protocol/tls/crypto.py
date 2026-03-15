@@ -108,13 +108,27 @@ class TLSCrypto:
         Derive individual keys from key block based on cipher suite
         """
         # Key lengths based on cipher suite
+        # For GCM cipher suites: mac_len=0 (AEAD), iv_len=4 (implicit nonce)
         key_lengths = {
-            0x002F: {"mac_len": 20, "key_len": 16, "iv_len": 16},  # AES128-SHA
-            0x0035: {"mac_len": 20, "key_len": 32, "iv_len": 16},  # AES256-SHA
-            0x003C: {"mac_len": 32, "key_len": 16, "iv_len": 16},  # AES128-SHA256
-            0x003D: {"mac_len": 32, "key_len": 32, "iv_len": 16},  # AES256-SHA256
-            0x1301: {"mac_len": 0, "key_len": 16, "iv_len": 12},  # AES128-GCM-SHA256
-            0x1302: {"mac_len": 0, "key_len": 32, "iv_len": 12},  # AES256-GCM-SHA384
+            # CBC cipher suites
+            0x002F: {"mac_len": 20, "key_len": 16, "iv_len": 16},  # TLS_RSA_WITH_AES_128_CBC_SHA
+            0x0035: {"mac_len": 20, "key_len": 32, "iv_len": 16},  # TLS_RSA_WITH_AES_256_CBC_SHA
+            0x003C: {"mac_len": 32, "key_len": 16, "iv_len": 16},  # TLS_RSA_WITH_AES_128_CBC_SHA256
+            0x003D: {"mac_len": 32, "key_len": 32, "iv_len": 16},  # TLS_RSA_WITH_AES_256_CBC_SHA256
+            0xC013: {"mac_len": 20, "key_len": 16, "iv_len": 16},  # TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA
+            0xC014: {"mac_len": 20, "key_len": 32, "iv_len": 16},  # TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA
+            0xC027: {"mac_len": 32, "key_len": 16, "iv_len": 16},  # TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256
+            0xC028: {"mac_len": 32, "key_len": 32, "iv_len": 16},  # TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384
+            # GCM cipher suites (AEAD - no separate MAC, 4-byte implicit IV)
+            0x009C: {"mac_len": 0, "key_len": 16, "iv_len": 4},   # TLS_RSA_WITH_AES_128_GCM_SHA256
+            0x009D: {"mac_len": 0, "key_len": 32, "iv_len": 4},   # TLS_RSA_WITH_AES_256_GCM_SHA384
+            0xC02F: {"mac_len": 0, "key_len": 16, "iv_len": 4},   # TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+            0xC030: {"mac_len": 0, "key_len": 32, "iv_len": 4},   # TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+            0xC02B: {"mac_len": 0, "key_len": 16, "iv_len": 4},   # TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+            0xC02C: {"mac_len": 0, "key_len": 32, "iv_len": 4},   # TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+            # TLS 1.3 cipher suites
+            0x1301: {"mac_len": 0, "key_len": 16, "iv_len": 12},  # TLS_AES_128_GCM_SHA256
+            0x1302: {"mac_len": 0, "key_len": 32, "iv_len": 12},  # TLS_AES_256_GCM_SHA384
         }
 
         lengths = key_lengths.get(
@@ -616,7 +630,8 @@ def get_cipher_info(cipher_suite: int) -> dict:
     Get cipher suite information
     """
     cipher_info = {
-        0x002F: {  # TLS_RSA_WITH_AES_128_CBC_SHA
+        # RSA key exchange with CBC
+        0x002F: {
             "name": "TLS_RSA_WITH_AES_128_CBC_SHA",
             "key_exchange": "RSA",
             "cipher": "AES_128_CBC",
@@ -624,8 +639,9 @@ def get_cipher_info(cipher_suite: int) -> dict:
             "key_size": 16,
             "iv_size": 16,
             "mac_size": 20,
+            "is_aead": False,
         },
-        0x0035: {  # TLS_RSA_WITH_AES_256_CBC_SHA
+        0x0035: {
             "name": "TLS_RSA_WITH_AES_256_CBC_SHA",
             "key_exchange": "RSA",
             "cipher": "AES_256_CBC",
@@ -633,8 +649,9 @@ def get_cipher_info(cipher_suite: int) -> dict:
             "key_size": 32,
             "iv_size": 16,
             "mac_size": 20,
+            "is_aead": False,
         },
-        0x003C: {  # TLS_RSA_WITH_AES_128_CBC_SHA256
+        0x003C: {
             "name": "TLS_RSA_WITH_AES_128_CBC_SHA256",
             "key_exchange": "RSA",
             "cipher": "AES_128_CBC",
@@ -642,24 +659,132 @@ def get_cipher_info(cipher_suite: int) -> dict:
             "key_size": 16,
             "iv_size": 16,
             "mac_size": 32,
+            "is_aead": False,
         },
-        0x1301: {  # TLS_AES_128_GCM_SHA256
+        # RSA key exchange with GCM
+        0x009C: {
+            "name": "TLS_RSA_WITH_AES_128_GCM_SHA256",
+            "key_exchange": "RSA",
+            "cipher": "AES_128_GCM",
+            "mac": "AEAD",
+            "key_size": 16,
+            "iv_size": 4,  # implicit IV
+            "mac_size": 0,
+            "is_aead": True,
+        },
+        0x009D: {
+            "name": "TLS_RSA_WITH_AES_256_GCM_SHA384",
+            "key_exchange": "RSA",
+            "cipher": "AES_256_GCM",
+            "mac": "AEAD",
+            "key_size": 32,
+            "iv_size": 4,
+            "mac_size": 0,
+            "is_aead": True,
+        },
+        # ECDHE-RSA with CBC
+        0xC013: {
+            "name": "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA",
+            "key_exchange": "ECDHE_RSA",
+            "cipher": "AES_128_CBC",
+            "mac": "SHA1",
+            "key_size": 16,
+            "iv_size": 16,
+            "mac_size": 20,
+            "is_aead": False,
+        },
+        0xC014: {
+            "name": "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA",
+            "key_exchange": "ECDHE_RSA",
+            "cipher": "AES_256_CBC",
+            "mac": "SHA1",
+            "key_size": 32,
+            "iv_size": 16,
+            "mac_size": 20,
+            "is_aead": False,
+        },
+        0xC027: {
+            "name": "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256",
+            "key_exchange": "ECDHE_RSA",
+            "cipher": "AES_128_CBC",
+            "mac": "SHA256",
+            "key_size": 16,
+            "iv_size": 16,
+            "mac_size": 32,
+            "is_aead": False,
+        },
+        0xC028: {
+            "name": "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384",
+            "key_exchange": "ECDHE_RSA",
+            "cipher": "AES_256_CBC",
+            "mac": "SHA384",
+            "key_size": 32,
+            "iv_size": 16,
+            "mac_size": 48,
+            "is_aead": False,
+        },
+        # ECDHE-RSA with GCM
+        0xC02F: {
+            "name": "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+            "key_exchange": "ECDHE_RSA",
+            "cipher": "AES_128_GCM",
+            "mac": "AEAD",
+            "key_size": 16,
+            "iv_size": 4,
+            "mac_size": 0,
+            "is_aead": True,
+        },
+        0xC030: {
+            "name": "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+            "key_exchange": "ECDHE_RSA",
+            "cipher": "AES_256_GCM",
+            "mac": "AEAD",
+            "key_size": 32,
+            "iv_size": 4,
+            "mac_size": 0,
+            "is_aead": True,
+        },
+        # ECDHE-ECDSA with GCM
+        0xC02B: {
+            "name": "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
+            "key_exchange": "ECDHE_ECDSA",
+            "cipher": "AES_128_GCM",
+            "mac": "AEAD",
+            "key_size": 16,
+            "iv_size": 4,
+            "mac_size": 0,
+            "is_aead": True,
+        },
+        0xC02C: {
+            "name": "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
+            "key_exchange": "ECDHE_ECDSA",
+            "cipher": "AES_256_GCM",
+            "mac": "AEAD",
+            "key_size": 32,
+            "iv_size": 4,
+            "mac_size": 0,
+            "is_aead": True,
+        },
+        # TLS 1.3 cipher suites
+        0x1301: {
             "name": "TLS_AES_128_GCM_SHA256",
             "key_exchange": "AEAD",
             "cipher": "AES_128_GCM",
             "mac": "SHA256",
             "key_size": 16,
             "iv_size": 12,
-            "mac_size": 0,  # AEAD
+            "mac_size": 0,
+            "is_aead": True,
         },
-        0x1302: {  # TLS_AES_256_GCM_SHA384
+        0x1302: {
             "name": "TLS_AES_256_GCM_SHA384",
             "key_exchange": "AEAD",
             "cipher": "AES_256_GCM",
             "mac": "SHA384",
             "key_size": 32,
             "iv_size": 12,
-            "mac_size": 0,  # AEAD
+            "mac_size": 0,
+            "is_aead": True,
         },
     }
 
@@ -673,5 +798,24 @@ def get_cipher_info(cipher_suite: int) -> dict:
             "key_size": 16,
             "iv_size": 16,
             "mac_size": 20,
+            "is_aead": False,
         },
     )
+
+
+# GCM cipher suite identifiers for quick lookup
+GCM_CIPHER_SUITES = frozenset({
+    0x009C,  # TLS_RSA_WITH_AES_128_GCM_SHA256
+    0x009D,  # TLS_RSA_WITH_AES_256_GCM_SHA384
+    0xC02F,  # TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+    0xC030,  # TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+    0xC02B,  # TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+    0xC02C,  # TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+    0x1301,  # TLS_AES_128_GCM_SHA256 (TLS 1.3)
+    0x1302,  # TLS_AES_256_GCM_SHA384 (TLS 1.3)
+})
+
+
+def is_gcm_cipher_suite(cipher_suite: int) -> bool:
+    """Check if cipher suite uses GCM mode"""
+    return cipher_suite in GCM_CIPHER_SUITES
