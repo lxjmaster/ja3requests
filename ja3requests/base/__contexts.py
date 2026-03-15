@@ -327,7 +327,10 @@ class BaseContext(ABC):
         :return:
         """
         if self.data:
-            self.body = self.data
+            data = self.data
+            if isinstance(data, str):
+                data = data.encode()
+            self.body = data
         if self.json:
             self.headers.update({"Content-Type": "application/json"})
             self.body = self.json.encode()
