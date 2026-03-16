@@ -1,3 +1,5 @@
+"""TLS ServerKeyExchange handshake message layer."""
+
 import struct
 from ja3requests.protocol.tls.layers import HandShake
 
@@ -93,8 +95,10 @@ class ServerKeyExchange(HandShake):
 
     @property
     def params(self) -> dict:
+        """Return the parsed DH parameters."""
         return self._params
 
     @property
     def signed_params(self) -> bytes:
+        """Return the signed parameters data."""
         return self._signed_params

@@ -5,11 +5,12 @@ TLS Record Layer Implementation
 This module implements TLS record layer encryption and decryption functionality.
 """
 
+import os
 import struct
 import hmac
 import hashlib
-from typing import Tuple, Optional
-from .crypto import AESCipher, TLSCrypto
+from typing import Tuple
+from .crypto import AESCipher
 from .debug import debug
 
 
@@ -31,6 +32,7 @@ class TLSRecordLayer:
         self,
         client_write_key,
         server_write_key,
+        *,
         client_write_mac_key,
         server_write_mac_key,
         client_write_iv,
@@ -81,8 +83,6 @@ class TLSRecordLayer:
             plaintext = data + mac
 
             # Encrypt with AES-CBC
-            import os
-
             iv = os.urandom(16)  # Generate random IV for this record
             ciphertext = AESCipher.encrypt_cbc(plaintext, self.client_write_key, iv)
 
@@ -95,7 +95,7 @@ class TLSRecordLayer:
             self.client_seq_num += 1
             return record_header + encrypted_data
 
-        except Exception as e:
+        except (ValueError, OSError) as e:
             debug(f"Encryption failed: {e}, sending as plaintext")
             # Fallback to plaintext
             record_header = struct.pack('!BBBH', content_type, 3, 3, len(data))
@@ -112,9 +112,9 @@ class TLSRecordLayer:
             raise ValueError("Invalid TLS record: too short")
 
         # Parse TLS record header
-        content_type, major_version, minor_version, length = struct.unpack(
-            '!BBBH', record_data[:5]
-        )
+        content_type = record_data[0]
+        tls_version = record_data[1:3]
+        length = struct.unpack('!H', record_data[3:5])[0]
         encrypted_data = record_data[5 : 5 + length]
 
         if not self.server_write_key or not self.server_write_mac_key:
@@ -122,53 +122,42 @@ class TLSRecordLayer:
             return encrypted_data, content_type
 
         try:
-            # Extract IV and ciphertext
-            iv = encrypted_data[:16]
-            ciphertext = encrypted_data[16:]
-
-            # Decrypt
+            # Decrypt with AES-CBC (first 16 bytes are IV)
             plaintext_with_mac = AESCipher.decrypt_cbc(
-                ciphertext, self.server_write_key, iv
+                encrypted_data[16:], self.server_write_key, encrypted_data[:16]
             )
 
-            # Determine MAC length
-            if self.cipher_suite in [0x002F, 0x0035]:  # SHA-1 based
-                mac_length = 20
-            else:  # SHA-256 based
-                mac_length = 32
+            # Determine MAC length and hash algorithm
+            mac_length = 20 if self.cipher_suite in [0x002F, 0x0035] else 32
+            hash_algo = (
+                hashlib.sha1
+                if self.cipher_suite in [0x002F, 0x0035]
+                else hashlib.sha256
+            )
 
-            # Separate data and MAC
             if len(plaintext_with_mac) < mac_length:
                 raise ValueError("Decrypted data too short for MAC")
 
             data = plaintext_with_mac[:-mac_length]
-            received_mac = plaintext_with_mac[-mac_length:]
 
             # Verify MAC
             mac_data = (
                 struct.pack('!Q', self.server_seq_num)
-                + struct.pack('!BBB', content_type, major_version, minor_version)
-                + struct.pack('!H', len(data))
+                + struct.pack('!BB', tls_version[0], tls_version[1])
+                + struct.pack('!BH', content_type, len(data))
                 + data
             )
+            expected_mac = hmac.new(
+                self.server_write_mac_key, mac_data, hash_algo
+            ).digest()
 
-            if self.cipher_suite in [0x002F, 0x0035]:  # SHA-1 based
-                expected_mac = hmac.new(
-                    self.server_write_mac_key, mac_data, hashlib.sha1
-                ).digest()
-            else:  # SHA-256 based
-                expected_mac = hmac.new(
-                    self.server_write_mac_key, mac_data, hashlib.sha256
-                ).digest()
-
-            if received_mac != expected_mac:
+            if plaintext_with_mac[-mac_length:] != expected_mac:
                 debug("Warning: MAC verification failed")
-                # Continue anyway for debugging
 
             self.server_seq_num += 1
             return data, content_type
 
-        except Exception as e:
+        except (ValueError, OSError) as e:
             debug(f"Decryption failed: {e}, treating as plaintext")
             return encrypted_data, content_type
 
@@ -192,11 +181,11 @@ class TLSSocket:
             self.record_layer.set_keys(
                 tls_context._client_write_key,
                 tls_context._server_write_key,
-                tls_context._client_write_mac_key,
-                tls_context._server_write_mac_key,
-                tls_context._client_write_iv,
-                tls_context._server_write_iv,
-                getattr(tls_context, '_selected_cipher_suite', 0x002F),
+                client_write_mac_key=tls_context._client_write_mac_key,
+                server_write_mac_key=tls_context._server_write_mac_key,
+                client_write_iv=tls_context._client_write_iv,
+                server_write_iv=tls_context._server_write_iv,
+                cipher_suite=getattr(tls_context, '_selected_cipher_suite', 0x002F),
             )
 
     def send(self, data: bytes) -> int:
@@ -228,13 +217,12 @@ class TLSSocket:
                         )
                         if content_type == 23:  # Application data
                             return decrypted_data[:bufsize]
-                        elif content_type == 21:  # Alert
+                        if content_type == 21:  # Alert
                             debug(f"Received TLS alert: {decrypted_data.hex()}")
                             continue
-                        else:
-                            debug(f"Received TLS record type {content_type}")
-                            continue
-                    except Exception as e:
+                        debug(f"Received TLS record type {content_type}")
+                        continue
+                    except (ValueError, OSError) as e:
                         debug(f"Failed to decrypt record: {e}")
                         return decrypted_data[:bufsize]
 
@@ -244,7 +232,7 @@ class TLSSocket:
                 if not raw_data:
                     break
                 self.receive_buffer += raw_data
-            except Exception as e:
+            except OSError as e:
                 debug(f"Socket receive error: {e}")
                 break
 
@@ -287,13 +275,13 @@ class TLSSocketFile:
             if size > 0:
                 return line[:size]
             return line
-        else:
-            # No newline found, return what we have
-            line = self.buffer
-            self.buffer = b''
-            if size > 0:
-                return line[:size]
-            return line
+
+        # No newline found, return what we have
+        line = self.buffer
+        self.buffer = b''
+        if size > 0:
+            return line[:size]
+        return line
 
     def read(self, size=-1):
         """Read data from the TLS socket"""
@@ -307,18 +295,17 @@ class TLSSocketFile:
                     break
                 result += data
             return result
-        else:
-            # Read specific amount
-            while len(self.buffer) < size:
-                data = self.tls_socket.recv(4096)
-                if not data:
-                    break
-                self.buffer += data
 
-            result = self.buffer[:size]
-            self.buffer = self.buffer[size:]
-            return result
+        # Read specific amount
+        while len(self.buffer) < size:
+            data = self.tls_socket.recv(4096)
+            if not data:
+                break
+            self.buffer += data
+
+        result = self.buffer[:size]
+        self.buffer = self.buffer[size:]
+        return result
 
     def close(self):
         """Close the file object"""
-        pass

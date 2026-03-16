@@ -1,5 +1,5 @@
-import time
-import os
+"""TLS ClientHello handshake message layer."""
+
 import struct
 from ja3requests.protocol.tls.layers import HandShake
 
@@ -133,11 +133,12 @@ class ClientHello(HandShake):
         cipher_suites=None,
         client_random=None,
         server_name=None,
+        *,
         supported_groups=None,
         signature_algorithms=None,
         alpn_protocols=None,
         use_grease=True,
-        extensions=None,
+        _extensions=None,
     ):
         super().__init__()
         self._version = tls_version
@@ -199,6 +200,7 @@ class ClientHello(HandShake):
 
         if self._use_grease:
             # Add GREASE value at the beginning
+            # pylint: disable-next=import-outside-toplevel
             from ja3requests.protocol.tls.cipher_suites.suites import ReservedGrease
 
             grease = ReservedGrease()

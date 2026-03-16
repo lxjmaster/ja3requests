@@ -13,7 +13,7 @@ from ja3requests.base import BaseResponse
 from ja3requests.cookies import Ja3RequestsCookieJar
 from ja3requests.utils import add_dict_to_cookiejar
 from ja3requests.const import MAX_LINE, MAX_HEADERS
-from ja3requests.exceptions import InvalidStatusLine, InvalidResponseHeaders, IssueError
+from ja3requests.exceptions import InvalidStatusLine, InvalidResponseHeaders
 from ja3requests.protocol.tls.debug import debug
 
 
@@ -134,7 +134,7 @@ class HTTPResponse(BaseResponse):
                         body = zlib.decompress(body)
                 elif self._content_encoding == b"br":
                     body = brotli.decompress(body)
-            except Exception as e:
+            except (OSError, zlib.error, brotli.error) as e:
                 debug(
                     f"Warning: Failed to decompress content with {self._content_encoding}: {e}"
                 )
@@ -211,8 +211,7 @@ class HTTPResponse(BaseResponse):
 
 
 class HTTPSResponse(HTTPResponse):
-
-    pass
+    """An HTTPS response from socket connection."""
 
 
 class Response(BaseResponse):

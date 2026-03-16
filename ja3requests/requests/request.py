@@ -31,6 +31,7 @@ class Request:
         self,
         method: AnyStr,
         url: AnyStr,
+        *,
         params: Union[
             Dict[AnyStr, Any],
             List[Tuple[Any, Any]],

@@ -1,3 +1,5 @@
+"""TLS CertificateRequest handshake message layer."""
+
 import struct
 from ja3requests.protocol.tls.layers import HandShake
 
@@ -56,8 +58,10 @@ class CertificateRequest(HandShake):
 
     @property
     def certificate_types(self) -> bytes:
+        """Return the parsed certificate types."""
         return self._certificate_types
 
     @property
     def certificate_authorities(self) -> bytes:
+        """Return the parsed certificate authorities."""
         return self._certificate_authorities

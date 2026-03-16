@@ -55,8 +55,7 @@ class HttpSocket(BaseSocket):
 
             if self._reused and self._pooled_conn:
                 success = self._pool.put_connection(
-                    host, port, "http", self.conn,
-                    pooled_conn=self._pooled_conn
+                    host, port, "http", self.conn, pooled_conn=self._pooled_conn
                 )
             else:
                 success = self._pool.put_connection(host, port, "http", self.conn)
@@ -73,6 +72,6 @@ class HttpSocket(BaseSocket):
         try:
             if self.conn:
                 self.conn.close()
-        except Exception:
+        except OSError:
             pass
         self.conn = None

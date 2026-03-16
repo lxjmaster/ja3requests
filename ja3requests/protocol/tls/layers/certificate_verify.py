@@ -1,3 +1,5 @@
+"""TLS CertificateVerify handshake message layer."""
+
 import struct
 from ja3requests.protocol.tls.layers import HandShake
 
@@ -35,4 +37,5 @@ class CertificateVerify(HandShake):
 
     @property
     def signature(self) -> bytes:
+        """Return the signature data."""
         return self._signature

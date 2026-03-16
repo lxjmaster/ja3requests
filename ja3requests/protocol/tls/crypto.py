@@ -8,8 +8,30 @@ This module provides cryptographic utilities for TLS implementation.
 import os
 import hashlib
 import hmac
-from typing import Tuple, Optional
+from typing import Tuple
+
+from cryptography.hazmat.primitives import serialization, padding as crypto_padding
+from cryptography.hazmat.primitives.asymmetric import ec, x25519, padding
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.backends import default_backend
+
 from ja3requests.protocol.tls.debug import debug
+
+# Common DH prime parameter (RFC 2409 / RFC 3526 MODP group)
+DH_PRIME = int(
+    "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD1"
+    "29024E088A67CC74020BBEA63B139B22514A08798E3404DD"
+    "EF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245"
+    "E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7ED"
+    "EE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3D"
+    "C2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F"
+    "83655D23DCA3AD961C62F356208552BB9ED529077096966D6"
+    "70C354E4ABC9804F1746C08CA18217C32905E462E36CE3BE"
+    "39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9D"
+    "E2BCBF6955817183995497CEA956AE515D2261898FA051015"
+    "728E5A8AACAA68FFFFFFFFFFFFFFFF",
+    16,
+)
 
 
 class TLSCrypto:
@@ -72,7 +94,7 @@ class TLSCrypto:
         premaster_secret: bytes,
         client_random: bytes,
         server_random: bytes,
-        cipher_suite: int = 0x002F,
+        _cipher_suite: int = 0x002F,
     ) -> bytes:
         """
         Generate master secret from premaster secret and randoms
@@ -90,7 +112,7 @@ class TLSCrypto:
         client_random: bytes,
         server_random: bytes,
         key_block_length: int,
-        cipher_suite: int = 0x002F,
+        _cipher_suite: int = 0x002F,
     ) -> bytes:
         """
         Generate key block containing encryption keys and MAC secrets
@@ -111,24 +133,88 @@ class TLSCrypto:
         # For GCM cipher suites: mac_len=0 (AEAD), iv_len=4 (implicit nonce)
         key_lengths = {
             # CBC cipher suites
-            0x002F: {"mac_len": 20, "key_len": 16, "iv_len": 16},  # TLS_RSA_WITH_AES_128_CBC_SHA
-            0x0035: {"mac_len": 20, "key_len": 32, "iv_len": 16},  # TLS_RSA_WITH_AES_256_CBC_SHA
-            0x003C: {"mac_len": 32, "key_len": 16, "iv_len": 16},  # TLS_RSA_WITH_AES_128_CBC_SHA256
-            0x003D: {"mac_len": 32, "key_len": 32, "iv_len": 16},  # TLS_RSA_WITH_AES_256_CBC_SHA256
-            0xC013: {"mac_len": 20, "key_len": 16, "iv_len": 16},  # TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA
-            0xC014: {"mac_len": 20, "key_len": 32, "iv_len": 16},  # TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA
-            0xC027: {"mac_len": 32, "key_len": 16, "iv_len": 16},  # TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256
-            0xC028: {"mac_len": 32, "key_len": 32, "iv_len": 16},  # TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384
+            0x002F: {
+                "mac_len": 20,
+                "key_len": 16,
+                "iv_len": 16,
+            },  # TLS_RSA_WITH_AES_128_CBC_SHA
+            0x0035: {
+                "mac_len": 20,
+                "key_len": 32,
+                "iv_len": 16,
+            },  # TLS_RSA_WITH_AES_256_CBC_SHA
+            0x003C: {
+                "mac_len": 32,
+                "key_len": 16,
+                "iv_len": 16,
+            },  # TLS_RSA_WITH_AES_128_CBC_SHA256
+            0x003D: {
+                "mac_len": 32,
+                "key_len": 32,
+                "iv_len": 16,
+            },  # TLS_RSA_WITH_AES_256_CBC_SHA256
+            0xC013: {
+                "mac_len": 20,
+                "key_len": 16,
+                "iv_len": 16,
+            },  # TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA
+            0xC014: {
+                "mac_len": 20,
+                "key_len": 32,
+                "iv_len": 16,
+            },  # TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA
+            0xC027: {
+                "mac_len": 32,
+                "key_len": 16,
+                "iv_len": 16,
+            },  # TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256
+            0xC028: {
+                "mac_len": 32,
+                "key_len": 32,
+                "iv_len": 16,
+            },  # TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384
             # GCM cipher suites (AEAD - no separate MAC, 4-byte implicit IV)
-            0x009C: {"mac_len": 0, "key_len": 16, "iv_len": 4},   # TLS_RSA_WITH_AES_128_GCM_SHA256
-            0x009D: {"mac_len": 0, "key_len": 32, "iv_len": 4},   # TLS_RSA_WITH_AES_256_GCM_SHA384
-            0xC02F: {"mac_len": 0, "key_len": 16, "iv_len": 4},   # TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
-            0xC030: {"mac_len": 0, "key_len": 32, "iv_len": 4},   # TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
-            0xC02B: {"mac_len": 0, "key_len": 16, "iv_len": 4},   # TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
-            0xC02C: {"mac_len": 0, "key_len": 32, "iv_len": 4},   # TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+            0x009C: {
+                "mac_len": 0,
+                "key_len": 16,
+                "iv_len": 4,
+            },  # TLS_RSA_WITH_AES_128_GCM_SHA256
+            0x009D: {
+                "mac_len": 0,
+                "key_len": 32,
+                "iv_len": 4,
+            },  # TLS_RSA_WITH_AES_256_GCM_SHA384
+            0xC02F: {
+                "mac_len": 0,
+                "key_len": 16,
+                "iv_len": 4,
+            },  # TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+            0xC030: {
+                "mac_len": 0,
+                "key_len": 32,
+                "iv_len": 4,
+            },  # TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+            0xC02B: {
+                "mac_len": 0,
+                "key_len": 16,
+                "iv_len": 4,
+            },  # TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+            0xC02C: {
+                "mac_len": 0,
+                "key_len": 32,
+                "iv_len": 4,
+            },  # TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
             # TLS 1.3 cipher suites
-            0x1301: {"mac_len": 0, "key_len": 16, "iv_len": 12},  # TLS_AES_128_GCM_SHA256
-            0x1302: {"mac_len": 0, "key_len": 32, "iv_len": 12},  # TLS_AES_256_GCM_SHA384
+            0x1301: {
+                "mac_len": 0,
+                "key_len": 16,
+                "iv_len": 12,
+            },  # TLS_AES_128_GCM_SHA256
+            0x1302: {
+                "mac_len": 0,
+                "key_len": 32,
+                "iv_len": 12,
+            },  # TLS_AES_256_GCM_SHA384
         }
 
         lengths = key_lengths.get(
@@ -174,7 +260,7 @@ class TLSCrypto:
         master_secret: bytes,
         handshake_messages: bytes,
         is_client: bool = True,
-        cipher_suite: int = 0x002F,
+        _cipher_suite: int = 0x002F,
     ) -> bytes:
         """
         Compute verify data for Finished message.
@@ -205,10 +291,6 @@ class RSAKeyExchange:
         Encrypt premaster secret with server's RSA public key
         """
         try:
-            from cryptography.hazmat.primitives import serialization
-            from cryptography.hazmat.primitives.asymmetric import padding
-            from cryptography.hazmat.backends import default_backend
-
             # Load the public key
             public_key = serialization.load_der_public_key(
                 public_key_der, backend=default_backend()
@@ -223,7 +305,7 @@ class RSAKeyExchange:
                 "Warning: cryptography library not available, using insecure fallback"
             )
             return premaster_secret
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             debug(f"RSA encryption failed: {e}")
             return premaster_secret
 
@@ -240,14 +322,13 @@ class DHEKeyExchange:
         This is a simplified implementation
         """
         # Common DH parameters (simplified)
-        p = 0xFFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804F1746C08CA18217C32905E462E36CE3BE39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9DE2BCBF6955817183995497CEA956AE515D2261898FA051015728E5A8AACAA68FFFFFFFFFFFFFFFF
         g = 2
 
         # Generate private key (random)
-        private_key = int.from_bytes(os.urandom(32), 'big') % (p - 1) + 1
+        private_key = int.from_bytes(os.urandom(32), 'big') % (DH_PRIME - 1) + 1
 
         # Calculate public key: g^private_key mod p
-        public_key = pow(g, private_key, p)
+        public_key = pow(g, private_key, DH_PRIME)
 
         return private_key, public_key
 
@@ -256,10 +337,8 @@ class DHEKeyExchange:
         """
         Compute shared secret from peer's public key and own private key
         """
-        p = 0xFFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804F1746C08CA18217C32905E462E36CE3BE39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9DE2BCBF6955817183995497CEA956AE515D2261898FA051015728E5A8AACAA68FFFFFFFFFFFFFFFF
-
         # Compute shared secret: peer_public_key^private_key mod p
-        shared_secret = pow(peer_public_key, private_key, p)
+        shared_secret = pow(peer_public_key, private_key, DH_PRIME)
 
         # Convert to bytes
         byte_length = (shared_secret.bit_length() + 7) // 8
@@ -306,24 +385,18 @@ class ECDHEKeyExchange:
             ImportError: If cryptography library is not available
             ValueError: If curve_id is not supported
         """
-        try:
-            from cryptography.hazmat.primitives.asymmetric import ec
-        except ImportError as e:
-            raise ImportError("cryptography library is required for ECDHE") from e
-
         if curve_id == ECDHEKeyExchange.CURVE_SECP256R1:
             return ec.SECP256R1()
-        elif curve_id == ECDHEKeyExchange.CURVE_SECP384R1:
+        if curve_id == ECDHEKeyExchange.CURVE_SECP384R1:
             return ec.SECP384R1()
-        elif curve_id == ECDHEKeyExchange.CURVE_SECP521R1:
+        if curve_id == ECDHEKeyExchange.CURVE_SECP521R1:
             return ec.SECP521R1()
-        elif curve_id == ECDHEKeyExchange.CURVE_X25519:
+        if curve_id == ECDHEKeyExchange.CURVE_X25519:
             return 'x25519'  # Special case for X25519
-        else:
-            raise ValueError(
-                f"Unsupported curve ID: {curve_id}. "
-                f"Supported: {ECDHEKeyExchange.SUPPORTED_CURVES}"
-            )
+        raise ValueError(
+            f"Unsupported curve ID: {curve_id}. "
+            f"Supported: {ECDHEKeyExchange.SUPPORTED_CURVES}"
+        )
 
     @staticmethod
     def generate_keypair(curve_id: int = 23) -> Tuple[any, bytes]:
@@ -341,33 +414,28 @@ class ECDHEKeyExchange:
             ImportError: If cryptography library is not available
             ValueError: If curve_id is not supported
         """
-        try:
-            from cryptography.hazmat.primitives.asymmetric import ec, x25519
-            from cryptography.hazmat.primitives import serialization
-            from cryptography.hazmat.backends import default_backend
-        except ImportError as e:
-            raise ImportError("cryptography library is required for ECDHE") from e
-
         if curve_id == ECDHEKeyExchange.CURVE_X25519:
             # X25519 curve
             private_key = x25519.X25519PrivateKey.generate()
             public_key_bytes = private_key.public_key().public_bytes(
                 encoding=serialization.Encoding.Raw,
-                format=serialization.PublicFormat.Raw
-            )
-            return private_key, public_key_bytes
-        else:
-            # NIST curves (secp256r1, secp384r1, secp521r1)
-            curve = ECDHEKeyExchange.get_curve(curve_id)
-            private_key = ec.generate_private_key(curve, default_backend())
-            public_key_bytes = private_key.public_key().public_bytes(
-                encoding=serialization.Encoding.X962,
-                format=serialization.PublicFormat.UncompressedPoint
+                format=serialization.PublicFormat.Raw,
             )
             return private_key, public_key_bytes
 
+        # NIST curves (secp256r1, secp384r1, secp521r1)
+        curve = ECDHEKeyExchange.get_curve(curve_id)
+        private_key = ec.generate_private_key(curve, default_backend())
+        public_key_bytes = private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.X962,
+            format=serialization.PublicFormat.UncompressedPoint,
+        )
+        return private_key, public_key_bytes
+
     @staticmethod
-    def compute_shared_secret(private_key, peer_public_key: bytes, curve_id: int = 23) -> bytes:
+    def compute_shared_secret(
+        private_key, peer_public_key: bytes, curve_id: int = 23
+    ) -> bytes:
         """
         Compute ECDH shared secret.
 
@@ -383,24 +451,17 @@ class ECDHEKeyExchange:
             ImportError: If cryptography library is not available
             ValueError: If curve_id is not supported or key exchange fails
         """
-        try:
-            from cryptography.hazmat.primitives.asymmetric import ec, x25519
-        except ImportError as e:
-            raise ImportError("cryptography library is required for ECDHE") from e
-
         if curve_id == ECDHEKeyExchange.CURVE_X25519:
             # X25519 curve
             peer_public = x25519.X25519PublicKey.from_public_bytes(peer_public_key)
-            shared_secret = private_key.exchange(peer_public)
-            return shared_secret
-        else:
-            # NIST curves - load peer public key from uncompressed point
-            curve = ECDHEKeyExchange.get_curve(curve_id)
-            peer_public = ec.EllipticCurvePublicKey.from_encoded_point(
-                curve, peer_public_key
-            )
-            shared_secret = private_key.exchange(ec.ECDH(), peer_public)
-            return shared_secret
+            return private_key.exchange(peer_public)
+
+        # NIST curves - load peer public key from uncompressed point
+        curve = ECDHEKeyExchange.get_curve(curve_id)
+        peer_public = ec.EllipticCurvePublicKey.from_encoded_point(
+            curve, peer_public_key
+        )
+        return private_key.exchange(ec.ECDH(), peer_public)
 
     @staticmethod
     def parse_server_ecdhe_params(data: bytes) -> dict:
@@ -428,7 +489,7 @@ class ECDHEKeyExchange:
             return None
 
         # Named Curve (2 bytes)
-        curve_id = int.from_bytes(data[offset:offset+2], byteorder='big')
+        curve_id = int.from_bytes(data[offset : offset + 2], byteorder='big')
         offset += 2
 
         # Public Key Length (1 byte)
@@ -436,7 +497,7 @@ class ECDHEKeyExchange:
         offset += 1
 
         # Public Key
-        public_key = data[offset:offset+pubkey_len]
+        public_key = data[offset : offset + pubkey_len]
         offset += pubkey_len
 
         debug(f"Parsed ECDHE params: curve_id={curve_id}, pubkey_len={pubkey_len}")
@@ -445,7 +506,7 @@ class ECDHEKeyExchange:
             'curve_type': curve_type,
             'curve_id': curve_id,
             'public_key': public_key,
-            'remaining_offset': offset
+            'remaining_offset': offset,
         }
 
 
@@ -470,13 +531,9 @@ class AESCipher:
                         padding is added manually according to TLS spec).
         """
         try:
-            from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-            from cryptography.hazmat.backends import default_backend
-            from cryptography.hazmat.primitives import padding
-
             if add_padding:
                 # Add PKCS#7 padding
-                padder = padding.PKCS7(128).padder()
+                padder = crypto_padding.PKCS7(128).padder()
                 data_to_encrypt = padder.update(plaintext) + padder.finalize()
             else:
                 # Plaintext must already be padded to block size
@@ -499,7 +556,7 @@ class AESCipher:
                 "Warning: cryptography library not available, using insecure fallback"
             )
             return plaintext
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             debug(f"AES-CBC encryption failed: {e}")
             return plaintext
 
@@ -519,10 +576,6 @@ class AESCipher:
                            where padding is handled manually).
         """
         try:
-            from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-            from cryptography.hazmat.backends import default_backend
-            from cryptography.hazmat.primitives import padding
-
             # Decrypt with AES-CBC
             cipher = Cipher(
                 algorithms.AES(key), modes.CBC(iv), backend=default_backend()
@@ -532,19 +585,19 @@ class AESCipher:
 
             if remove_padding:
                 # Remove PKCS#7 padding
-                unpadder = padding.PKCS7(128).unpadder()
+                unpadder = crypto_padding.PKCS7(128).unpadder()
                 plaintext = unpadder.update(decrypted_data) + unpadder.finalize()
                 return plaintext
-            else:
-                # Return raw decrypted data, caller handles padding
-                return decrypted_data
+
+            # Return raw decrypted data, caller handles padding
+            return decrypted_data
 
         except ImportError:
             debug(
                 "Warning: cryptography library not available, using insecure fallback"
             )
             return ciphertext
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             debug(f"AES-CBC decryption failed: {e}")
             return ciphertext
 
@@ -557,9 +610,6 @@ class AESCipher:
         Returns (ciphertext, auth_tag)
         """
         try:
-            from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-            from cryptography.hazmat.backends import default_backend
-
             # Create AES-GCM cipher
             cipher = Cipher(
                 algorithms.AES(key), modes.GCM(iv), backend=default_backend()
@@ -582,7 +632,7 @@ class AESCipher:
                 "Warning: cryptography library not available, using insecure fallback"
             )
             return plaintext, os.urandom(16)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             debug(f"AES-GCM encryption failed: {e}")
             return plaintext, os.urandom(16)
 
@@ -598,9 +648,6 @@ class AESCipher:
         AES-GCM decryption with authentication verification
         """
         try:
-            from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-            from cryptography.hazmat.backends import default_backend
-
             # Create AES-GCM cipher
             cipher = Cipher(
                 algorithms.AES(key), modes.GCM(iv, auth_tag), backend=default_backend()
@@ -620,7 +667,7 @@ class AESCipher:
                 "Warning: cryptography library not available, using insecure fallback"
             )
             return ciphertext
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             debug(f"AES-GCM decryption failed: {e}")
             return ciphertext
 
@@ -804,16 +851,18 @@ def get_cipher_info(cipher_suite: int) -> dict:
 
 
 # GCM cipher suite identifiers for quick lookup
-GCM_CIPHER_SUITES = frozenset({
-    0x009C,  # TLS_RSA_WITH_AES_128_GCM_SHA256
-    0x009D,  # TLS_RSA_WITH_AES_256_GCM_SHA384
-    0xC02F,  # TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
-    0xC030,  # TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
-    0xC02B,  # TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
-    0xC02C,  # TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
-    0x1301,  # TLS_AES_128_GCM_SHA256 (TLS 1.3)
-    0x1302,  # TLS_AES_256_GCM_SHA384 (TLS 1.3)
-})
+GCM_CIPHER_SUITES = frozenset(
+    {
+        0x009C,  # TLS_RSA_WITH_AES_128_GCM_SHA256
+        0x009D,  # TLS_RSA_WITH_AES_256_GCM_SHA384
+        0xC02F,  # TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+        0xC030,  # TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+        0xC02B,  # TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+        0xC02C,  # TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+        0x1301,  # TLS_AES_128_GCM_SHA256 (TLS 1.3)
+        0x1302,  # TLS_AES_256_GCM_SHA384 (TLS 1.3)
+    }
+)
 
 
 def is_gcm_cipher_suite(cipher_suite: int) -> bool:

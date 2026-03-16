@@ -37,6 +37,7 @@ def default_user_agent(agent: AnyStr = "Ja3Requests"):
 
 
 def make_headers(
+    *,
     keep_alive: bool = None,
     accept_encoding: Union[AnyStr, List[AnyStr]] = None,
     user_agent: AnyStr = None,

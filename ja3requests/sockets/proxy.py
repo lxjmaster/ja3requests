@@ -100,10 +100,9 @@ class ProxySocket(BaseSocket):
         if hasattr(self.context, 'tls_config') and self.context.tls_config:
             # For HTTPS through proxy, we need to do TLS handshake through the tunnel
             return self._send_https_through_proxy()
-        else:
-            # For HTTP through proxy, send directly
-            self.conn.sendall(self.context.message)
-            return self.conn
+        # For HTTP through proxy, send directly
+        self.conn.sendall(self.context.message)
+        return self.conn
 
     def _send_https_through_proxy(self):
         """
@@ -121,10 +120,13 @@ class ProxySocket(BaseSocket):
         """
         Create an HTTPS socket that works through the proxy tunnel
         """
-        from ja3requests.sockets.https import HttpsSocket
+        from ja3requests.sockets.https import HttpsSocket  # pylint: disable=import-outside-toplevel
+        from ja3requests.protocol.tls import TLS  # pylint: disable=import-outside-toplevel
 
         # Create a proxy-wrapped context that uses the tunnel connection
         class TunnelContext:
+            """Context wrapper that routes through a proxy tunnel connection."""
+
             def __init__(self, original_context, tunnel_conn):
                 self.original_context = original_context
                 self.tunnel_conn = tunnel_conn
@@ -137,6 +139,8 @@ class ProxySocket(BaseSocket):
 
         # Create an HTTPS socket that uses the tunnel connection
         class TunnelHttpsSocket(HttpsSocket):
+            """HTTPS socket that performs TLS handshake through a proxy tunnel."""
+
             def __init__(self, context, tunnel_conn):
                 super().__init__(context)
                 self.tunnel_conn = tunnel_conn
@@ -146,8 +150,6 @@ class ProxySocket(BaseSocket):
                 self.conn = self.tunnel_conn
 
                 # Now perform TLS handshake through the tunnel
-                from ja3requests.protocol.tls import TLS
-
                 tls = TLS(self.conn)
 
                 # Set up TLS configuration
@@ -160,7 +162,7 @@ class ProxySocket(BaseSocket):
 
                 if not handshake_success:
                     self.conn.close()
-                    raise Exception("TLS handshake failed through proxy tunnel")
+                    raise ConnectionError("TLS handshake failed through proxy tunnel")
 
                 # Store TLS instance
                 self.tls = tls

@@ -11,8 +11,6 @@ import warnings
 class TLSSecurityWarning(UserWarning):
     """Warning for TLS security issues"""
 
-    pass
-
 
 def warn_insecure_implementation():
     """Warn about insecure TLS implementation"""

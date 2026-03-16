@@ -1,3 +1,5 @@
+"""TLS ClientKeyExchange handshake message layer."""
+
 import struct
 from ja3requests.protocol.tls.layers import HandShake
 
@@ -69,7 +71,7 @@ class ClientKeyExchange(HandShake):
             return self._exchange_keys
 
         # For DHE key exchange
-        elif self._cipher_suite in [
+        if self._cipher_suite in [
             b'\x00\x33',
             b'\x00\x39',
             b'\x00\x67',
@@ -81,9 +83,9 @@ class ClientKeyExchange(HandShake):
             self._exchange_keys = dh_Yc
             return self._exchange_keys
 
-        else:
-            raise ValueError(f"Unsupported cipher suite: {self._cipher_suite}")
+        raise ValueError(f"Unsupported cipher suite: {self._cipher_suite}")
 
     @property
     def exchange_keys(self) -> bytes:
+        """Return the exchange keys data."""
         return self._exchange_keys
