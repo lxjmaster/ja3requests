@@ -3,10 +3,22 @@ Ja3Requests.sockets.https
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
 This module of HTTPS Socket.
-"""
+"""  # pylint: disable=too-many-lines
+
+import hashlib
+import hmac
+import os
+import socket
+import time
+import traceback
+
+import requests as requests_lib
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from ja3requests.base import BaseSocket
 from ja3requests.protocol.tls import TLS
+from ja3requests.protocol.tls.crypto import AESCipher
 from ja3requests.protocol.tls.debug import debug
 
 
@@ -54,7 +66,9 @@ class HttpsSocket(BaseSocket):
 
         if not handshake_success:
             self.conn.close()
-            raise Exception("TLS handshake failed - server rejected the connection")
+            raise ConnectionError(
+                "TLS handshake failed - server rejected the connection"
+            )
 
         self.tls = tls
         self._reused = False
@@ -96,12 +110,14 @@ class HttpsSocket(BaseSocket):
         try:
             if self.conn:
                 self.conn.close()
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             pass
         self.conn = None
         self.tls = None
 
-    def send(self):
+    def send(
+        self,
+    ):  # pylint: disable=too-many-return-statements,too-many-branches,too-many-statements,too-many-nested-blocks,broad-exception-caught
         """
         Send HTTP message over TLS connection
         :return:
@@ -110,8 +126,6 @@ class HttpsSocket(BaseSocket):
             # Send encrypted HTTP request over established TLS connection
             try:
                 # Give the server some time to process our Finished message
-                import time
-
                 time.sleep(0.5)
 
                 # Check if connection is still alive after handshake
@@ -126,7 +140,7 @@ class HttpsSocket(BaseSocket):
                     debug("HTTP request sent successfully")
 
                     # Try multiple times to receive response in case server is slow
-                    for attempt in range(3):
+                    for attempt in range(3):  # pylint: disable=too-many-nested-blocks
                         try:
                             response_data = self.conn.recv(8192)
                             if response_data:
@@ -166,14 +180,11 @@ class HttpsSocket(BaseSocket):
                                     if decrypted:
                                         return decrypted
                                 break
-                            else:
-                                debug(
-                                    f"No response on attempt {attempt + 1}, retrying..."
-                                )
-                                import time
-
-                                time.sleep(0.2)
-                        except Exception as recv_error:
+                            debug(f"No response on attempt {attempt + 1}, retrying...")
+                            time.sleep(0.2)
+                        except (
+                            Exception
+                        ) as recv_error:  # pylint: disable=broad-exception-caught  # noqa: E501
                             debug(f"Receive attempt {attempt + 1} failed: {recv_error}")
                             if attempt == 2:  # Last attempt
                                 break
@@ -190,17 +201,21 @@ class HttpsSocket(BaseSocket):
                         real_content = self._fetch_real_content_via_http()
                         if real_content:
                             return real_content
-                    except Exception as fallback_error:
+                    except (
+                        Exception
+                    ) as fallback_error:  # pylint: disable=broad-exception-caught  # noqa: E501
                         debug(f"HTTP content fetch failed: {fallback_error}")
 
                     # As final fallback, show that TLS handshake worked
                     return self._create_meaningful_response()
 
-                except Exception as send_error:
+                except (
+                    Exception
+                ) as send_error:  # pylint: disable=broad-exception-caught  # noqa: E501
                     debug(f"Error sending/receiving: {send_error}")
                     return self._create_meaningful_response()
 
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 debug(f"Encrypted communication failed: {e}")
                 # If all else fails, return test response to show TLS handshake worked
                 return self._create_test_response()
@@ -219,6 +234,8 @@ class HttpsSocket(BaseSocket):
 
         # Create a mock connection object that can be used by the response handler
         class MockConnection:
+            """Mock connection for TLS handshake success response."""
+
             def __init__(self):
                 self.response_data = (
                     b"HTTP/1.1 200 OK\r\n"
@@ -232,6 +249,7 @@ class HttpsSocket(BaseSocket):
                 self.closed = False
 
             def recv(self, size):
+                """Receive data from mock response buffer."""
                 if self.closed or self.position >= len(self.response_data):
                     return b""
 
@@ -257,10 +275,9 @@ class HttpsSocket(BaseSocket):
                         line = self.response_data[start:line_end]
                         self.position = line_end
                         return line
-                    else:
-                        # Found \n
-                        line = self.response_data[start : line_end + 1]
-                        self.position = line_end + 1
+                    # Found \n
+                    line = self.response_data[start : line_end + 1]
+                    self.position = line_end + 1
                 else:
                     # Found \r\n
                     line = self.response_data[start : line_end + 2]
@@ -289,17 +306,20 @@ class HttpsSocket(BaseSocket):
 
                 return data
 
-            def makefile(self, mode="rb"):
+            def makefile(self, _mode="rb"):
                 """Create a file-like object for the response data"""
                 return self
 
             def close(self):
+                """Close the mock connection."""
                 self.closed = True
 
-        debug("✅ TLS handshake completed - returning success response")
+        debug("TLS handshake completed - returning success response")
         return MockConnection()
 
-    def _handle_encrypted_response(self):
+    def _handle_encrypted_response(
+        self,
+    ):  # pylint: disable=too-many-branches,too-many-nested-blocks
         """
         Handle encrypted TLS response from server
         Read and decrypt TLS application data records
@@ -315,7 +335,7 @@ class HttpsSocket(BaseSocket):
                     break
 
                 record_type = header[0]
-                tls_version = header[1:3]
+                _tls_version = header[1:3]
                 record_length = int.from_bytes(header[3:5], byteorder='big')
 
                 debug(
@@ -365,11 +385,11 @@ class HttpsSocket(BaseSocket):
             # Create a mock connection with the decrypted HTTP response
             if http_response_data:
                 return self._create_response_connection(http_response_data)
-            else:
-                debug("No HTTP response data received")
-                return self._create_test_response()
 
-        except Exception as e:
+            debug("No HTTP response data received")
+            return self._create_test_response()
+
+        except Exception as e:  # pylint: disable=broad-exception-caught
             debug(f"Error handling encrypted response: {e}")
             return self._create_test_response()
 
@@ -390,11 +410,11 @@ class HttpsSocket(BaseSocket):
             return self._decrypt_application_data_gcm(encrypted_data)
         return self._decrypt_application_data_cbc(encrypted_data)
 
-    def _decrypt_application_data_gcm(self, encrypted_data):
+    def _decrypt_application_data_gcm(
+        self, encrypted_data
+    ):  # pylint: disable=too-many-locals
         """Decrypt TLS application data using AES-GCM"""
         try:
-            from ja3requests.protocol.tls.crypto import AESCipher
-
             # GCM record format: explicit_nonce (8) + ciphertext + auth_tag (16)
             if len(encrypted_data) < 24:  # 8 + 16 minimum
                 debug("Encrypted data too short for GCM")
@@ -432,24 +452,20 @@ class HttpsSocket(BaseSocket):
                 ciphertext, server_write_key, nonce, auth_tag, aad
             )
 
-            self.tls._server_seq_num += 1
+            self.tls._server_seq_num += 1  # pylint: disable=protected-access
             debug(f"GCM decrypted {len(plaintext)} bytes")
             return plaintext
 
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             debug(f"GCM decryption failed: {e}")
-            import traceback
-
             traceback.print_exc()
             return None
 
-    def _decrypt_application_data_cbc(self, encrypted_data):
+    def _decrypt_application_data_cbc(
+        self, encrypted_data
+    ):  # pylint: disable=too-many-return-statements,too-many-locals
         """Decrypt TLS application data using AES-CBC with HMAC"""
         try:
-            from ja3requests.protocol.tls.crypto import AESCipher
-            import hmac
-            import hashlib
-
             # Extract explicit IV (first 16 bytes) and ciphertext
             if len(encrypted_data) < 16:
                 debug("Encrypted data too short for IV")
@@ -512,23 +528,21 @@ class HttpsSocket(BaseSocket):
             ).digest()
 
             if received_mac != expected_mac:
-                debug(f"MAC verification failed!")
+                debug("MAC verification failed!")
                 debug(f"Expected: {expected_mac.hex()}", level=2)
                 debug(f"Received: {received_mac.hex()}", level=2)
                 # Still return plaintext for debugging, but log the error
             else:
-                debug(f"MAC verification successful")
+                debug("MAC verification successful")
 
             # Increment server sequence number
-            self.tls._server_seq_num += 1
+            self.tls._server_seq_num += 1  # pylint: disable=protected-access
 
             debug(f"Successfully decrypted {len(plaintext)} bytes")
             return plaintext
 
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             debug(f"Decryption failed: {e}")
-            import traceback
-
             traceback.print_exc()  # Keep traceback for debugging
             return None
 
@@ -539,7 +553,7 @@ class HttpsSocket(BaseSocket):
             for line in headers_str.split('\r\n'):
                 if line.lower().startswith('content-length:'):
                     return int(line.split(':', 1)[1].strip())
-        except:
+        except (ValueError, UnicodeDecodeError):
             pass
         return None
 
@@ -547,12 +561,15 @@ class HttpsSocket(BaseSocket):
         """Create a mock connection with real HTTP response data"""
 
         class RealResponseConnection:
+            """Mock connection wrapping real HTTP response data."""
+
             def __init__(self, data):
                 self.response_data = data
                 self.position = 0
                 self.closed = False
 
             def recv(self, size):
+                """Receive data from response buffer."""
                 if self.closed or self.position >= len(self.response_data):
                     return b""
                 end_pos = min(self.position + size, len(self.response_data))
@@ -561,6 +578,7 @@ class HttpsSocket(BaseSocket):
                 return chunk
 
             def readline(self, max_size=None):
+                """Read a line from the response data."""
                 if self.closed or self.position >= len(self.response_data):
                     return b""
                 start = self.position
@@ -572,9 +590,8 @@ class HttpsSocket(BaseSocket):
                         line = self.response_data[start:line_end]
                         self.position = line_end
                         return line
-                    else:
-                        line = self.response_data[start : line_end + 1]
-                        self.position = line_end + 1
+                    line = self.response_data[start : line_end + 1]
+                    self.position = line_end + 1
                 else:
                     line = self.response_data[start : line_end + 2]
                     self.position = line_end + 2
@@ -584,6 +601,7 @@ class HttpsSocket(BaseSocket):
                 return line
 
             def read(self, size=-1):
+                """Read data from the response."""
                 if self.closed or self.position >= len(self.response_data):
                     return b""
                 if size == -1:
@@ -595,14 +613,16 @@ class HttpsSocket(BaseSocket):
                     self.position = end_pos
                 return data
 
-            def makefile(self, mode="rb"):
+            def makefile(self, _mode="rb"):
+                """Create a file-like object for the response data."""
                 return self
 
             def close(self):
+                """Close the connection."""
                 self.closed = True
 
         debug(
-            f"✅ Created response connection with {len(http_data)} bytes of real HTTP data"
+            f"Created response connection with {len(http_data)} bytes of real HTTP data"
         )
         return RealResponseConnection(http_data)
 
@@ -660,13 +680,13 @@ class HttpsSocket(BaseSocket):
                     f"Successfully decrypted HTTP response: {len(http_response_data)} bytes"
                 )
                 return self._create_response_connection(http_response_data)
-            else:
-                debug(
-                    f"No valid HTTP data decrypted, got: {http_response_data[:100] if http_response_data else b''}"
-                )
-                return self._create_test_response()
 
-        except Exception as e:
+            debug(
+                f"No valid HTTP data decrypted, got: {http_response_data[:100] if http_response_data else b''}"
+            )
+            return self._create_test_response()
+
+        except Exception as e:  # pylint: disable=broad-exception-caught
             debug(f"Error handling encrypted response data: {e}")
             return self._create_test_response()
 
@@ -692,7 +712,7 @@ class HttpsSocket(BaseSocket):
     </style>
 </head>
 <body>
-    <h1 class="success">✅ TLS Connection Successfully Established!</h1>
+    <h1 class="success">TLS Connection Successfully Established!</h1>
     <div class="details">
         <h3 class="info">Connection Details:</h3>
         <ul>
@@ -735,12 +755,15 @@ Server: ja3requests-tls/1.0\r
         )
 
         class TLSResponseConnection:
+            """Mock connection wrapping TLS response data."""
+
             def __init__(self, data):
                 self.response_data = data
                 self.position = 0
                 self.closed = False
 
             def recv(self, size):
+                """Receive data from response buffer."""
                 if self.closed or self.position >= len(self.response_data):
                     return b""
                 end_pos = min(self.position + size, len(self.response_data))
@@ -749,6 +772,7 @@ Server: ja3requests-tls/1.0\r
                 return chunk
 
             def readline(self, max_size=None):
+                """Read a line from the response data."""
                 if self.closed or self.position >= len(self.response_data):
                     return b""
                 start = self.position
@@ -760,9 +784,8 @@ Server: ja3requests-tls/1.0\r
                         line = self.response_data[start:line_end]
                         self.position = line_end
                         return line
-                    else:
-                        line = self.response_data[start : line_end + 1]
-                        self.position = line_end + 1
+                    line = self.response_data[start : line_end + 1]
+                    self.position = line_end + 1
                 else:
                     line = self.response_data[start : line_end + 2]
                     self.position = line_end + 2
@@ -772,6 +795,7 @@ Server: ja3requests-tls/1.0\r
                 return line
 
             def read(self, size=-1):
+                """Read data from the response."""
                 if self.closed or self.position >= len(self.response_data):
                     return b""
                 if size == -1:
@@ -783,21 +807,21 @@ Server: ja3requests-tls/1.0\r
                     self.position = end_pos
                 return data
 
-            def makefile(self, mode="rb"):
+            def makefile(self, _mode="rb"):
+                """Create a file-like object for the response data."""
                 return self
 
             def close(self):
+                """Close the connection."""
                 self.closed = True
 
-        debug(f"✅ Created meaningful TLS response with connection details")
+        debug("Created meaningful TLS response with connection details")
         return TLSResponseConnection(response_data)
 
-    def _fetch_real_content_via_http(self):
+    def _fetch_real_content_via_http(self):  # pylint: disable=too-many-nested-blocks
         """
         Fetch real content via HTTP since TLS handshake succeeded but encrypted communication failed
         """
-        import socket
-
         # Get the server hostname
         hostname = getattr(self.tls, '_server_name', self.context.destination_address)
 
@@ -812,9 +836,7 @@ Server: ja3requests-tls/1.0\r
 
                     if scheme == 'https':
                         # Use requests library for HTTPS since it handles TLS properly
-                        import requests
-
-                        response = requests.get(
+                        response = requests_lib.get(
                             f"https://{hostname}/", timeout=10, verify=False
                         )
 
@@ -828,44 +850,43 @@ Server: ja3requests-tls/1.0\r
                         response_data = response_data.encode('utf-8') + response.content
 
                         debug(
-                            f"✅ Successfully fetched real content via HTTPS: {len(response_data)} bytes"
+                            f"Successfully fetched real content via HTTPS: {len(response_data)} bytes"
                         )
                         return self._create_response_connection(response_data)
 
-                    else:
-                        # HTTP fallback
-                        http_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                        http_sock.settimeout(10)
-                        http_sock.connect((hostname, port))
+                    # HTTP fallback
+                    http_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    http_sock.settimeout(10)
+                    http_sock.connect((hostname, port))
 
-                        # Send HTTP request
-                        http_request = f"GET / HTTP/1.1\r\nHost: {hostname}\r\nConnection: close\r\nUser-Agent: ja3requests/1.0\r\n\r\n"
-                        http_sock.sendall(http_request.encode('utf-8'))
+                    # Send HTTP request
+                    http_request = f"GET / HTTP/1.1\r\nHost: {hostname}\r\nConnection: close\r\nUser-Agent: ja3requests/1.0\r\n\r\n"
+                    http_sock.sendall(http_request.encode('utf-8'))
 
-                        # Receive response
-                        response_data = b""
-                        while True:
-                            chunk = http_sock.recv(4096)
-                            if not chunk:
-                                break
-                            response_data += chunk
+                    # Receive response
+                    response_data = b""
+                    while True:
+                        chunk = http_sock.recv(4096)
+                        if not chunk:
+                            break
+                        response_data += chunk
 
-                        http_sock.close()
+                    http_sock.close()
 
-                        if response_data and response_data.startswith(b'HTTP/'):
-                            debug(
-                                f"✅ Successfully fetched real content via HTTP: {len(response_data)} bytes"
-                            )
-                            return self._create_response_connection(response_data)
+                    if response_data and response_data.startswith(b'HTTP/'):
+                        debug(
+                            f"Successfully fetched real content via HTTP: {len(response_data)} bytes"
+                        )
+                        return self._create_response_connection(response_data)
 
-                except Exception as e:
+                except Exception as e:  # pylint: disable=broad-exception-caught
                     debug(f"{scheme.upper()} attempt failed: {e}")
                     continue
 
             # If both failed, return None to use fallback
             return None
 
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             debug(f"Error fetching real content: {e}")
             return None
 
@@ -879,8 +900,7 @@ Server: ja3requests-tls/1.0\r
 
     def _encrypt_application_data_gcm(self, data: bytes) -> bytes:
         """Encrypt application data using AES-GCM"""
-        from ja3requests.protocol.tls.crypto import AESCipher
-
+        # pylint: disable=protected-access
         content_type = 0x17  # Application data
         version = b'\x03\x03'  # TLS 1.2
 
@@ -890,7 +910,10 @@ Server: ja3requests-tls/1.0\r
         explicit_nonce = current_seq_num.to_bytes(8, byteorder='big')
 
         # Full nonce = implicit_iv (4) + explicit_nonce (8)
-        nonce = self.tls._client_write_iv + explicit_nonce
+        nonce = (
+            self.tls._client_write_iv  # pylint: disable=protected-access
+            + explicit_nonce
+        )
 
         # Build AAD
         aad = (
@@ -901,9 +924,10 @@ Server: ja3requests-tls/1.0\r
         )
 
         # Encrypt with AES-GCM
-        ciphertext, auth_tag = AESCipher.encrypt_gcm(
-            data, self.tls._client_write_key, nonce, aad
-        )
+        client_write_key = (
+            self.tls._client_write_key
+        )  # pylint: disable=protected-access
+        ciphertext, auth_tag = AESCipher.encrypt_gcm(data, client_write_key, nonce, aad)
 
         # Record data = explicit_nonce + ciphertext + auth_tag
         encrypted_data = explicit_nonce + ciphertext + auth_tag
@@ -915,16 +939,15 @@ Server: ja3requests-tls/1.0\r
             + encrypted_data
         )
 
-        self.tls._client_seq_num += 1
+        self.tls._client_seq_num += 1  # pylint: disable=protected-access
         return record
 
-    def _encrypt_application_data_cbc(self, data: bytes) -> bytes:
+    def _encrypt_application_data_cbc(
+        self, data: bytes
+    ) -> (
+        bytes
+    ):  # pylint: disable=too-many-locals,protected-access,broad-exception-caught
         """Encrypt application data using AES-CBC with HMAC"""
-        from ja3requests.protocol.tls.crypto import AESCipher
-        import hmac
-        import hashlib
-        import os
-
         content_type = 0x17  # Application data
         version = b'\x03\x03'  # TLS 1.2
 
@@ -940,7 +963,10 @@ Server: ja3requests-tls/1.0\r
         )
 
         # Calculate HMAC
-        mac = hmac.new(self.tls._client_write_mac_key, mac_input, hashlib.sha1).digest()
+        client_mac_key = (
+            self.tls._client_write_mac_key
+        )  # pylint: disable=protected-access
+        mac = hmac.new(client_mac_key, mac_input, hashlib.sha1).digest()
 
         # Combine data and MAC
         plaintext = data + mac
@@ -956,21 +982,24 @@ Server: ja3requests-tls/1.0\r
 
         # Encrypt
         try:
-            from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-            from cryptography.hazmat.backends import default_backend
-
+            cbc_write_key = (
+                self.tls._client_write_key
+            )  # pylint: disable=protected-access
             cipher = Cipher(
-                algorithms.AES(self.tls._client_write_key),
+                algorithms.AES(cbc_write_key),
                 modes.CBC(explicit_iv),
                 backend=default_backend(),
             )
             encryptor = cipher.encryptor()
             ciphertext = encryptor.update(padded_plaintext) + encryptor.finalize()
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             debug(f"AES-CBC encryption failed: {e}")
+            cbc_write_key = (
+                self.tls._client_write_key
+            )  # pylint: disable=protected-access
             ciphertext = AESCipher.encrypt_cbc(
                 padded_plaintext,
-                self.tls._client_write_key,
+                cbc_write_key,
                 explicit_iv,
                 add_padding=False,
             )
@@ -984,5 +1013,5 @@ Server: ja3requests-tls/1.0\r
             + encrypted_data
         )
 
-        self.tls._client_seq_num += 1
+        self.tls._client_seq_num += 1  # pylint: disable=protected-access
         return record

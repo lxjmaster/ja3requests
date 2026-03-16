@@ -1,5 +1,6 @@
+"""TLS Finished handshake message layer."""
+
 import struct
-import hashlib
 from ja3requests.protocol.tls.layers import HandShake
 
 
@@ -67,4 +68,5 @@ class Finished(HandShake):
 
     @property
     def verify_data(self) -> bytes:
+        """Return the verify data."""
         return self._verify_data

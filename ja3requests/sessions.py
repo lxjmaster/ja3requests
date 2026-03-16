@@ -10,7 +10,7 @@ import sys
 import time
 from io import IOBase
 from http.cookiejar import CookieJar
-from typing import AnyStr, Any, Dict, ByteString, Union, List, Tuple, Optional
+from typing import AnyStr, Any, Dict, Union, List, Tuple, Optional
 from ja3requests.base import BaseSession
 from ja3requests.response import Response
 from ja3requests.const import DEFAULT_REDIRECT_LIMIT
@@ -37,12 +37,14 @@ class Session(BaseSession):
         self,
         tls_config: TlsConfig = None,
         pool: Optional[ConnectionPool] = None,
-        use_pooling: bool = True
+        use_pooling: bool = True,
     ):
         super().__init__()
         self._tls_config = tls_config or TlsConfig()
         self._use_pooling = use_pooling
-        self._pool = pool if pool is not None else (get_default_pool() if use_pooling else None)
+        self._pool = (
+            pool if pool is not None else (get_default_pool() if use_pooling else None)
+        )
 
     @property
     def tls_config(self) -> TlsConfig:
@@ -80,7 +82,8 @@ class Session(BaseSession):
         self,
         method: AnyStr,
         url: AnyStr,
-        params: Union[Dict[AnyStr, Any], ByteString] = None,
+        *,
+        params: Union[Dict[AnyStr, Any], bytes] = None,
         data: Union[
             Dict[Any, Any], List[Tuple[Any, Any]], Tuple[Tuple[Any, Any]], AnyStr
         ] = None,
@@ -176,7 +179,7 @@ class Session(BaseSession):
         kwargs.setdefault("allow_redirects", False)
         return self.request("HEAD", url, **kwargs)
 
-    def post(self, url, data=None, json=None, files=None, headers=None, **kwargs):
+    def post(self, url, *, data=None, json=None, files=None, headers=None, **kwargs):
         """
         Send a POST request.
         :param url:
@@ -251,7 +254,7 @@ class Session(BaseSession):
         :param kwargs:
         :return:
         """
-        from urllib.parse import urljoin, urlparse
+        from urllib.parse import urljoin, urlparse  # pylint: disable=import-outside-toplevel
 
         send_kwargs = kwargs
         # Get the original URL to resolve relative redirects

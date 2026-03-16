@@ -5,9 +5,14 @@ ja3requests.protocol.tls.certificate_verify
 Certificate verification for TLS connections.
 """
 
-import ssl
 from datetime import datetime
 from typing import List, Optional, Tuple
+
+from cryptography import x509
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric import padding, ec, rsa
+from cryptography.x509.oid import ExtensionOID, NameOID
+
 from ja3requests.protocol.tls.debug import debug
 
 # Constants
@@ -16,22 +21,18 @@ CERT_LENGTH_FIELD_SIZE = 3  # Certificate length field is 3 bytes in TLS
 
 class CertificateVerificationError(Exception):
     """Base exception for certificate verification errors"""
-    pass
 
 
 class CertificateExpiredError(CertificateVerificationError):
     """Certificate has expired or is not yet valid"""
-    pass
 
 
 class CertificateHostnameMismatchError(CertificateVerificationError):
     """Certificate hostname does not match the requested hostname"""
-    pass
 
 
 class CertificateChainError(CertificateVerificationError):
     """Certificate chain validation failed"""
-    pass
 
 
 class CertificateVerifier:
@@ -76,19 +77,23 @@ class CertificateVerifier:
         )
         offset = CERT_LENGTH_FIELD_SIZE
 
-        while offset < len(certificate_data) and offset < total_length + CERT_LENGTH_FIELD_SIZE:
+        while (
+            offset < len(certificate_data)
+            and offset < total_length + CERT_LENGTH_FIELD_SIZE
+        ):
             if offset + CERT_LENGTH_FIELD_SIZE > len(certificate_data):
                 break
 
             cert_length = int.from_bytes(
-                certificate_data[offset:offset + CERT_LENGTH_FIELD_SIZE], byteorder='big'
+                certificate_data[offset : offset + CERT_LENGTH_FIELD_SIZE],
+                byteorder='big',
             )
             offset += CERT_LENGTH_FIELD_SIZE
 
             if offset + cert_length > len(certificate_data):
                 break
 
-            cert_der = certificate_data[offset:offset + cert_length]
+            cert_der = certificate_data[offset : offset + cert_length]
             certificates.append(cert_der)
             offset += cert_length
 
@@ -145,18 +150,15 @@ class CertificateVerifier:
         except CertificateVerificationError as e:
             debug(f"Certificate verification failed: {e}")
             return False, str(e)
-        except Exception as e:
+        except (ValueError, TypeError, AttributeError) as e:
             debug(f"Certificate verification error: {e}")
             return False, str(e)
 
     def _load_certificate(self, cert_der: bytes):
         """Load certificate from DER bytes"""
         try:
-            from cryptography import x509
-            from cryptography.hazmat.backends import default_backend
-
             return x509.load_der_x509_certificate(cert_der, default_backend())
-        except Exception as e:
+        except (ValueError, TypeError) as e:
             debug(f"Failed to load certificate: {e}")
             return None
 
@@ -191,9 +193,9 @@ class CertificateVerifier:
 
             debug(f"Certificate valid until {not_after}")
 
-        except CertificateExpiredError:
+        except CertificateExpiredError:  # pylint: disable=try-except-raise
             raise
-        except Exception as e:
+        except (ValueError, TypeError, AttributeError) as e:
             debug(f"Expiration check error: {e}")
             # Don't fail on unexpected errors during date parsing
 
@@ -205,9 +207,6 @@ class CertificateVerifier:
             CertificateHostnameMismatchError: If hostname doesn't match
         """
         try:
-            from cryptography import x509
-            from cryptography.x509.oid import ExtensionOID, NameOID
-
             # Check Subject Alternative Names first (preferred method)
             try:
                 san_ext = cert.extensions.get_extension_for_oid(
@@ -229,18 +228,18 @@ class CertificateVerifier:
                     if self._match_hostname(hostname, attr.value):
                         debug(f"Hostname {hostname} matches CN {attr.value}")
                         return
-            except Exception:
+            except (ValueError, AttributeError):
                 pass
 
             raise CertificateHostnameMismatchError(
                 f"Hostname {hostname} does not match certificate"
             )
 
-        except CertificateHostnameMismatchError:
+        except CertificateHostnameMismatchError:  # pylint: disable=try-except-raise
             raise
-        except Exception as e:
+        except (ValueError, TypeError, AttributeError) as e:
             debug(f"Hostname verification error: {e}")
-            raise CertificateHostnameMismatchError(str(e))
+            raise CertificateHostnameMismatchError(str(e)) from e
 
     def _match_hostname(self, hostname: str, pattern: str) -> bool:
         """
@@ -257,8 +256,7 @@ class CertificateVerifier:
                 hostname_suffix = hostname.split('.', 1)[1]
                 return hostname_suffix == suffix
             return False
-        else:
-            return hostname == pattern
+        return hostname == pattern
 
     def _verify_chain(self, certificates: List[bytes]) -> None:
         """
@@ -298,17 +296,19 @@ class CertificateVerifier:
                 # Verify signature
                 try:
                     self._verify_signature(current_cert, issuer_cert)
-                except Exception as e:
+                except (ValueError, TypeError, AttributeError, KeyError) as e:
                     debug(f"Signature verification failed for cert {i}: {e}")
                     # Continue without failing - signature verification is complex
 
-            debug(f"Certificate chain structure verified ({len(loaded_certs)} certificates)")
+            debug(
+                f"Certificate chain structure verified ({len(loaded_certs)} certificates)"
+            )
 
-        except CertificateChainError:
+        except CertificateChainError:  # pylint: disable=try-except-raise
             raise
-        except Exception as e:
+        except (ValueError, TypeError, AttributeError) as e:
             debug(f"Chain verification error: {e}")
-            raise CertificateChainError(f"Chain verification failed: {e}")
+            raise CertificateChainError(f"Chain verification failed: {e}") from e
 
     def _verify_signature(self, cert, issuer_cert) -> None:
         """
@@ -317,9 +317,6 @@ class CertificateVerifier:
         This is a best-effort verification using the cryptography library.
         """
         try:
-            from cryptography.hazmat.primitives import hashes
-            from cryptography.hazmat.primitives.asymmetric import padding, ec, rsa
-
             issuer_public_key = issuer_cert.public_key()
 
             # Get signature algorithm
@@ -339,7 +336,7 @@ class CertificateVerifier:
             else:
                 debug(f"Unknown public key type: {type(issuer_public_key)}")
 
-        except Exception as e:
+        except (ValueError, TypeError, AttributeError) as e:
             debug(f"Signature verification error: {e}")
             # Don't raise - signature verification can fail for various reasons
 
@@ -358,9 +355,6 @@ class CertificateVerifier:
             return {}
 
         try:
-            from cryptography.x509.oid import NameOID, ExtensionOID
-            from cryptography import x509
-
             # Handle different cryptography versions
             try:
                 valid_from = str(cert.not_valid_before_utc)
@@ -379,10 +373,12 @@ class CertificateVerifier:
             }
 
             for attr in cert.subject:
-                info['subject'][attr.oid._name] = attr.value
+                name = attr.oid._name  # pylint: disable=protected-access
+                info['subject'][name] = attr.value
 
             for attr in cert.issuer:
-                info['issuer'][attr.oid._name] = attr.value
+                name = attr.oid._name  # pylint: disable=protected-access
+                info['issuer'][name] = attr.value
 
             try:
                 san_ext = cert.extensions.get_extension_for_oid(
@@ -394,7 +390,7 @@ class CertificateVerifier:
 
             return info
 
-        except Exception as e:
+        except (ValueError, TypeError, AttributeError) as e:
             debug(f"Error getting certificate info: {e}")
             return {}
 

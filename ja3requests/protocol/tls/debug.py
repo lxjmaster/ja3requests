@@ -14,7 +14,7 @@ _debug_level = int(os.environ.get('JA3_DEBUG', '0'))
 
 def set_debug_level(level: int):
     """Set debug level programmatically"""
-    global _debug_level
+    global _debug_level  # pylint: disable=global-statement
     _debug_level = level
 
 

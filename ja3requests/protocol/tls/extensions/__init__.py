@@ -18,10 +18,12 @@ from abc import ABC, abstractmethod
 
 
 class Extension(ABC):
+    """Abstract base class for TLS extensions."""
 
     extension_type = None
     extension_data = b''
 
     @abstractmethod
     def encode(self):
+        """Encode the extension into bytes."""
         raise NotImplementedError("encode method must be implemented by subclass.")

@@ -1,3 +1,5 @@
+"""TLS handshake layer base classes and utilities."""
+
 import os
 import time
 import struct
@@ -34,14 +36,14 @@ class Random:
         return self.bytes()
 
     def bytes(self):
+        """Return the random bytes as a concatenation of unix time and random data."""
         if self.gmt_unix_time and self.random_bytes:
             return self.gmt_unix_time.to_bytes(4, byteorder="big") + self.random_bytes
-        else:
-            return os.urandom(32)
+        return os.urandom(32)
 
     @staticmethod
     def get_unix_time():
-
+        """Return the current UNIX time as a 32-bit integer."""
         current_time_unix = int(time.time())
         current_time_unix_32bit = current_time_unix % (2**32)
 
@@ -247,7 +249,7 @@ class HandShake(ABC):
     @property
     @abstractmethod
     def handshake_type(self) -> bytes:
-
+        """Return the handshake type identifier byte."""
         raise NotImplementedError(
             "handshake_type method must be implemented by subclass."
         )
@@ -367,8 +369,8 @@ class HandShake(ABC):
 
         self._extensions = attr
 
-    def content(self):
-
+    def content(self):  # pylint: disable=too-many-branches
+        """Build the handshake content from all configured fields."""
         content = b""
         if self.version:
             content += self.version

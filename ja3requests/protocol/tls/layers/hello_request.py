@@ -1,8 +1,11 @@
+"""TLS HelloRequest handshake message layer."""
+
 import struct
 from ja3requests.protocol.tls.layers import HandShake
 
 
 class HelloRequest(HandShake):
+    """Represents a TLS HelloRequest message."""
 
     @property
     def handshake_type(self) -> bytes:

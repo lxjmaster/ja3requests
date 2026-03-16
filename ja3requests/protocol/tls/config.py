@@ -5,8 +5,19 @@ ja3requests.protocol.tls.config
 This module provides TLS configuration for customizing TLS handshake parameters.
 """
 
-from typing import List, Optional, Union
-from ja3requests.protocol.tls.cipher_suites.suites import *
+from typing import List, Optional
+
+from ja3requests.protocol.tls.cipher_suites.suites import (
+    EcdheEcdsaWithAes128GcmSha256,
+    EcdheEcdsaWithAes256GcmSha384,
+    EcdheRsaWithAes128CbcSha256,
+    EcdheRsaWithAes128GcmSha256,
+    EcdheRsaWithAes256CbcSha384,
+    EcdheRsaWithAes256GcmSha384,
+    ReservedGrease,
+    RsaWithAes128CbcSha,
+    RsaWithAes256CbcSha,
+)
 
 
 class TlsConfig:
@@ -118,9 +129,9 @@ class TlsConfig:
         return self._signature_algorithms
 
     @signature_algorithms.setter
-    def signature_algorithms(self, algorithms: List[int]):
+    def signature_algorithms(self, sig_algorithms: List[int]):
         """Set signature algorithms"""
-        self._signature_algorithms = algorithms
+        self._signature_algorithms = sig_algorithms
 
     @property
     def compression_methods(self) -> List[int]:
@@ -287,6 +298,7 @@ class TlsConfig:
 
     def create_custom_config(
         self,
+        *,
         tls_version: int = None,
         cipher_suites: List = None,
         supported_groups: List[int] = None,

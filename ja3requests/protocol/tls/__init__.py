@@ -1,5 +1,21 @@
+# pylint: disable=too-many-lines
+"""TLS handshake implementation with JA3 fingerprint customization.
+
+This module provides a custom TLS 1.2 handshake implementation that supports
+both RSA and ECDHE key exchange, allowing JA3 fingerprint configuration.
+"""
+import hashlib
+import hmac
 import os
 import struct
+import time
+import traceback
+
+from cryptography import x509
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
 from ja3requests.protocol.tls.layers import HandShake
 from ja3requests.protocol.tls.debug import debug, debug_hex
 from ja3requests.protocol.tls.layers.client_hello import ClientHello
@@ -17,24 +33,36 @@ from ja3requests.protocol.tls.security_warnings import (
     warn_unencrypted_key_exchange,
     warn_invalid_finished_message,
 )
+from .crypto import (
+    TLSCrypto,
+    RSAKeyExchange,
+    ECDHEKeyExchange,
+    AESCipher,
+    get_cipher_info,
+    is_gcm_cipher_suite,
+)
+from .certificate_verify import CertificateVerifier
 
 # ECDHE Cipher Suite Constants
 # These cipher suites use Elliptic Curve Diffie-Hellman Ephemeral key exchange
-ECDHE_CIPHER_SUITES = frozenset({
-    0xC02F,  # TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
-    0xC030,  # TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
-    0xC013,  # TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA
-    0xC014,  # TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA
-    0xC027,  # TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256
-    0xC028,  # TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384
-    0xC009,  # TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA
-    0xC00A,  # TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA
-    0xC02B,  # TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
-    0xC02C,  # TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
-})
+ECDHE_CIPHER_SUITES = frozenset(
+    {
+        0xC02F,  # TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+        0xC030,  # TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+        0xC013,  # TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA
+        0xC014,  # TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA
+        0xC027,  # TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256
+        0xC028,  # TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384
+        0xC009,  # TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA
+        0xC00A,  # TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA
+        0xC02B,  # TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+        0xC02C,  # TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+    }
+)
 
 
 class TLS:
+    """TLS 1.2 handshake handler with support for custom JA3 fingerprints."""
 
     def __init__(self, conn):
         # Show security warning on first use
@@ -59,6 +87,7 @@ class TLS:
 
     @property
     def tls_version(self) -> bytes:
+        """Return the TLS version bytes, defaulting to TLS 1.2."""
         if not self._tls_version:
             self._tls_version = struct.pack("I", 771)[:2]
         return self._tls_version
@@ -69,6 +98,7 @@ class TLS:
 
     @property
     def body(self) -> HandShake:
+        """Return the ClientHello handshake body, creating it if needed."""
         if self._body is None:
             self._body = ClientHello(
                 self.tls_version,
@@ -160,8 +190,6 @@ class TLS:
             # Step 10: Wait for server's response to our Finished message
             try:
                 # Give server time to process our messages
-                import time
-
                 time.sleep(0.3)
 
                 # Check for server's response with longer timeout
@@ -173,30 +201,31 @@ class TLS:
                     debug("✅ Full TLS handshake completed successfully!")
                     self.conn.settimeout(None)
                     return True
-                else:
-                    # Server might have sent alert or closed connection
-                    debug("Server did not complete handshake as expected")
-                    # For many implementations, this is still considered working
-                    # as long as we can establish the basic handshake protocol
-                    return True
+                # Server might have sent alert or closed connection
+                debug("Server did not complete handshake as expected")
+                # For many implementations, this is still considered working
+                # as long as we can establish the basic handshake protocol
+                return True
 
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 debug(f"Error during handshake completion: {e}")
                 # Even if completion fails, if we got this far, the basic TLS is working
                 return True
             finally:
                 self.conn.settimeout(None)
 
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             debug(f"TLS Handshake failed: {e}")
             return False
 
-    def _parse_server_handshake_messages(self):
+    def _parse_server_handshake_messages(
+        self,
+    ):  # pylint: disable=too-many-branches,too-many-statements,too-many-nested-blocks
         """
         Parse incoming server handshake messages with improved error handling
         """
         buffer = b""
-        received_messages = set()
+        _received_messages = set()
         timeout_count = 0
         max_timeout = 10
 
@@ -222,7 +251,7 @@ class TLS:
                 # Parse TLS records from buffer
                 while len(buffer) >= 5:  # Minimum TLS record header size
                     record_type = buffer[0]
-                    tls_version = buffer[1:3]
+                    _tls_version = buffer[1:3]
 
                     # Ensure we have enough bytes for length
                     if len(buffer) < 5:
@@ -251,7 +280,9 @@ class TLS:
                                 f"Received TLS Alert: level={alert_level}, description={alert_description}"
                             )
                             if alert_level == 2:  # Fatal alert
-                                raise Exception(f"TLS Fatal Alert: {alert_description}")
+                                raise ConnectionError(
+                                    f"TLS Fatal Alert: {alert_description}"
+                                )
 
                     # Check if we've received all expected messages
                     if (
@@ -262,17 +293,16 @@ class TLS:
                         self.conn.settimeout(None)  # Reset timeout
                         return
 
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 if "timed out" in str(e):
                     timeout_count += 1
                     if timeout_count >= max_timeout:
                         debug("Timeout waiting for server handshake messages")
                         break
                     continue
-                else:
-                    debug(f"Error parsing server messages: {e}")
-                    self.conn.settimeout(None)  # Reset timeout
-                    raise e
+                debug(f"Error parsing server messages: {e}")
+                self.conn.settimeout(None)  # Reset timeout
+                raise
 
         self.conn.settimeout(None)  # Reset timeout
 
@@ -337,7 +367,7 @@ class TLS:
         # TLS version (2 bytes)
         if offset + 2 > len(data):
             return
-        server_version = data[offset : offset + 2]
+        _server_version = data[offset : offset + 2]
         offset += 2
 
         # Server random (32 bytes)
@@ -354,7 +384,7 @@ class TLS:
         if session_id_length > 0:
             if offset + session_id_length > len(data):
                 return
-            session_id = data[offset : offset + session_id_length]
+            _session_id = data[offset : offset + session_id_length]
             offset += session_id_length
 
         # Cipher suite (2 bytes)
@@ -368,7 +398,7 @@ class TLS:
 
         # Compression method (1 byte)
         if offset < len(data):
-            compression_method = data[offset]
+            _compression_method = data[offset]
             offset += 1
 
     def _parse_certificate(self, data):
@@ -390,14 +420,12 @@ class TLS:
                 debug("Failed to extract server public key from certificate")
                 warn_no_certificate_verification()
 
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             debug(f"Error parsing certificate: {e}")
             warn_no_certificate_verification()
 
     def _parse_server_key_exchange(self, data):
         """Parse ServerKeyExchange message for ECDHE or DHE key exchange"""
-        from .crypto import ECDHEKeyExchange
-
         # Determine key exchange type based on cipher suite
         cipher_suite = getattr(self, '_selected_cipher_suite', 0)
 
@@ -410,7 +438,9 @@ class TLS:
                 self._ecdhe_curve_id = ecdhe_params['curve_id']
                 self._ecdhe_server_pubkey = ecdhe_params['public_key']
                 debug(f"ECDHE key exchange: curve_id={self._ecdhe_curve_id}")
-                debug(f"Server ECDHE public key length: {len(self._ecdhe_server_pubkey)}")
+                debug(
+                    f"Server ECDHE public key length: {len(self._ecdhe_server_pubkey)}"
+                )
             else:
                 debug("Failed to parse ECDHE parameters")
         else:
@@ -418,11 +448,11 @@ class TLS:
             self._key_exchange_type = 'RSA'
             debug(f"RSA key exchange for cipher suite 0x{cipher_suite:04X}")
 
-    def _parse_certificate_request(self, data):
+    def _parse_certificate_request(self, _data):
         """Parse CertificateRequest message"""
         self._client_cert_requested = True
 
-    def _parse_server_hello_done(self, data):
+    def _parse_server_hello_done(self, _data):
         """Parse ServerHelloDone message"""
         # This message has no content, just set the flag
         self._server_hello_done_received = True
@@ -460,7 +490,9 @@ class TLS:
         self.conn.sendall(finished_message)
         debug("Sent Finished")
 
-    def _wait_for_server_handshake_completion(self):
+    def _wait_for_server_handshake_completion(
+        self,
+    ):  # pylint: disable=too-many-branches,too-many-return-statements,too-many-nested-blocks
         """
         Wait for server's final handshake messages (ChangeCipherSpec + Finished)
         Returns True if server accepts the handshake, False otherwise
@@ -480,7 +512,7 @@ class TLS:
                 else:
                     debug("No response from server after our Finished")
                     return False
-            except Exception as recv_error:
+            except Exception as recv_error:  # pylint: disable=broad-exception-caught
                 debug(f"Error receiving server response: {recv_error}")
                 return False
 
@@ -527,24 +559,21 @@ class TLS:
                                 )
                                 # This is expected with our current implementation
                                 return False
-                            else:
-                                debug(f"Server sent fatal alert: {alert_description}")
-                                return False
-                        else:
-                            debug(f"Server sent warning alert: {alert_description}")
+                            debug(f"Server sent fatal alert: {alert_description}")
+                            return False
+                        debug(f"Server sent warning alert: {alert_description}")
 
                 offset += 5 + record_length
 
             # If we received both messages, handshake is complete
             if received_change_cipher_spec and received_finished:
                 return True
-            else:
-                debug(
-                    f"Incomplete handshake: ChangeCipherSpec={received_change_cipher_spec}, Finished={received_finished}"
-                )
-                return False
+            debug(
+                f"Incomplete handshake: ChangeCipherSpec={received_change_cipher_spec}, Finished={received_finished}"
+            )
+            return False
 
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             debug(f"Failed to wait for server handshake completion: {e}")
             return False
 
@@ -560,16 +589,13 @@ class TLS:
 
     def _build_client_key_exchange(self):
         """Build ClientKeyExchange message with RSA or ECDHE key exchange"""
-        from .crypto import TLSCrypto, RSAKeyExchange, ECDHEKeyExchange
-
         key_exchange_type = getattr(self, '_key_exchange_type', 'RSA')
 
         if key_exchange_type == 'ECDHE':
             # ECDHE key exchange
             return self._build_ecdhe_client_key_exchange()
-        else:
-            # RSA key exchange (default)
-            return self._build_rsa_client_key_exchange()
+        # RSA key exchange (default)
+        return self._build_rsa_client_key_exchange()
 
     def _build_ecdhe_client_key_exchange(self):
         """Build ClientKeyExchange message for ECDHE key exchange.
@@ -578,8 +604,6 @@ class TLS:
             ValueError: If no server ECDHE public key is available
             ImportError: If cryptography library is not available (falls back to RSA)
         """
-        from .crypto import TLSCrypto, ECDHEKeyExchange
-
         curve_id = getattr(self, '_ecdhe_curve_id', 23)  # Default to secp256r1
         server_pubkey = getattr(self, '_ecdhe_server_pubkey', None)
 
@@ -619,7 +643,11 @@ class TLS:
             # Build ClientKeyExchange message for ECDHE
             # Format: length (1 byte) + public_key
             key_exchange_data = bytes([len(public_key)]) + public_key
-            msg = b'\x10' + struct.pack("!I", len(key_exchange_data))[1:] + key_exchange_data
+            msg = (
+                b'\x10'
+                + struct.pack("!I", len(key_exchange_data))[1:]
+                + key_exchange_data
+            )
 
             # Store for handshake hash calculation
             if not hasattr(self, '_handshake_messages'):
@@ -632,16 +660,13 @@ class TLS:
 
         except ImportError as e:
             # Fall back to RSA only if cryptography library is not available
-            debug(f"ECDHE unavailable (missing cryptography library), falling back to RSA: {e}")
+            debug(
+                f"ECDHE unavailable (missing cryptography library), falling back to RSA: {e}"
+            )
             return self._build_rsa_client_key_exchange()
-        except ValueError:
-            # Re-raise ValueError (unsupported curve, etc.)
-            raise
 
     def _build_rsa_client_key_exchange(self):
         """Build ClientKeyExchange message with RSA encryption"""
-        from .crypto import TLSCrypto, RSAKeyExchange
-
         # Generate proper premaster secret
         self._premaster_secret = TLSCrypto.generate_premaster_secret()
 
@@ -652,7 +677,7 @@ class TLS:
                     self._premaster_secret, self._server_public_key
                 )
                 debug("Successfully encrypted premaster secret")
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 debug(f"Failed to encrypt premaster secret: {e}")
                 # Fall back to unencrypted (still insecure but better than random)
                 warn_unencrypted_key_exchange()
@@ -700,8 +725,6 @@ class TLS:
 
     def _build_finished_message(self):
         """Build Finished message with proper verify data"""
-        from .crypto import TLSCrypto
-
         if hasattr(self, '_master_secret') and hasattr(self, '_handshake_messages'):
             # Calculate proper verify data using PRF
             debug(
@@ -713,7 +736,7 @@ class TLS:
                 self._master_secret,
                 self._handshake_messages,
                 is_client=True,
-                cipher_suite=cipher_suite,
+                _cipher_suite=cipher_suite,
             )
             debug(f"Generated verify data: {verify_data.hex()}")
         else:
@@ -746,20 +769,20 @@ class TLS:
                     f"Successfully encrypted Finished message: {len(encrypted_record)} bytes"
                 )
                 return encrypted_record
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 debug(f"Encryption failed, falling back to unencrypted: {e}")
                 # If encryption fails, send unencrypted (for debugging)
                 record = b'\x16\x03\x03' + struct.pack("!H", len(msg)) + msg
                 return record
         else:
-            debug(f"Warning: No encryption keys (is_gcm={is_gcm}, has_key={has_key}, has_iv={has_iv}, has_mac={has_mac})")
+            debug(
+                f"Warning: No encryption keys (is_gcm={is_gcm}, has_key={has_key}, has_iv={has_iv}, has_mac={has_mac})"
+            )
             record = b'\x16\x03\x03' + struct.pack("!H", len(msg)) + msg
             return record
 
     def _generate_session_keys(self):
         """Generate session keys from master secret"""
-        from .crypto import TLSCrypto
-
         if not hasattr(self, '_master_secret'):
             debug("Warning: No master secret available for key generation")
             return
@@ -769,7 +792,6 @@ class TLS:
             self, '_selected_cipher_suite', 0x002F
         )  # Default to AES128-SHA
 
-        from .crypto import get_cipher_info, is_gcm_cipher_suite
         cipher_info = get_cipher_info(cipher_suite)
         is_gcm = is_gcm_cipher_suite(cipher_suite)
 
@@ -818,11 +840,7 @@ class TLS:
         """
         Encrypt a handshake message using TLS record layer encryption
         """
-        from .crypto import AESCipher
-        import hmac
-        import hashlib
-        import os
-
+        # pylint: disable=too-many-locals
         # TLS record header for handshake
         content_type = 0x16  # Handshake
         version = b'\x03\x03'  # TLS 1.2
@@ -904,9 +922,6 @@ class TLS:
         Nonce = implicit_iv (4 bytes from key derivation) + explicit_nonce (8 bytes)
         AAD = seq_num (8) + type (1) + version (2) + length (2)
         """
-        from .crypto import AESCipher
-        import os
-
         content_type = 0x16  # Handshake
         version = b'\x03\x03'  # TLS 1.2
 
@@ -952,11 +967,7 @@ class TLS:
         """
         Encrypt Finished message using AES-CBC with HMAC.
         """
-        from .crypto import AESCipher
-        import hmac
-        import hashlib
-        import os
-
+        # pylint: disable=too-many-locals
         # TLS record parameters
         content_type = 0x16  # Handshake
         version = b'\x03\x03'  # TLS 1.2
@@ -1023,9 +1034,6 @@ class TLS:
 
         # Encrypt using AES-CBC (without additional padding since we already added TLS padding)
         try:
-            from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-            from cryptography.hazmat.backends import default_backend
-
             # Encrypt directly without additional PKCS#7 padding (we already padded manually)
             cipher = Cipher(
                 algorithms.AES(self._client_write_key),
@@ -1034,7 +1042,7 @@ class TLS:
             )
             encryptor = cipher.encryptor()
             ciphertext = encryptor.update(padded_plaintext) + encryptor.finalize()
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             debug(f"AES-CBC encryption failed: {e}")
             # Fallback to AESCipher with add_padding=False since we already added TLS padding
             ciphertext = AESCipher.encrypt_cbc(
@@ -1059,10 +1067,6 @@ class TLS:
     def _extract_server_public_key(self, certificate_data):
         """Extract server's public key from certificate"""
         try:
-            from cryptography import x509
-            from cryptography.hazmat.backends import default_backend
-            from cryptography.hazmat.primitives import serialization
-
             debug(f"Certificate data length: {len(certificate_data)}")
             debug(f"First 20 bytes: {certificate_data[:20].hex()}")
 
@@ -1123,10 +1127,8 @@ class TLS:
                 "Warning: cryptography library not available, cannot extract server public key"
             )
             return None
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             debug(f"Failed to extract server public key: {e}")
-            import traceback
-
             traceback.print_exc()
             return None
 
@@ -1138,8 +1140,6 @@ class TLS:
             certificate_data: Raw certificate data from Certificate message
         """
         try:
-            from .certificate_verify import CertificateVerifier
-
             hostname = getattr(self, '_server_name', None)
             if not hostname:
                 debug("No server name for certificate verification, skipping")
@@ -1166,7 +1166,7 @@ class TLS:
         except ImportError as e:
             debug(f"Certificate verification module not available: {e}")
             self._cert_verified = False
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             debug(f"Certificate verification error: {e}")
             self._cert_verified = False
             self._cert_error = str(e)

@@ -1,3 +1,5 @@
+"""TLS ServerHelloDone handshake message layer."""
+
 import struct
 from ja3requests.protocol.tls.layers import HandShake
 
@@ -6,9 +8,6 @@ class ServerHelloDone(HandShake):
     """
     struct {} ServerHelloDone;
     """
-
-    def __init__(self):
-        super().__init__()
 
     @property
     def handshake_type(self) -> bytes:

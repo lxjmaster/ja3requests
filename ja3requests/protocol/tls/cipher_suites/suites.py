@@ -52,8 +52,11 @@ negotiate these cipher suites.
     CipherSuite  TLS_KRB5_EXPORT_WITH_RC4_40_MD5        = { 0x00,0x2B};
 """
 
-from ja3requests.protocol.tls.cipher_suites import CipherSuite
+# pylint: disable=too-many-lines
+
 import random
+
+from ja3requests.protocol.tls.cipher_suites import CipherSuite
 
 
 class ReservedGrease(CipherSuite):
@@ -114,12 +117,10 @@ class NullWithNullNull(CipherSuite):
         self.version = {1.1, 1.2}
 
 
-"""
-The following CipherSuite definitions require that the server provide
-an RSA certificate that can be used for key exchange.  The server may
-request any signature-capable certificate in the certificate request
-message.
-"""
+# The following CipherSuite definitions require that the server provide
+# an RSA certificate that can be used for key exchange.  The server may
+# request any signature-capable certificate in the certificate request
+# message.
 
 
 class RsaWithNullMd5(CipherSuite):
@@ -326,21 +327,19 @@ class RsaWithAes256CbcSha256(CipherSuite):
         self.version = {1.1}
 
 
-"""
-The following cipher suite definitions are used for server-
-authenticated (and optionally client-authenticated) Diffie-Hellman.
-DH denotes cipher suites in which the server's certificate contains
-the Diffie-Hellman parameters signed by the certificate authority
-(CA).  DHE denotes ephemeral Diffie-Hellman, where the Diffie-Hellman
-parameters are signed by a signature-capable certificate, which has
-been signed by the CA.  The signing algorithm used by the server is
-specified after the DHE component of the CipherSuite name.  The
-server can request any signature-capable certificate from the client
-for client authentication, or it may request a Diffie-Hellman
-certificate.  Any Diffie-Hellman certificate provided by the client
-must use the parameters (group and generator) described by the
-server.
-"""
+# The following cipher suite definitions are used for server-
+# authenticated (and optionally client-authenticated) Diffie-Hellman.
+# DH denotes cipher suites in which the server's certificate contains
+# the Diffie-Hellman parameters signed by the certificate authority
+# (CA).  DHE denotes ephemeral Diffie-Hellman, where the Diffie-Hellman
+# parameters are signed by a signature-capable certificate, which has
+# been signed by the CA.  The signing algorithm used by the server is
+# specified after the DHE component of the CipherSuite name.  The
+# server can request any signature-capable certificate from the client
+# for client authentication, or it may request a Diffie-Hellman
+# certificate.  Any Diffie-Hellman certificate provided by the client
+# must use the parameters (group and generator) described by the
+# server.
 
 
 class DhDssWithDesCbcSha(CipherSuite):
@@ -751,19 +750,17 @@ class DheRsaWithAes256CbcSha256(CipherSuite):
         self.version = {1.1}
 
 
-"""
-The following cipher suites are used for completely anonymous
-Diffie-Hellman communications in which neither party is
-authenticated.  Note that this mode is vulnerable to man-in-the-
-middle attacks.  Using this mode therefore is of limited use: These
-cipher suites MUST NOT be used by TLS 1.2 implementations unless the
-application layer has specifically requested to allow anonymous key
-exchange.  (Anonymous key exchange may sometimes be acceptable, for
-example, to support opportunistic encryption when no set-up for
-authentication is in place, or when TLS is used as part of more
-complex security protocols that have other means to ensure
-authentication.)
-"""
+# The following cipher suites are used for completely anonymous
+# Diffie-Hellman communications in which neither party is
+# authenticated.  Note that this mode is vulnerable to man-in-the-
+# middle attacks.  Using this mode therefore is of limited use: These
+# cipher suites MUST NOT be used by TLS 1.2 implementations unless the
+# application layer has specifically requested to allow anonymous key
+# exchange.  (Anonymous key exchange may sometimes be acceptable, for
+# example, to support opportunistic encryption when no set-up for
+# authentication is in place, or when TLS is used as part of more
+# complex security protocols that have other means to ensure
+# authentication.)
 
 
 class DhAnonWithRc4128Md5(CipherSuite):
@@ -889,95 +886,89 @@ class DhAnonWithAes256CbcSha256(CipherSuite):
 # https://www.rfc-editor.org/rfc/rfc5289.html
 
 
-"""
-Note that using non-anonymous key exchange without actually verifying
-the key exchange is essentially equivalent to anonymous key exchange,
-and the same precautions apply.  While non-anonymous key exchange
-will generally involve a higher computational and communicational
-cost than anonymous key exchange, it may be in the interest of
-interoperability not to disable non-anonymous key exchange when the
-application layer is allowing anonymous key exchange.
-
-Note: The cipher suite values { 0x00, 0x1C } and { 0x00, 0x1D } are
-reserved to avoid collision with Fortezza-based cipher suites in SSL 3.
-"""
+# Note that using non-anonymous key exchange without actually verifying
+# the key exchange is essentially equivalent to anonymous key exchange,
+# and the same precautions apply.  While non-anonymous key exchange
+# will generally involve a higher computational and communicational
+# cost than anonymous key exchange, it may be in the interest of
+# interoperability not to disable non-anonymous key exchange when the
+# application layer is allowing anonymous key exchange.
+#
+# Note: The cipher suite values { 0x00, 0x1C } and { 0x00, 0x1D } are
+# reserved to avoid collision with Fortezza-based cipher suites in SSL 3.
 
 
-"""
-A symmetric cipher suite defines the pair of the AEAD algorithm and
-hash algorithm to be used with HKDF.  Cipher suite names follow the
-naming convention:
-
-    CipherSuite TLS_AEAD_HASH = VALUE;
-    
-    +-----------+------------------------------------------------+
-    | Component | Contents                                       |
-    +-----------+------------------------------------------------+
-    | TLS       | The string "TLS"                               |
-    |           |                                                |
-    | AEAD      | The AEAD algorithm used for record protection  |
-    |           |                                                |
-    | HASH      | The hash algorithm used with HKDF              |
-    |           |                                                |
-    | VALUE     | The two-byte ID assigned for this cipher suite |
-    +-----------+------------------------------------------------+
-
-This specification defines the following cipher suites for use with
-TLS 1.3.
-
-    +------------------------------+-------------+
-    | Description                  | Value       |
-    +------------------------------+-------------+
-    | TLS_AES_128_GCM_SHA256       | {0x13,0x01} |
-    |                              |             |
-    | TLS_AES_256_GCM_SHA384       | {0x13,0x02} |
-    |                              |             |
-    | TLS_CHACHA20_POLY1305_SHA256 | {0x13,0x03} |
-    |                              |             |
-    | TLS_AES_128_CCM_SHA256       | {0x13,0x04} |
-    |                              |             |
-    | TLS_AES_128_CCM_8_SHA256     | {0x13,0x05} |
-    +------------------------------+-------------+
-    
-The corresponding AEAD algorithms AEAD_AES_128_GCM, AEAD_AES_256_GCM,
-and AEAD_AES_128_CCM are defined in [RFC5116](https://datatracker.ietf.org/doc/html/rfc5116).
-AEAD_CHACHA20_POLY1305 is defined in [RFC8439](https://datatracker.ietf.org/doc/html/rfc8439).
-AEAD_AES_128_CCM_8 is defined in [RFC6655](https://datatracker.ietf.org/doc/html/rfc6655).
-The corresponding hash algorithms are defined in [SHS].
-
-[SHS]     Dang, Q., "Secure Hash Standard (SHS)", National Institute
-          of Standards and Technology report,
-          DOI 10.6028/NIST.FIPS.180-4, August 2015.
-
-Although TLS 1.3 uses the same cipher suite space as previous
-versions of TLS, TLS 1.3 cipher suites are defined differently, only
-specifying the symmetric ciphers, and cannot be used for TLS 1.2.
-Similarly, cipher suites for TLS 1.2 and lower cannot be used with
-TLS 1.3.
-
-[CCM]     Dworkin, M., "NIST Special Publication 800-38C: The CCM
-          Mode for Authentication and Confidentiality", U.S.
-          National Institute of Standards and Technology,
-          <http://csrc.nist.gov/publications/nistpubs/800-38C/
-          SP800-38C.pdf>.
-          
-[GCM]     Dworkin, M., "NIST Special Publication 800-38D:
-          Recommendation for Block Cipher Modes of Operation:
-          Galois/Counter Mode (GCM) and GMAC.", U.S. National
-          Institute of Standards and Technology, November 2007,
-          <http://csrc.nist.gov/publications/nistpubs/800-38D/
-          SP-800-38D.pdf>.
-
-[MV04]    McGrew, D. and J. Viega, "The Security and Performance of
-          the Galois/Counter Mode (GCM)", Proceedings of
-          INDOCRYPT '04, December 2004,
-          <http://eprint.iacr.org/2004/193>.
-
-[J02]     Jonsson, J., "On the Security of CTR + CBC-MAC",
-          Proceedings of the 9th Annual Workshop on Selected Areas
-          on Cryptography, 2002, <http://csrc.nist.gov/groups/ST/
-          toolkit/BCM/documents/proposedmodes/ccm/ccm-ad1.pdf>.
-"""
+# A symmetric cipher suite defines the pair of the AEAD algorithm and
+# hash algorithm to be used with HKDF.  Cipher suite names follow the
+# naming convention:
+#
+#     CipherSuite TLS_AEAD_HASH = VALUE;
+#
+#     +-----------+------------------------------------------------+
+#     | Component | Contents                                       |
+#     +-----------+------------------------------------------------+
+#     | TLS       | The string "TLS"                               |
+#     |           |                                                |
+#     | AEAD      | The AEAD algorithm used for record protection  |
+#     |           |                                                |
+#     | HASH      | The hash algorithm used with HKDF              |
+#     |           |                                                |
+#     | VALUE     | The two-byte ID assigned for this cipher suite |
+#     +-----------+------------------------------------------------+
+#
+# This specification defines the following cipher suites for use with
+# TLS 1.3.
+#
+#     +------------------------------+-------------+
+#     | Description                  | Value       |
+#     +------------------------------+-------------+
+#     | TLS_AES_128_GCM_SHA256       | {0x13,0x01} |
+#     |                              |             |
+#     | TLS_AES_256_GCM_SHA384       | {0x13,0x02} |
+#     |                              |             |
+#     | TLS_CHACHA20_POLY1305_SHA256 | {0x13,0x03} |
+#     |                              |             |
+#     | TLS_AES_128_CCM_SHA256       | {0x13,0x04} |
+#     |                              |             |
+#     | TLS_AES_128_CCM_8_SHA256     | {0x13,0x05} |
+#     +------------------------------+-------------+
+#
+# The corresponding AEAD algorithms AEAD_AES_128_GCM, AEAD_AES_256_GCM,
+# and AEAD_AES_128_CCM are defined in [RFC5116].
+# AEAD_CHACHA20_POLY1305 is defined in [RFC8439].
+# AEAD_AES_128_CCM_8 is defined in [RFC6655].
+# The corresponding hash algorithms are defined in [SHS].
+#
+# [SHS]     Dang, Q., "Secure Hash Standard (SHS)", National Institute
+#           of Standards and Technology report,
+#           DOI 10.6028/NIST.FIPS.180-4, August 2015.
+#
+# Although TLS 1.3 uses the same cipher suite space as previous
+# versions of TLS, TLS 1.3 cipher suites are defined differently, only
+# specifying the symmetric ciphers, and cannot be used for TLS 1.2.
+# Similarly, cipher suites for TLS 1.2 and lower cannot be used with
+# TLS 1.3.
+#
+# [CCM]     Dworkin, M., "NIST Special Publication 800-38C: The CCM
+#           Mode for Authentication and Confidentiality", U.S.
+#           National Institute of Standards and Technology,
+#           <http://csrc.nist.gov/publications/nistpubs/800-38C/SP800-38C.pdf>.
+#
+# [GCM]     Dworkin, M., "NIST Special Publication 800-38D:
+#           Recommendation for Block Cipher Modes of Operation:
+#           Galois/Counter Mode (GCM) and GMAC.", U.S. National
+#           Institute of Standards and Technology, November 2007,
+#           <http://csrc.nist.gov/publications/nistpubs/800-38D/SP-800-38D.pdf>.
+#
+# [MV04]    McGrew, D. and J. Viega, "The Security and Performance of
+#           the Galois/Counter Mode (GCM)", Proceedings of
+#           INDOCRYPT '04, December 2004,
+#           <http://eprint.iacr.org/2004/193>.
+#
+# [J02]     Jonsson, J., "On the Security of CTR + CBC-MAC",
+#           Proceedings of the 9th Annual Workshop on Selected Areas
+#           on Cryptography, 2002, <http://csrc.nist.gov/groups/ST/
+#           toolkit/BCM/documents/proposedmodes/ccm/ccm-ad1.pdf>.
 
 
 class Aes128GcmSha256(CipherSuite):
@@ -1340,7 +1331,8 @@ if __name__ == '__main__':
     from cryptography.hazmat.backends import default_backend
     import os
 
-    def aes_128_gcm_encrypt(plaintext, key):
+    def aes_128_gcm_encrypt(plaintext, key):  # pylint: disable=redefined-outer-name
+        """Encrypt plaintext using AES-128-GCM and return nonce + ciphertext + tag."""
         # 生成随机 nonce（12字节，GCM 标准）
         nonce = os.urandom(12)
 

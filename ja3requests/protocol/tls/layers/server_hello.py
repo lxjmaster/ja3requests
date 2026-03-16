@@ -1,3 +1,5 @@
+"""TLS ServerHello handshake message layer."""
+
 import struct
 from ja3requests.protocol.tls.layers import HandShake
 
@@ -90,10 +92,12 @@ class ServerHello(HandShake):
 
     @property
     def cipher_suite(self) -> bytes:
+        """Return the selected cipher suite."""
         return self._cipher_suite
 
     @property
     def compression_method(self) -> bytes:
+        """Return the selected compression method."""
         return struct.pack("B", self._compression_method)
 
     @property
