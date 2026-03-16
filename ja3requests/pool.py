@@ -17,7 +17,15 @@ from ja3requests.protocol.tls.debug import debug
 class PooledConnection:
     """Wrapper for pooled connections with metadata"""
 
-    def __init__(self, conn: Any, scheme: str, host: str = "", port: int = 0, created_at: float = None):
+    def __init__(
+        self,
+        conn: Any,
+        scheme: str,
+        host: str = "",
+        port: int = 0,
+        *,
+        created_at: float = None,
+    ):
         self.conn = conn
         self.scheme = scheme
         self.host = host
@@ -54,7 +62,7 @@ class PooledConnection:
             finally:
                 self.conn.setblocking(True)
             return True
-        except Exception as e:
+        except (OSError, AttributeError, TypeError) as e:
             debug(f"Connection alive check error: {e}", level=2)
             return False
 
@@ -67,7 +75,7 @@ class PooledConnection:
         try:
             if self.conn:
                 self.conn.close()
-        except Exception as e:
+        except OSError as e:
             debug(f"Error closing connection: {e}", level=2)
         self.conn = None
 
@@ -109,10 +117,7 @@ class ConnectionPool:
         return (host.lower(), port, scheme.lower())
 
     def get_connection(
-        self,
-        host: str,
-        port: int,
-        scheme: str = "https"
+        self, host: str, port: int, scheme: str = "https"
     ) -> Optional[PooledConnection]:
         """
         Get a connection from the pool if available.
@@ -160,8 +165,9 @@ class ConnectionPool:
         port: int,
         scheme: str,
         conn: Any,
+        *,
         tls: Any = None,
-        pooled_conn: Optional['PooledConnection'] = None
+        pooled_conn: Optional['PooledConnection'] = None,
     ) -> bool:
         """
         Return a connection to the pool for reuse.
@@ -193,11 +199,15 @@ class ConnectionPool:
 
             # Check pool limits for new connections
             if self._total_connections >= self._max_pool_size:
-                debug(f"Pool full ({self._total_connections}/{self._max_pool_size}), rejecting connection")
+                debug(
+                    f"Pool full ({self._total_connections}/{self._max_pool_size}), rejecting connection"
+                )
                 return False
 
             if len(pool) >= self._max_per_host:
-                debug(f"Host pool full ({len(pool)}/{self._max_per_host}), rejecting connection")
+                debug(
+                    f"Host pool full ({len(pool)}/{self._max_per_host}), rejecting connection"
+                )
                 return False
 
             # Create new pooled connection wrapper
@@ -259,7 +269,7 @@ class ConnectionPool:
                 "pools": len(self._pools),
                 "max_per_host": self._max_per_host,
                 "idle_timeout": self._idle_timeout,
-                "hosts": {}
+                "hosts": {},
             }
 
             for key, pool in self._pools.items():
@@ -286,7 +296,7 @@ _pool_lock = threading.Lock()
 
 def get_default_pool() -> ConnectionPool:
     """Get or create the default connection pool"""
-    global _default_pool
+    global _default_pool  # pylint: disable=global-statement
 
     with _pool_lock:
         if _default_pool is None:
@@ -296,7 +306,7 @@ def get_default_pool() -> ConnectionPool:
 
 def set_default_pool(pool: ConnectionPool):
     """Set a custom default connection pool"""
-    global _default_pool
+    global _default_pool  # pylint: disable=global-statement
 
     with _pool_lock:
         if _default_pool is not None:

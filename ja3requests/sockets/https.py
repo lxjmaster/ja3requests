@@ -70,11 +70,17 @@ class HttpsSocket(BaseSocket):
             # If this was a reused connection, return the original wrapper
             if self._reused and self._pooled_conn:
                 success = self._pool.put_connection(
-                    host, port, "https", self.conn, self.tls,
-                    pooled_conn=self._pooled_conn
+                    host,
+                    port,
+                    "https",
+                    self.conn,
+                    tls=self.tls,
+                    pooled_conn=self._pooled_conn,
                 )
             else:
-                success = self._pool.put_connection(host, port, "https", self.conn, self.tls)
+                success = self._pool.put_connection(
+                    host, port, "https", self.conn, tls=self.tls
+                )
 
             if success:
                 debug(f"Returned connection to pool: {host}:{port}")
@@ -127,7 +133,10 @@ class HttpsSocket(BaseSocket):
                                 debug(
                                     f"Received raw response: {len(response_data)} bytes"
                                 )
-                                debug(f"First 50 bytes: {response_data[:50].hex()}", level=2)
+                                debug(
+                                    f"First 50 bytes: {response_data[:50].hex()}",
+                                    level=2,
+                                )
 
                                 # Check if it's encrypted TLS application data
                                 if len(response_data) >= 5 and response_data[0] == 0x17:
@@ -430,6 +439,7 @@ class HttpsSocket(BaseSocket):
         except Exception as e:
             debug(f"GCM decryption failed: {e}")
             import traceback
+
             traceback.print_exc()
             return None
 
@@ -497,7 +507,9 @@ class HttpsSocket(BaseSocket):
                 + plaintext
             )
 
-            expected_mac = hmac.new(server_write_mac_key, mac_input, hashlib.sha1).digest()
+            expected_mac = hmac.new(
+                server_write_mac_key, mac_input, hashlib.sha1
+            ).digest()
 
             if received_mac != expected_mac:
                 debug(f"MAC verification failed!")
@@ -516,6 +528,7 @@ class HttpsSocket(BaseSocket):
         except Exception as e:
             debug(f"Decryption failed: {e}")
             import traceback
+
             traceback.print_exc()  # Keep traceback for debugging
             return None
 
@@ -956,7 +969,10 @@ Server: ja3requests-tls/1.0\r
         except Exception as e:
             debug(f"AES-CBC encryption failed: {e}")
             ciphertext = AESCipher.encrypt_cbc(
-                padded_plaintext, self.tls._client_write_key, explicit_iv, add_padding=False
+                padded_plaintext,
+                self.tls._client_write_key,
+                explicit_iv,
+                add_padding=False,
             )
 
         # Construct TLS record
