@@ -5,7 +5,6 @@ Ja3Requests.base.__requests
 Basic of Request.
 """
 
-
 import os
 from io import IOBase
 from abc import ABC, abstractmethod
@@ -41,6 +40,7 @@ class BaseRequest(ABC):
         self._json = None
         self._proxy = None
         self._timeout = None
+        self._tls_config = None
 
     @property
     def schema(self) -> AnyStr:
@@ -110,14 +110,16 @@ class BaseRequest(ABC):
         if self._url:
             parse = urlparse(self._url)
             self.schema = parse.scheme
-            if self.schema == "https":
-                self.port = 443
 
             if parse.netloc != "" and ":" in parse.netloc:
                 port = parse.netloc.split(":")[-1]
                 self.port = int(port)
             else:
-                self.port = 80
+                # Set default port based on schema
+                if self.schema == "https":
+                    self.port = 443
+                else:
+                    self.port = 80
 
     @property
     def params(self):
@@ -376,6 +378,23 @@ class BaseRequest(ABC):
         """
         self._timeout = attr
 
+    @property
+    def tls_config(self):
+        """
+        Request property tls_config
+        :return:
+        """
+        return self._tls_config
+
+    @tls_config.setter
+    def tls_config(self, attr):
+        """
+        Request property tls_config set
+        :param attr:
+        :return:
+        """
+        self._tls_config = attr
+
     def set_payload(self, **kwargs):
         """
         Set request payload
@@ -406,7 +425,7 @@ class BaseRequest(ABC):
         return self.schema.lower() == "https"
 
     @abstractmethod
-    def send(self):
+    def send(self, *args, **kwargs):
         """
         Request send
         :return:

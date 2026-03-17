@@ -5,7 +5,6 @@ Ja3Requests.response
 This module contains response.
 """
 
-
 import json
 import gzip
 import zlib
@@ -14,7 +13,8 @@ from ja3requests.base import BaseResponse
 from ja3requests.cookies import Ja3RequestsCookieJar
 from ja3requests.utils import add_dict_to_cookiejar
 from ja3requests.const import MAX_LINE, MAX_HEADERS
-from ja3requests.exceptions import InvalidStatusLine, InvalidResponseHeaders, IssueError
+from ja3requests.exceptions import InvalidStatusLine, InvalidResponseHeaders
+from ja3requests.protocol.tls.debug import debug
 
 
 class HTTPResponse(BaseResponse):
@@ -49,7 +49,9 @@ class HTTPResponse(BaseResponse):
 
         if not line:
             raise InvalidStatusLine(
-                f"The remote servers return an invalid response status line: {line!r}"
+                f"The remote server closed the connection without sending a response. "
+                f"This may indicate TLS handshake failure or server rejection of the connection. "
+                f"Status line received: {line!r}"
             )
 
         try:
@@ -94,9 +96,9 @@ class HTTPResponse(BaseResponse):
             raise ValueError("Required headers to parse.")
 
         self.headers = b""
-        for header in headers_list[1:]:
+        for header in headers_list:
             self.headers += header
-            name, value = header.strip().split(b": ")
+            name, value = header.strip().split(b": ", 1)
             headers.setdefault(name.lower(), value)
 
         return headers
@@ -121,16 +123,22 @@ class HTTPResponse(BaseResponse):
         if self._content_length > 0:
             body = self.fp.read(self._content_length)
 
-        if self._content_encoding is not None or self._content_encoding != b"":
-            if self._content_encoding == b"gzip":
-                body = gzip.decompress(body)
-            elif self._content_encoding == b"deflate":
-                try:
-                    body = zlib.decompress(body, -zlib.MAX_WBITS)
-                except zlib.error:
-                    body = zlib.decompress(body)
-            elif self._content_encoding == b"br":
-                body = brotli.decompress(body)
+        if self._content_encoding and self._content_encoding != b"":
+            try:
+                if self._content_encoding == b"gzip":
+                    body = gzip.decompress(body)
+                elif self._content_encoding == b"deflate":
+                    try:
+                        body = zlib.decompress(body, -zlib.MAX_WBITS)
+                    except zlib.error:
+                        body = zlib.decompress(body)
+                elif self._content_encoding == b"br":
+                    body = brotli.decompress(body)
+            except (OSError, zlib.error, brotli.error) as e:
+                debug(
+                    f"Warning: Failed to decompress content with {self._content_encoding}: {e}"
+                )
+                # Return original body if decompression fails
 
         return body
 
@@ -142,14 +150,26 @@ class HTTPResponse(BaseResponse):
                 continue
             if chunked_size == b"0":
                 break
-            size = int(chunked_size, 16)
-            chunked_data += self.fp.read(size)
+            try:
+                size = int(chunked_size, 16)
+                chunked_data += self.fp.read(size)
+                # Read the trailing CRLF after chunk data
+                self.fp.readline(MAX_LINE + 1)
+            except ValueError:
+                # If we can't parse as hex, this might not be chunked encoding
+                # Read the line as regular content and break
+                debug(f"Warning: Expected hex chunk size, got: {chunked_size}")
+                chunked_data += chunked_size + b"\n"
+                # Read remaining content
+                remaining = self.fp.read()
+                chunked_data += remaining
+                break
 
         return chunked_data
 
-    def begin(self):
+    def handle(self):
         """
-        Receive data from remote connection and begin parse message.
+        Receive data from remote connection and handle message.
         :return:
         """
         if self.headers is not None:
@@ -162,12 +182,12 @@ class HTTPResponse(BaseResponse):
         self._content_encoding = headers.get(b"content-encoding", b"")
 
         transfer_encoding = headers.get(b"transfer-encoding", b"")
-        if transfer_encoding == b"chunked":
+        if transfer_encoding and b"chunked" in transfer_encoding.lower():
             self._chunked = True
-        elif transfer_encoding != b"":
-            raise IssueError(
-                "This situation may not be considered yet, please issue it"
-            )
+        elif transfer_encoding and transfer_encoding != b"":
+            # Handle other transfer encodings gracefully
+            debug(f"Warning: Unsupported transfer encoding: {transfer_encoding}")
+            self._chunked = False
 
         self._content_length = int(headers.get(b"content-length", 0))
 
@@ -188,6 +208,10 @@ class HTTPResponse(BaseResponse):
                 headers.append({name.strip(): value.strip()})
 
         return headers
+
+
+class HTTPSResponse(HTTPResponse):
+    """An HTTPS response from socket connection."""
 
 
 class Response(BaseResponse):

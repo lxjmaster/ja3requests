@@ -5,7 +5,6 @@ Ja3Requests.requests.request
 This module of Request.
 """
 
-
 import os
 import warnings
 from io import IOBase
@@ -32,6 +31,7 @@ class Request:
         self,
         method: AnyStr,
         url: AnyStr,
+        *,
         params: Union[
             Dict[AnyStr, Any],
             List[Tuple[Any, Any]],
@@ -46,6 +46,7 @@ class Request:
         json: Dict[AnyStr, AnyStr] = None,
         proxies: Dict[AnyStr, AnyStr] = None,
         timeout: float = None,
+        tls_config=None,
     ):
         self.method = method
         self.url = url
@@ -58,6 +59,7 @@ class Request:
         self.json = json
         self.proxies = proxies
         self.timeout = timeout
+        self.tls_config = tls_config
 
     def __repr__(self):
         return f"<Request [{self.method}]>"
@@ -107,8 +109,9 @@ class Request:
                 cookies=cookies,
                 auth=auth,
                 json=_json,
-                proxies=proxies,
+                proxy=proxies,
                 timeout=self.timeout,
+                tls_config=self.tls_config,
             )
             return req
 

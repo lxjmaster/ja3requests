@@ -5,7 +5,6 @@ Ja3Requests.requests.http
 This module of HTTP Request.
 """
 
-
 from ja3requests.base import BaseRequest
 from ja3requests.contexts.context import HTTPContext
 from ja3requests.sockets.http import HttpSocket
@@ -25,20 +24,23 @@ class HttpRequest(BaseRequest):
         self.port = DEFAULT_HTTP_PORT
 
     @staticmethod
-    def create_connection(context: HTTPContext):
+    def create_connection(context: HTTPContext, pool=None):
         """
         create a new connection by context
         :param context:
+        :param pool: Connection pool for reuse
         :return:
         """
         if context.proxy:
             sock = ProxySocket(context)
         else:
-            sock = HttpSocket(context)
+            sock = HttpSocket(context, pool=pool)
 
         return sock.new_conn()
 
-    def send(self):
+    def send(self, **kwargs):
+        pool = kwargs.pop('pool', None)
+
         context = HTTPContext()
         context.set_payload(
             method=self.method,
@@ -52,9 +54,13 @@ class HttpRequest(BaseRequest):
             proxy=self.proxy,
             cookies=self.cookies,
         )
-        sock = self.create_connection(context)
+        sock = self.create_connection(context, pool=pool)
         sock.send()
         response = HTTPResponse(sock.conn)
-        response.begin()
+        response.handle()
+
+        # Return connection to pool if available
+        if pool and hasattr(sock, 'return_to_pool'):
+            sock.return_to_pool()
 
         return response

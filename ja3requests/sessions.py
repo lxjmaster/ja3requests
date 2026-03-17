@@ -5,17 +5,20 @@ Ja3Requests.sessions
 This module provides a Session object to manage and persist settings across
 ja3Requests.
 """
+
 import sys
 import time
 from io import IOBase
 from http.cookiejar import CookieJar
-from typing import AnyStr, Any, Dict, ByteString, Union, List, Tuple
+from typing import AnyStr, Any, Dict, Union, List, Tuple, Optional
 from ja3requests.base import BaseSession
 from ja3requests.response import Response
 from ja3requests.const import DEFAULT_REDIRECT_LIMIT
 from ja3requests.base import BaseRequest
 from ja3requests.requests.request import Request
 from ja3requests.exceptions import MaxRetriedException
+from ja3requests.protocol.tls.config import TlsConfig
+from ja3requests.pool import ConnectionPool, get_default_pool
 
 # Preferred clock, based on which one is more accurate on a given system.
 if sys.platform == "win32":
@@ -30,11 +33,57 @@ class Session(BaseSession):
     Provides cookie persistence, connection-pooling, and configuration.
     """
 
+    def __init__(
+        self,
+        tls_config: TlsConfig = None,
+        pool: Optional[ConnectionPool] = None,
+        use_pooling: bool = True,
+    ):
+        super().__init__()
+        self._tls_config = tls_config or TlsConfig()
+        self._use_pooling = use_pooling
+        self._pool = (
+            pool if pool is not None else (get_default_pool() if use_pooling else None)
+        )
+
+    @property
+    def tls_config(self) -> TlsConfig:
+        """Get TLS configuration"""
+        return self._tls_config
+
+    @tls_config.setter
+    def tls_config(self, config: TlsConfig):
+        """Set TLS configuration"""
+        self._tls_config = config
+
+    @property
+    def pool(self) -> Optional[ConnectionPool]:
+        """Get connection pool"""
+        return self._pool
+
+    @pool.setter
+    def pool(self, pool: Optional[ConnectionPool]):
+        """Set connection pool"""
+        self._pool = pool
+
+    def close(self):
+        """Close the session and all pooled connections"""
+        if self._pool and self._pool is not get_default_pool():
+            self._pool.close_all()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+        return False
+
     def request(
         self,
         method: AnyStr,
         url: AnyStr,
-        params: Union[Dict[AnyStr, Any], ByteString] = None,
+        *,
+        params: Union[Dict[AnyStr, Any], bytes] = None,
         data: Union[
             Dict[Any, Any], List[Tuple[Any, Any]], Tuple[Tuple[Any, Any]], AnyStr
         ] = None,
@@ -72,6 +121,7 @@ class Session(BaseSession):
             auth=auth,
             json=json,
             proxies=proxies,
+            tls_config=self._tls_config,
         )
 
         kwargs.setdefault("timeout", None)
@@ -91,8 +141,22 @@ class Session(BaseSession):
         :param kwargs:
         :return:
         """
-
-        return self.request("GET", url, params=params, headers=headers, **kwargs)
+        # Extract tls_config from kwargs if provided
+        tls_config = kwargs.pop('tls_config', None)
+        if tls_config:
+            # Use the provided tls_config for this request
+            original_config = self._tls_config
+            self._tls_config = tls_config
+            try:
+                result = self.request(
+                    "GET", url, params=params, headers=headers, **kwargs
+                )
+                return result
+            finally:
+                # Restore original config
+                self._tls_config = original_config
+        else:
+            return self.request("GET", url, params=params, headers=headers, **kwargs)
 
     def options(self, url, **kwargs):
         """
@@ -115,7 +179,7 @@ class Session(BaseSession):
         kwargs.setdefault("allow_redirects", False)
         return self.request("HEAD", url, **kwargs)
 
-    def post(self, url, data=None, json=None, files=None, headers=None, **kwargs):
+    def post(self, url, *, data=None, json=None, files=None, headers=None, **kwargs):
         """
         Send a POST request.
         :param url:
@@ -170,7 +234,10 @@ class Session(BaseSession):
         if not isinstance(request, BaseRequest):
             raise ValueError("You can only send HttpRequest/HttpsRequest.")
 
-        rep = request.send()
+        # Pass connection pool to request
+        kwargs['pool'] = self._pool
+
+        rep = request.send(**kwargs)
         response = Response(request, rep)
         allow_redirects = kwargs.get("allow_redirects", True)
         if allow_redirects and response.is_redirected:
@@ -187,20 +254,34 @@ class Session(BaseSession):
         :param kwargs:
         :return:
         """
+        from urllib.parse import urljoin, urlparse  # pylint: disable=import-outside-toplevel
+
         send_kwargs = kwargs
+        # Get the original URL to resolve relative redirects
+        original_url = self.Request.url
 
         for _ in range(DEFAULT_REDIRECT_LIMIT):
+            # Handle relative URLs by joining with the original URL
+            if not urlparse(url).scheme:
+                url = urljoin(original_url, url)
+
             req = Request(
                 method="GET",
                 url=url,
                 headers=self.Request.headers,
                 cookies=self.Request.cookies,
                 proxies=self.Request.proxies,
+                tls_config=self._tls_config,
             ).request()
 
             response = self.send(req, **send_kwargs)
             if 400 <= response.status_code or response.status_code < 300:
                 break
+
+            # Update URL for next redirect and original_url for relative resolution
+            if response.is_redirected and response.location:
+                original_url = url
+                url = response.location
         else:
             raise MaxRetriedException("Too many redirects")
 

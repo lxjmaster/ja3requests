@@ -11,6 +11,8 @@ disable = [
     "too-many-public-methods",
     "too-many-instance-attributes",
     "attribute-defined-outside-init",
+    "duplicate-code",
+    "fixme",
 #    "too-many-return-statements",
 #    "broad-exception-caught",
 #    "no-member",
