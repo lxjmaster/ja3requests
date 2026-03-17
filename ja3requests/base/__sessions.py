@@ -5,7 +5,6 @@ Ja3Requests.base.__sessions
 Basic of Session.
 """
 
-
 from ja3requests.const import DEFAULT_REDIRECT_LIMIT
 from ja3requests.cookies import Ja3RequestsCookieJar, CookieJar
 from ja3requests.utils import dict_from_cookie_string, add_dict_to_cookiejar
