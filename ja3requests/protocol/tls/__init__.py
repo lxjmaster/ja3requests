@@ -16,6 +16,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
+from ja3requests.exceptions import TLSEncryptionError, TLSHandshakeError, TLSKeyError
 from ja3requests.protocol.tls.layers import HandShake
 from ja3requests.protocol.tls.debug import debug, debug_hex
 from ja3requests.protocol.tls.layers.client_hello import ClientHello
@@ -201,16 +202,7 @@ class TLS:
                     debug("✅ Full TLS handshake completed successfully!")
                     self.conn.settimeout(None)
                     return True
-                # Server might have sent alert or closed connection
-                debug("Server did not complete handshake as expected")
-                # For many implementations, this is still considered working
-                # as long as we can establish the basic handshake protocol
-                return True
-
-            except Exception as e:  # pylint: disable=broad-exception-caught
-                debug(f"Error during handshake completion: {e}")
-                # Even if completion fails, if we got this far, the basic TLS is working
-                return True
+                raise TLSHandshakeError("Server did not complete handshake")
             finally:
                 self.conn.settimeout(None)
 
@@ -628,14 +620,14 @@ class TLS:
             debug(f"Computed ECDHE shared secret: {len(self._premaster_secret)} bytes")
 
             # Generate master secret
-            if hasattr(self, '_server_random') and self._server_random:
-                self._master_secret = TLSCrypto.generate_master_secret(
-                    self._premaster_secret, self._client_random, self._server_random
+            if not (hasattr(self, '_server_random') and self._server_random):
+                raise TLSHandshakeError(
+                    "No server random available for master secret generation"
                 )
-                debug(f"Generated master secret: {len(self._master_secret)} bytes")
-            else:
-                debug("Warning: No server random, using fallback master secret")
-                self._master_secret = os.urandom(48)
+            self._master_secret = TLSCrypto.generate_master_secret(
+                self._premaster_secret, self._client_random, self._server_random
+            )
+            debug(f"Generated master secret: {len(self._master_secret)} bytes")
 
             # Generate session keys
             self._generate_session_keys()
@@ -670,39 +662,28 @@ class TLS:
         # Generate proper premaster secret
         self._premaster_secret = TLSCrypto.generate_premaster_secret()
 
-        # Encrypt with server's public key if available
-        if hasattr(self, '_server_public_key') and self._server_public_key:
-            try:
-                encrypted_premaster = RSAKeyExchange.encrypt_premaster_secret(
-                    self._premaster_secret, self._server_public_key
-                )
-                debug("Successfully encrypted premaster secret")
-            except Exception as e:  # pylint: disable=broad-exception-caught
-                debug(f"Failed to encrypt premaster secret: {e}")
-                # Fall back to unencrypted (still insecure but better than random)
-                warn_unencrypted_key_exchange()
-                encrypted_premaster = self._premaster_secret
-        else:
-            debug(
-                "Warning: No server public key available, using unencrypted premaster secret"
+        # Encrypt with server's public key
+        if not (hasattr(self, '_server_public_key') and self._server_public_key):
+            raise TLSKeyError("No server public key available for RSA key exchange")
+        try:
+            encrypted_premaster = RSAKeyExchange.encrypt_premaster_secret(
+                self._premaster_secret, self._server_public_key
             )
-            warn_unencrypted_key_exchange()
-            encrypted_premaster = self._premaster_secret
+            debug("Successfully encrypted premaster secret")
+        except Exception as e:
+            raise TLSEncryptionError(f"Failed to encrypt premaster secret: {e}") from e
 
         # Generate master secret
-        if hasattr(self, '_server_random') and self._server_random:
-            self._master_secret = TLSCrypto.generate_master_secret(
-                self._premaster_secret, self._client_random, self._server_random
+        if not (hasattr(self, '_server_random') and self._server_random):
+            raise TLSHandshakeError(
+                "No server random available for master secret generation"
             )
-            debug(
-                f"Generated master secret from premaster: {len(self._master_secret)} bytes"
-            )
-        else:
-            debug(
-                "Warning: No server random available, cannot generate proper master secret"
-            )
-            # Use a fallback master secret (insecure)
-            self._master_secret = os.urandom(48)
+        self._master_secret = TLSCrypto.generate_master_secret(
+            self._premaster_secret, self._client_random, self._server_random
+        )
+        debug(
+            f"Generated master secret from premaster: {len(self._master_secret)} bytes"
+        )
 
         # Generate session keys
         self._generate_session_keys()
@@ -725,26 +706,25 @@ class TLS:
 
     def _build_finished_message(self):
         """Build Finished message with proper verify data"""
-        if hasattr(self, '_master_secret') and hasattr(self, '_handshake_messages'):
-            # Calculate proper verify data using PRF
-            debug(
-                f"Handshake messages for verify data: {len(self._handshake_messages)} bytes"
+        if not (
+            hasattr(self, '_master_secret') and hasattr(self, '_handshake_messages')
+        ):
+            raise TLSHandshakeError(
+                "Cannot build Finished: missing master secret or handshake messages"
             )
-            debug(f"Handshake messages hex: {self._handshake_messages.hex()}")
-            cipher_suite = getattr(self, '_selected_cipher_suite', 0x002F)
-            verify_data = TLSCrypto.compute_verify_data(
-                self._master_secret,
-                self._handshake_messages,
-                is_client=True,
-                _cipher_suite=cipher_suite,
-            )
-            debug(f"Generated verify data: {verify_data.hex()}")
-        else:
-            debug(
-                "Warning: Missing master secret or handshake messages, using random verify data"
-            )
-            warn_invalid_finished_message()
-            verify_data = os.urandom(12)
+        # Calculate proper verify data using PRF
+        debug(
+            f"Handshake messages for verify data: {len(self._handshake_messages)} bytes"
+        )
+        debug(f"Handshake messages hex: {self._handshake_messages.hex()}")
+        cipher_suite = getattr(self, '_selected_cipher_suite', 0x002F)
+        verify_data = TLSCrypto.compute_verify_data(
+            self._master_secret,
+            self._handshake_messages,
+            is_client=True,
+            _cipher_suite=cipher_suite,
+        )
+        debug(f"Generated verify data: {verify_data.hex()}")
 
         msg = b'\x14' + struct.pack("!I", len(verify_data))[1:] + verify_data
 
@@ -761,25 +741,19 @@ class TLS:
 
         can_encrypt = has_key and (is_gcm and has_iv or not is_gcm and has_mac)
 
-        if can_encrypt:
-            try:
-                # Use proper TLS record layer encryption
-                encrypted_record = self._encrypt_finished_message(msg)
-                debug(
-                    f"Successfully encrypted Finished message: {len(encrypted_record)} bytes"
-                )
-                return encrypted_record
-            except Exception as e:  # pylint: disable=broad-exception-caught
-                debug(f"Encryption failed, falling back to unencrypted: {e}")
-                # If encryption fails, send unencrypted (for debugging)
-                record = b'\x16\x03\x03' + struct.pack("!H", len(msg)) + msg
-                return record
-        else:
+        if not can_encrypt:
+            raise TLSKeyError("Cannot encrypt Finished: encryption keys not available")
+        try:
+            # Use proper TLS record layer encryption
+            encrypted_record = self._encrypt_finished_message(msg)
             debug(
-                f"Warning: No encryption keys (is_gcm={is_gcm}, has_key={has_key}, has_iv={has_iv}, has_mac={has_mac})"
+                f"Successfully encrypted Finished message: {len(encrypted_record)} bytes"
             )
-            record = b'\x16\x03\x03' + struct.pack("!H", len(msg)) + msg
-            return record
+            return encrypted_record
+        except (TLSEncryptionError, TLSKeyError):
+            raise
+        except Exception as e:
+            raise TLSEncryptionError(f"Failed to encrypt Finished message: {e}") from e
 
     def _generate_session_keys(self):
         """Generate session keys from master secret"""
@@ -811,17 +785,16 @@ class TLS:
         self._is_gcm = is_gcm
 
         # Generate key block
-        if hasattr(self, '_server_random') and self._server_random:
-            key_block = TLSCrypto.generate_key_block(
-                self._master_secret,
-                self._client_random,
-                self._server_random,
-                key_block_length,
+        if not (hasattr(self, '_server_random') and self._server_random):
+            raise TLSHandshakeError(
+                "Cannot generate session keys: server random not available"
             )
-        else:
-            debug("Warning: No server random for key generation, using fallback")
-            # Fallback key block (insecure)
-            key_block = os.urandom(key_block_length)
+        key_block = TLSCrypto.generate_key_block(
+            self._master_secret,
+            self._client_random,
+            self._server_random,
+            key_block_length,
+        )
 
         # Derive individual keys
         keys = TLSCrypto.derive_keys(key_block, cipher_suite)
@@ -1033,21 +1006,14 @@ class TLS:
         explicit_iv = os.urandom(16)
 
         # Encrypt using AES-CBC (without additional padding since we already added TLS padding)
-        try:
-            # Encrypt directly without additional PKCS#7 padding (we already padded manually)
-            cipher = Cipher(
-                algorithms.AES(self._client_write_key),
-                modes.CBC(explicit_iv),
-                backend=default_backend(),
-            )
-            encryptor = cipher.encryptor()
-            ciphertext = encryptor.update(padded_plaintext) + encryptor.finalize()
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            debug(f"AES-CBC encryption failed: {e}")
-            # Fallback to AESCipher with add_padding=False since we already added TLS padding
-            ciphertext = AESCipher.encrypt_cbc(
-                padded_plaintext, self._client_write_key, explicit_iv, add_padding=False
-            )
+        # Encrypt directly without additional PKCS#7 padding (we already padded manually)
+        cipher = Cipher(
+            algorithms.AES(self._client_write_key),
+            modes.CBC(explicit_iv),
+            backend=default_backend(),
+        )
+        encryptor = cipher.encryptor()
+        ciphertext = encryptor.update(padded_plaintext) + encryptor.finalize()
 
         # Construct TLS record: type + version + length + explicit_iv + ciphertext
         encrypted_data = explicit_iv + ciphertext

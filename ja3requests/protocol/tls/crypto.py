@@ -15,6 +15,7 @@ from cryptography.hazmat.primitives.asymmetric import ec, x25519, padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 
+from ja3requests.exceptions import TLSEncryptionError, TLSDecryptionError
 from ja3requests.protocol.tls.debug import debug
 
 # Common DH prime parameter (RFC 2409 / RFC 3526 MODP group)
@@ -299,15 +300,10 @@ class RSAKeyExchange:
             # Encrypt the premaster secret using RSA PKCS#1 v1.5 padding
             encrypted = public_key.encrypt(premaster_secret, padding.PKCS1v15())
             return encrypted
-        except ImportError:
-            # Fallback if cryptography library not available
-            debug(
-                "Warning: cryptography library not available, using insecure fallback"
-            )
-            return premaster_secret
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            debug(f"RSA encryption failed: {e}")
-            return premaster_secret
+        except Exception as e:
+            raise TLSEncryptionError(
+                f"RSA encryption of premaster secret failed: {e}"
+            ) from e
 
 
 class DHEKeyExchange:
@@ -551,14 +547,8 @@ class AESCipher:
             ciphertext = encryptor.update(data_to_encrypt) + encryptor.finalize()
 
             return ciphertext
-        except ImportError:
-            debug(
-                "Warning: cryptography library not available, using insecure fallback"
-            )
-            return plaintext
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            debug(f"AES-CBC encryption failed: {e}")
-            return plaintext
+        except Exception as e:
+            raise TLSEncryptionError(f"AES-CBC encryption failed: {e}") from e
 
     @staticmethod
     def decrypt_cbc(
@@ -592,14 +582,8 @@ class AESCipher:
             # Return raw decrypted data, caller handles padding
             return decrypted_data
 
-        except ImportError:
-            debug(
-                "Warning: cryptography library not available, using insecure fallback"
-            )
-            return ciphertext
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            debug(f"AES-CBC decryption failed: {e}")
-            return ciphertext
+        except Exception as e:
+            raise TLSDecryptionError(f"AES-CBC decryption failed: {e}") from e
 
     @staticmethod
     def encrypt_gcm(
@@ -627,14 +611,8 @@ class AESCipher:
             auth_tag = encryptor.tag
 
             return ciphertext, auth_tag
-        except ImportError:
-            debug(
-                "Warning: cryptography library not available, using insecure fallback"
-            )
-            return plaintext, os.urandom(16)
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            debug(f"AES-GCM encryption failed: {e}")
-            return plaintext, os.urandom(16)
+        except Exception as e:
+            raise TLSEncryptionError(f"AES-GCM encryption failed: {e}") from e
 
     @staticmethod
     def decrypt_gcm(
@@ -662,14 +640,8 @@ class AESCipher:
             plaintext = decryptor.update(ciphertext) + decryptor.finalize()
 
             return plaintext
-        except ImportError:
-            debug(
-                "Warning: cryptography library not available, using insecure fallback"
-            )
-            return ciphertext
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            debug(f"AES-GCM decryption failed: {e}")
-            return ciphertext
+        except Exception as e:
+            raise TLSDecryptionError(f"AES-GCM decryption failed: {e}") from e
 
 
 def get_cipher_info(cipher_suite: int) -> dict:
