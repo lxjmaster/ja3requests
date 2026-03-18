@@ -10,6 +10,13 @@ import struct
 import hmac
 import hashlib
 from typing import Tuple
+
+from ja3requests.exceptions import (
+    TLSEncryptionError,
+    TLSDecryptionError,
+    TLSMACVerificationError,
+    TLSKeyError,
+)
 from .crypto import AESCipher
 from .debug import debug
 
@@ -57,9 +64,9 @@ class TLSRecordLayer:
         :return: TLS record with encrypted data
         """
         if not self.client_write_key or not self.client_write_mac_key:
-            # If no encryption keys, send as plaintext (fallback)
-            record_header = struct.pack('!BBBH', content_type, 3, 3, len(data))
-            return record_header + data
+            raise TLSKeyError(
+                "Cannot encrypt: client write key or MAC key not available"
+            )
 
         try:
             # Calculate MAC
@@ -96,10 +103,7 @@ class TLSRecordLayer:
             return record_header + encrypted_data
 
         except (ValueError, OSError) as e:
-            debug(f"Encryption failed: {e}, sending as plaintext")
-            # Fallback to plaintext
-            record_header = struct.pack('!BBBH', content_type, 3, 3, len(data))
-            return record_header + data
+            raise TLSEncryptionError(f"Record layer encryption failed: {e}") from e
 
     def decrypt_application_data(self, record_data: bytes) -> Tuple[bytes, int]:
         """
@@ -118,8 +122,9 @@ class TLSRecordLayer:
         encrypted_data = record_data[5 : 5 + length]
 
         if not self.server_write_key or not self.server_write_mac_key:
-            # No decryption keys, treat as plaintext
-            return encrypted_data, content_type
+            raise TLSKeyError(
+                "Cannot decrypt: server write key or MAC key not available"
+            )
 
         try:
             # Decrypt with AES-CBC (first 16 bytes are IV)
@@ -152,14 +157,15 @@ class TLSRecordLayer:
             ).digest()
 
             if plaintext_with_mac[-mac_length:] != expected_mac:
-                debug("Warning: MAC verification failed")
+                raise TLSMACVerificationError(
+                    "MAC verification failed: record may have been tampered with"
+                )
 
             self.server_seq_num += 1
             return data, content_type
 
         except (ValueError, OSError) as e:
-            debug(f"Decryption failed: {e}, treating as plaintext")
-            return encrypted_data, content_type
+            raise TLSDecryptionError(f"Record layer decryption failed: {e}") from e
 
 
 class TLSSocket:

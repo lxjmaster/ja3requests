@@ -81,3 +81,27 @@ class IssueError(ValueError):
     """
     This situation may not be considered yet, please issue it
     """
+
+
+class TLSError(RequestException):
+    """Base exception for all TLS-related errors."""
+
+
+class TLSEncryptionError(TLSError):
+    """Encryption operation failed (AES-CBC, AES-GCM, RSA)."""
+
+
+class TLSDecryptionError(TLSError):
+    """Decryption operation failed (AES-CBC, AES-GCM)."""
+
+
+class TLSMACVerificationError(TLSDecryptionError):
+    """MAC or AEAD authentication tag verification failed."""
+
+
+class TLSHandshakeError(TLSError):
+    """TLS handshake protocol error (missing keys, bad Finished, etc.)."""
+
+
+class TLSKeyError(TLSError):
+    """Missing or invalid encryption keys."""
