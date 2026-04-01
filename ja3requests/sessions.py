@@ -78,7 +78,7 @@ class Session(BaseSession):
         self.close()
         return False
 
-    def request(
+    def request(  # pylint: disable=too-many-locals
         self,
         method: AnyStr,
         url: AnyStr,
@@ -93,6 +93,8 @@ class Session(BaseSession):
         auth: Tuple = None,
         proxies: Dict[AnyStr, AnyStr] = None,
         json: Union[Dict[AnyStr, AnyStr], AnyStr] = None,
+        timeout: Optional[float] = None,
+        verify: bool = False,
         **kwargs
     ):
         """
@@ -104,11 +106,20 @@ class Session(BaseSession):
         :param headers:
         :param cookies:
         :param files:
-        :param auth:
+        :param auth: Tuple of (username, password) for Basic Auth.
         :param proxies:
         :param json:
+        :param timeout: Timeout in seconds for connect and read.
+        :param verify: Whether to verify TLS certificates. Default False.
         :return:
         """
+
+        # Apply verify to TLS config
+        tls_config = self._tls_config
+        if verify != tls_config.verify_cert:
+            tls_config = TlsConfig()
+            tls_config.__dict__.update(self._tls_config.__dict__)
+            tls_config.verify_cert = verify
 
         self.Request = Request(
             method=method,
@@ -121,10 +132,10 @@ class Session(BaseSession):
             auth=auth,
             json=json,
             proxies=proxies,
-            tls_config=self._tls_config,
+            timeout=timeout,
+            tls_config=tls_config,
         )
 
-        kwargs.setdefault("timeout", None)
         kwargs.setdefault("allow_redirects", True)
 
         req = self.Request.request()

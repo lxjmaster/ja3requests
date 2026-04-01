@@ -13,7 +13,7 @@ from ja3requests.base import BaseResponse
 from ja3requests.cookies import Ja3RequestsCookieJar
 from ja3requests.utils import add_dict_to_cookiejar
 from ja3requests.const import MAX_LINE, MAX_HEADERS
-from ja3requests.exceptions import InvalidStatusLine, InvalidResponseHeaders
+from ja3requests.exceptions import InvalidStatusLine, InvalidResponseHeaders, HTTPError
 from ja3requests.protocol.tls.debug import debug
 
 
@@ -322,6 +322,16 @@ class Response(BaseResponse):
         """
 
         return 300 <= self.status_code < 400
+
+    def raise_for_status(self):
+        """
+        Raise an HTTPError if the response status code indicates an error (4xx or 5xx).
+        """
+        if 400 <= self.status_code < 600:
+            raise HTTPError(
+                f"{self.status_code} Error for url: {getattr(self.request, 'url', 'unknown')}",
+                response=self,
+            )
 
     @property
     def location(self):

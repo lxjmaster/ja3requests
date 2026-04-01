@@ -76,8 +76,8 @@ class Request:
         _json = self.__ready_json()
         files = self.__ready_files()
         headers = self.__ready_headers()
+        headers = self.__ready_auth(headers)
         cookies = self.__ready_cookies()
-        auth = self.__ready_auth()
         proxies = self.__read_proxies()
 
         if schema == "http":
@@ -90,7 +90,7 @@ class Request:
                 files=files,
                 headers=headers,
                 cookies=cookies,
-                auth=auth,
+                auth=self.auth,
                 json=_json,
                 proxy=proxies,
                 timeout=self.timeout,
@@ -107,7 +107,7 @@ class Request:
                 files=files,
                 headers=headers,
                 cookies=cookies,
-                auth=auth,
+                auth=self.auth,
                 json=_json,
                 proxy=proxies,
                 timeout=self.timeout,
@@ -266,15 +266,29 @@ class Request:
 
         return cookies
 
-    def __ready_auth(self):
+    def __ready_auth(self, headers):
         """
-        Todo: Ready http authenticator
-        :return:
+        Ready HTTP authentication. Supports Basic Auth tuple (username, password).
+        Returns headers dict with Authorization header added if auth is set.
+        :param headers: Headers dict to modify.
+        :return: headers dict (possibly new if input was None)
         """
-
         auth = self.auth
+        if not auth:
+            return headers
 
-        return auth
+        if isinstance(auth, tuple) and len(auth) == 2:
+            from ja3requests.utils import b  # pylint: disable=import-outside-toplevel
+            from base64 import b64encode  # pylint: disable=import-outside-toplevel
+
+            username, password = auth
+            credentials = b64encode(b(f"{username}:{password}")).decode("utf-8")
+            if headers is None:
+                from ja3requests.utils import default_headers  # pylint: disable=import-outside-toplevel
+                headers = default_headers()
+            headers["Authorization"] = f"Basic {credentials}"
+
+        return headers
 
     def __ready_json(self):
         """
