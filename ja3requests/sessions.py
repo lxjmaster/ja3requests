@@ -6,6 +6,7 @@ This module provides a Session object to manage and persist settings across
 ja3Requests.
 """
 
+import copy
 import sys
 import time
 from io import IOBase
@@ -114,11 +115,10 @@ class Session(BaseSession):
         :return:
         """
 
-        # Apply verify to TLS config
+        # Apply verify to TLS config (deep copy to avoid mutating session config)
         tls_config = self._tls_config
         if verify != tls_config.verify_cert:
-            tls_config = TlsConfig()
-            tls_config.__dict__.update(self._tls_config.__dict__)
+            tls_config = copy.deepcopy(self._tls_config)
             tls_config.verify_cert = verify
 
         self.Request = Request(
