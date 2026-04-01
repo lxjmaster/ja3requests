@@ -25,14 +25,8 @@ from ja3requests.protocol.tls.layers.certificate import Certificate
 from ja3requests.protocol.tls.layers.server_key_exchange import ServerKeyExchange
 from ja3requests.protocol.tls.layers.certificate_request import CertificateRequest
 from ja3requests.protocol.tls.layers.server_hello_done import ServerHelloDone
-from ja3requests.protocol.tls.layers.client_key_exchange import ClientKeyExchange
-from ja3requests.protocol.tls.layers.certificate_verify import CertificateVerify
-from ja3requests.protocol.tls.layers.finished import Finished
 from ja3requests.protocol.tls.security_warnings import (
-    warn_insecure_implementation,
     warn_no_certificate_verification,
-    warn_unencrypted_key_exchange,
-    warn_invalid_finished_message,
 )
 from .crypto import (
     TLSCrypto,
@@ -66,9 +60,6 @@ class TLS:
     """TLS 1.2 handshake handler with support for custom JA3 fingerprints."""
 
     def __init__(self, conn):
-        # Show security warning on first use
-        warn_insecure_implementation()
-
         self._tls_version = None
         self._body = None
         self.conn = conn
