@@ -10,6 +10,9 @@ from .protocol.tls.config import TlsConfig
 from .response import Response
 from .exceptions import (
     RequestException,
+    HTTPError,
+    ConnectionException,
+    Timeout,
     NotAllowedRequestMethod,
     MissingScheme,
     NotAllowedScheme,

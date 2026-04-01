@@ -83,6 +83,18 @@ class IssueError(ValueError):
     """
 
 
+class HTTPError(RequestException):
+    """An HTTP error occurred (4xx/5xx status codes)."""
+
+
+class ConnectionException(RequestException):
+    """A connection error occurred."""
+
+
+class Timeout(RequestException):
+    """The request timed out."""
+
+
 class TLSError(RequestException):
     """Base exception for all TLS-related errors."""
 
