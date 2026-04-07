@@ -124,9 +124,9 @@ class Session(BaseSession):
 
         # Merge session-level cookies with per-request cookies
         merged_cookies = Ja3RequestsCookieJar()
-        if self._cookies:
+        if len(self._cookies) > 0:
             merge_cookies(merged_cookies, self._cookies)
-        if cookies:
+        if cookies is not None:
             merge_cookies(merged_cookies, cookies)
 
         self.Request = Request(
@@ -135,7 +135,7 @@ class Session(BaseSession):
             params=params,
             data=data,
             headers=headers,
-            cookies=merged_cookies if len(merged_cookies) > 0 else cookies,
+            cookies=merged_cookies if len(merged_cookies) > 0 else None,
             files=files,
             auth=auth,
             json=json,
@@ -293,7 +293,7 @@ class Session(BaseSession):
                 method="GET",
                 url=url,
                 headers=self.Request.headers,
-                cookies=self._cookies if len(self._cookies) > 0 else self.Request.cookies,
+                cookies=self._cookies,
                 proxies=self.Request.proxies,
                 tls_config=self._tls_config,
             ).request()
