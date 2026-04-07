@@ -85,6 +85,37 @@ class TestEncodingDetection(unittest.TestCase):
         self.assertEqual(resp.encoding, "shift_jis")
 
 
+class TestEncodingEdgeCases(unittest.TestCase):
+    """Test charset parsing edge cases."""
+
+    def test_empty_charset_value_falls_back(self):
+        """charset= with no value should fall back to utf-8."""
+        resp = make_response(
+            200,
+            headers={"Content-Type": "text/html; charset="},
+            body=b"test",
+        )
+        self.assertEqual(resp.encoding, "utf-8")
+
+    def test_whitespace_around_equals(self):
+        """charset = gbk (spaces around =) should be parsed."""
+        resp = make_response(
+            200,
+            headers={"Content-Type": "text/html; charset = gbk"},
+            body="你好".encode("gbk"),
+        )
+        self.assertEqual(resp.encoding, "gbk")
+
+    def test_no_space_after_semicolon(self):
+        """text/html;charset=utf-8 (no space) should work."""
+        resp = make_response(
+            200,
+            headers={"Content-Type": "text/html;charset=utf-8"},
+            body=b"test",
+        )
+        self.assertEqual(resp.encoding, "utf-8")
+
+
 class TestEncodingOverride(unittest.TestCase):
     """Test manual encoding override."""
 

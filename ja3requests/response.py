@@ -312,13 +312,16 @@ class Response(BaseResponse):
             return self._encoding
 
         content_type = self.headers.get("Content-Type") or self.headers.get("content-type", "")
-        if "charset=" in content_type.lower():
+        if "charset" in content_type.lower():
             # Extract charset value from Content-Type header
             for part in content_type.split(";"):
+                # Normalize: strip whitespace, handle "charset = value" with spaces around =
                 part = part.strip()
-                if part.lower().startswith("charset="):
+                lower_part = part.lower().replace(" ", "")
+                if lower_part.startswith("charset="):
                     charset = part.split("=", 1)[1].strip().strip('"').strip("'")
-                    return charset
+                    if charset:  # Guard against empty "charset="
+                        return charset
 
         return "utf-8"
 
