@@ -224,6 +224,7 @@ class Response(BaseResponse):
         self.request = request
         self.response = response
         self.body = self.response.read_body() if self.response else b""
+        self._encoding = None  # user override
 
     def __repr__(self):
         """
@@ -300,12 +301,42 @@ class Response(BaseResponse):
         return self.body
 
     @property
-    def text(self):
+    def encoding(self):
         """
-        Response Text
+        Response encoding, detected from Content-Type header charset.
+        Can be set manually to override auto-detection.
+        Falls back to 'utf-8' if no charset is found.
         :return:
         """
-        return self.content.decode("utf8")
+        if self._encoding is not None:
+            return self._encoding
+
+        content_type = self.headers.get("Content-Type") or self.headers.get("content-type", "")
+        if "charset=" in content_type.lower():
+            # Extract charset value from Content-Type header
+            for part in content_type.split(";"):
+                part = part.strip()
+                if part.lower().startswith("charset="):
+                    charset = part.split("=", 1)[1].strip().strip('"').strip("'")
+                    return charset
+
+        return "utf-8"
+
+    @encoding.setter
+    def encoding(self, value):
+        """
+        Override the auto-detected encoding.
+        :param value: encoding name (e.g., 'gbk', 'iso-8859-1')
+        """
+        self._encoding = value
+
+    @property
+    def text(self):
+        """
+        Response Text, decoded using the detected or overridden encoding.
+        :return:
+        """
+        return self.content.decode(self.encoding)
 
     def json(self):
         """
