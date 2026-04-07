@@ -19,7 +19,7 @@ class BaseSession:
         self._request = None
         self._response = None
         self._headers = None
-        self._cookies = None
+        self._cookies = Ja3RequestsCookieJar()
         self._auth = None
         self._proxies = None
         self._params = None
