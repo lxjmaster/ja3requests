@@ -132,8 +132,8 @@ class HttpsSocket(BaseSocket):
         try:
             # Brief delay for server to process our Finished message
             time.sleep(0.3)
-            read_timeout = getattr(self.context, 'read_timeout', None) or 15.0
-            self.conn.settimeout(read_timeout)
+            read_timeout = getattr(self.context, 'read_timeout', None)
+            self.conn.settimeout(read_timeout if read_timeout is not None else 15.0)
 
             # Encrypt and send HTTP request
             encrypted_data = self._encrypt_application_data(self.context.message)

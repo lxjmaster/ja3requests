@@ -186,7 +186,7 @@ class TLS:
                 time.sleep(0.3)
 
                 # Check for server's response with longer timeout
-                self.conn.settimeout(self._handshake_timeout or 5.0)
+                self.conn.settimeout(self._handshake_timeout if self._handshake_timeout is not None else 5.0)
 
                 # Try to properly handle server's Change Cipher Spec + Finished
                 success = self._wait_for_server_handshake_completion()
@@ -214,7 +214,7 @@ class TLS:
         max_timeout = 10
 
         # Set socket timeout for receiving
-        recv_timeout = min(self._handshake_timeout, 5.0) if self._handshake_timeout else 1.0
+        recv_timeout = min(self._handshake_timeout, 5.0) if self._handshake_timeout is not None else 1.0
         self.conn.settimeout(recv_timeout)
 
         while True:

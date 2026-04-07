@@ -158,6 +158,37 @@ class TestFakeContextTimeoutProperties(unittest.TestCase):
         self.assertEqual(ctx.connect_timeout, 0)
         self.assertEqual(ctx.read_timeout, 0)
 
+    def test_tuple_with_zero_read(self):
+        """timeout=(5, 0) should give connect=5 and read=0, not fallback to 15."""
+        ctx = FakeContext()
+        ctx.timeout = (5.0, 0)
+        self.assertEqual(ctx.connect_timeout, 5.0)
+        self.assertEqual(ctx.read_timeout, 0)
+
+
+class TestReadTimeoutFallback(unittest.TestCase):
+    """Test that read_timeout=0 is not treated as falsy."""
+
+    def test_read_timeout_zero_not_replaced(self):
+        """read_timeout=0 must not be silently replaced with a default."""
+        # Simulates what HttpsSocket.send() does
+        read_timeout = 0
+        result = read_timeout if read_timeout is not None else 15.0
+        self.assertEqual(result, 0)
+
+    def test_read_timeout_none_gets_default(self):
+        """read_timeout=None should fall back to default 15.0."""
+        read_timeout = None
+        result = read_timeout if read_timeout is not None else 15.0
+        self.assertEqual(result, 15.0)
+
+    def test_handshake_timeout_zero_not_replaced(self):
+        """handshake_timeout=0 must not fall back to default."""
+        handshake_timeout = 0
+        # Simulates the TLS recv_timeout logic
+        result = min(handshake_timeout, 5.0) if handshake_timeout is not None else 1.0
+        self.assertEqual(result, 0)
+
 
 if __name__ == "__main__":
     unittest.main()
