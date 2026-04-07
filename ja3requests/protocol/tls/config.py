@@ -278,7 +278,7 @@ class TlsConfig:
         extensions = "-".join([str(t) for t in ext_types])
 
         # Elliptic Curves (Supported Groups)
-        elliptic_curves = "-".join([str(group) for group in self._supported_groups])
+        elliptic_curves = "-".join([str(group) for group in self._supported_groups]) if self._supported_groups else ""
 
         # Elliptic Curve Point Formats (commonly 0 for uncompressed)
         ec_point_formats = "0"

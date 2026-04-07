@@ -287,5 +287,29 @@ class TestTlsConfigWithExtensions(unittest.TestCase):
         self.assertIn("0", ext_types)   # SNI
 
 
+class TestJA3NoneEdgeCases(unittest.TestCase):
+    """Test get_ja3_string with None values that could crash."""
+
+    def test_ja3_with_none_supported_groups(self):
+        from ja3requests.protocol.tls.config import TlsConfig
+
+        config = TlsConfig()
+        config.supported_groups = None
+        # Should not crash
+        ja3 = config.get_ja3_string()
+        parts = ja3.split(",")
+        self.assertEqual(len(parts), 5)
+        self.assertEqual(parts[3], "")  # empty elliptic curves
+
+    def test_ja3_with_empty_supported_groups(self):
+        from ja3requests.protocol.tls.config import TlsConfig
+
+        config = TlsConfig()
+        config.supported_groups = []
+        ja3 = config.get_ja3_string()
+        parts = ja3.split(",")
+        self.assertEqual(parts[3], "")
+
+
 if __name__ == "__main__":
     unittest.main()
