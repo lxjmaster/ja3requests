@@ -385,7 +385,9 @@ class BaseContext(ABC):
     @property
     def timeout(self):
         """
-        Context property timeout
+        Context property timeout.
+        Can be a single float (used for both connect and read)
+        or a tuple (connect_timeout, read_timeout).
         :return:
         """
         return self._timeout
@@ -398,6 +400,20 @@ class BaseContext(ABC):
         :return:
         """
         self._timeout = attr
+
+    @property
+    def connect_timeout(self):
+        """Extract connect timeout from timeout setting."""
+        if isinstance(self._timeout, tuple):
+            return self._timeout[0]
+        return self._timeout
+
+    @property
+    def read_timeout(self):
+        """Extract read timeout from timeout setting."""
+        if isinstance(self._timeout, tuple):
+            return self._timeout[1] if len(self._timeout) > 1 else self._timeout[0]
+        return self._timeout
 
     @property
     def proxy(self):
