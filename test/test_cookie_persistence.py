@@ -149,6 +149,44 @@ class TestSessionCookieMerge(unittest.TestCase):
         self.assertEqual(merged.get("shared"), "session_value")
 
 
+class TestEmptySessionCookieMerge(unittest.TestCase):
+    """Test merging when session cookie jar is empty."""
+
+    def test_empty_session_still_uses_request_cookies(self):
+        """When session has no cookies, per-request cookies should still be passed."""
+        s = Session(use_pooling=False)
+        self.assertEqual(len(list(s._cookies)), 0)
+
+        request_cookies = {"token": "abc"}
+        merged = Ja3RequestsCookieJar()
+        from ja3requests.cookies import merge_cookies
+        if len(s._cookies) > 0:
+            merge_cookies(merged, s._cookies)
+        if request_cookies is not None:
+            merge_cookies(merged, request_cookies)
+
+        self.assertEqual(merged.get("token"), "abc")
+
+    def test_none_cookies_no_crash(self):
+        """Passing cookies=None should not crash."""
+        s = Session(use_pooling=False)
+        merged = Ja3RequestsCookieJar()
+        from ja3requests.cookies import merge_cookies
+        if len(s._cookies) > 0:
+            merge_cookies(merged, s._cookies)
+        cookies = None
+        if cookies is not None:
+            merge_cookies(merged, cookies)
+        self.assertEqual(len(list(merged)), 0)
+
+    def test_redirect_always_uses_session_cookies(self):
+        """Redirects should always use session._cookies, even when empty."""
+        s = Session(use_pooling=False)
+        # Empty session cookies should be passed as-is (not fall back to Request.cookies)
+        self.assertIsInstance(s._cookies, Ja3RequestsCookieJar)
+        self.assertEqual(len(list(s._cookies)), 0)
+
+
 class TestContextManagerCookies(unittest.TestCase):
     """Test cookies work correctly with context manager."""
 
