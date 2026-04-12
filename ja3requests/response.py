@@ -219,12 +219,18 @@ class Response(BaseResponse):
     <Response [200]>
     """
 
-    def __init__(self, request=None, response=None):
+    def __init__(self, request=None, response=None, stream=False):
         super().__init__()
         self.request = request
         self.response = response
-        self.body = self.response.read_body() if self.response else b""
+        self._stream = stream
         self._encoding = None  # user override
+        self._body = None
+        self._body_consumed = False
+
+        if not stream:
+            self._body = self.response.read_body() if self.response else b""
+            self._body_consumed = True
 
     def __repr__(self):
         """
@@ -293,12 +299,76 @@ class Response(BaseResponse):
         return int(self.response.status_code)
 
     @property
+    def body(self):
+        """Response body bytes. Triggers full read if streaming."""
+        if self._body is None and not self._body_consumed:
+            self._body = self.response.read_body() if self.response else b""
+            self._body_consumed = True
+        return self._body or b""
+
+    @body.setter
+    def body(self, value):
+        self._body = value
+
+    @property
     def content(self):
         """
         Response Content
         :return:
         """
         return self.body
+
+    def iter_content(self, chunk_size=1024):
+        """
+        Yield response body in chunks.
+
+        :param chunk_size: Size of each chunk in bytes.
+        :yield: bytes chunks
+        """
+        if self._body_consumed:
+            # Body already fully read, yield from buffer
+            data = self._body or b""
+            for i in range(0, len(data), chunk_size):
+                yield data[i:i + chunk_size]
+            return
+
+        if not self.response or not self.response.fp:
+            return
+
+        # Read raw body in chunks (before decompression)
+        # For simplicity, read full body then yield chunks
+        # (true streaming through TLS records is complex)
+        self._body = self.response.read_body() if self.response else b""
+        self._body_consumed = True
+        data = self._body
+        for i in range(0, len(data), chunk_size):
+            yield data[i:i + chunk_size]
+
+    def iter_lines(self, chunk_size=512, delimiter=None):
+        """
+        Yield response body line by line.
+
+        :param chunk_size: Size of chunks to read at a time.
+        :param delimiter: Line delimiter (default: newline).
+        :yield: bytes lines
+        """
+        pending = b""
+        for chunk in self.iter_content(chunk_size=chunk_size):
+            pending += chunk
+            sep = delimiter or b"\n"
+            while sep in pending:
+                line, pending = pending.split(sep, 1)
+                yield line
+        if pending:
+            yield pending
+
+    def close(self):
+        """Close the underlying connection and release resources."""
+        if self.response and hasattr(self.response, 'fp') and self.response.fp:
+            try:
+                self.response._close_conn()
+            except (OSError, AttributeError):
+                pass
 
     @property
     def encoding(self):
