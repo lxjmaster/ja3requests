@@ -189,9 +189,10 @@ class HttpsSocket(BaseSocket):
             def h2_recv(n):
                 return self._decrypt_single_record() or b""
 
-            # Get H2 fingerprint settings from session
-            h2_settings = getattr(self.context, '_h2_settings', None)
-            h2_window = getattr(self.context, '_h2_window_update', None)
+            # Get H2 fingerprint settings from TLS config
+            tls_config = getattr(self.context, 'tls_config', None)
+            h2_settings = getattr(tls_config, 'h2_settings', None) if tls_config else None
+            h2_window = getattr(tls_config, 'h2_window_update', None) if tls_config else None
 
             h2 = H2Connection(h2_send, h2_recv, settings=h2_settings)
             h2.initiate(
