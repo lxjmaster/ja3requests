@@ -415,18 +415,35 @@ class BaseContext(ABC):
             return self._timeout[1] if len(self._timeout) > 1 else self._timeout[0]
         return self._timeout
 
+    def _strip_proxy_scheme(self, value):
+        """Strip socks5://, socks4://, http:// scheme prefix from proxy value."""
+        if value and "://" in value:
+            return value.split("://", 1)[1]
+        return value
+
+    @property
+    def proxy_scheme(self):
+        """
+        Get the proxy scheme (socks5, socks4, http, or None).
+        :return:
+        """
+        if self._proxy and "://" in self._proxy:
+            return self._proxy.split("://", 1)[0].lower()
+        return None
+
     @property
     def proxy(self):
         """
-        Context property proxy
+        Context property proxy (host:port without scheme).
         :return:
         """
         proxy = None
         if self._proxy:
-            if "@" in self._proxy:
-                proxy = self._proxy.split("@")[-1]
+            raw = self._strip_proxy_scheme(self._proxy)
+            if "@" in raw:
+                proxy = raw.split("@")[-1]
             else:
-                proxy = self._proxy
+                proxy = raw
 
         return proxy
 
@@ -447,8 +464,9 @@ class BaseContext(ABC):
         """
         proxy_auth = None
         if self._proxy:
-            if "@" in self._proxy:
-                proxy_auth = self._proxy.split("@")[0]
+            raw = self._strip_proxy_scheme(self._proxy)
+            if "@" in raw:
+                proxy_auth = raw.split("@")[0]
 
         return proxy_auth
 
