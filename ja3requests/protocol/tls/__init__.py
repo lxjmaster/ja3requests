@@ -277,6 +277,33 @@ class TLS:
             )
             debug(f"Saved TLS session for {self._server_host}:{self._server_port}")
 
+    def _parse_new_session_ticket(self, data):
+        """
+        Parse NewSessionTicket message (handshake type 4) and cache ticket.
+        TLS 1.2: lifetime(4) + ticket_data
+        """
+        if len(data) < 6:
+            return
+        lifetime = struct.unpack("!I", data[:4])[0]
+        ticket_len = struct.unpack("!H", data[4:6])[0]
+        if len(data) < 6 + ticket_len:
+            return
+        ticket = data[6:6 + ticket_len]
+        debug(f"Received NewSessionTicket: lifetime={lifetime}s, ticket_len={ticket_len}")
+
+        # Store ticket as session ID for resumption
+        if self._session_cache is not None and self._server_host and self._master_secret:
+            cipher = getattr(self, '_selected_cipher_suite', 0)
+            self._session_cache.put(
+                self._server_host,
+                self._server_port or 443,
+                ticket,  # Use ticket as session ID
+                self._master_secret,
+                cipher,
+                tls_version=self._tls_version,
+            )
+            debug(f"Cached session ticket for {self._server_host}")
+
     def _parse_server_handshake_messages(
         self,
     ):  # pylint: disable=too-many-branches,too-many-statements,too-many-nested-blocks

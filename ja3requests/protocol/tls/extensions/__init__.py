@@ -55,7 +55,15 @@ class SNIExtension(Extension):
         self.server_name = server_name
 
     def encode(self):
-        name_bytes = self.server_name.encode('utf-8')
+        # Convert internationalized domain names to Punycode (RFC 5890)
+        name = self.server_name
+        try:
+            name.encode('ascii')
+        except UnicodeEncodeError:
+            # Non-ASCII domain: convert to IDNA/Punycode
+            name = name.encode('idna').decode('ascii')
+
+        name_bytes = name.encode('ascii')
         # ServerNameList: 2 bytes list length
         #   ServerName: 1 byte name type (0 = hostname) + 2 bytes name length + name
         sni_entry = struct.pack("!BH", 0, len(name_bytes)) + name_bytes
