@@ -59,7 +59,7 @@ ECDHE_CIPHER_SUITES = frozenset(
 class TLS:
     """TLS 1.2 handshake handler with support for custom JA3 fingerprints."""
 
-    def __init__(self, conn):
+    def __init__(self, conn, handshake_timeout=None):
         self._tls_version = None
         self._body = None
         self.conn = conn
@@ -71,6 +71,7 @@ class TLS:
         self._supported_groups = None
         self._signature_algorithms = None
         self._cipher_suites = None
+        self._handshake_timeout = handshake_timeout
 
         # Sequence numbers for record layer encryption/decryption
         # These are reset to 0 after ChangeCipherSpec
@@ -186,7 +187,7 @@ class TLS:
                 time.sleep(0.3)
 
                 # Check for server's response with longer timeout
-                self.conn.settimeout(5.0)
+                self.conn.settimeout(self._handshake_timeout if self._handshake_timeout is not None else 5.0)
 
                 # Try to properly handle server's Change Cipher Spec + Finished
                 success = self._wait_for_server_handshake_completion()
@@ -214,7 +215,8 @@ class TLS:
         max_timeout = 10
 
         # Set socket timeout for receiving
-        self.conn.settimeout(1.0)
+        recv_timeout = min(self._handshake_timeout, 5.0) if self._handshake_timeout is not None else 1.0
+        self.conn.settimeout(recv_timeout)
 
         while True:
             try:

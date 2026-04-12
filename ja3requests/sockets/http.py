@@ -44,6 +44,9 @@ class HttpSocket(BaseSocket):
         Connection send message
         :return:
         """
+        read_timeout = getattr(self.context, 'read_timeout', None)
+        if read_timeout is not None:
+            self.conn.settimeout(read_timeout)
         self.conn.sendall(self.context.message)
         return self.conn
 
