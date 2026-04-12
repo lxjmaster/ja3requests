@@ -72,8 +72,8 @@ class TLSRecordLayer:
             # Calculate MAC
             mac_data = (
                 struct.pack('!Q', self.client_seq_num)
-                + struct.pack('!BBB', content_type, 3, 3)
-                + struct.pack('!H', len(data))
+                + struct.pack('!BB', 3, 3)
+                + struct.pack('!BH', content_type, len(data))
                 + data
             )
 
