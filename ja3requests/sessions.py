@@ -21,6 +21,7 @@ from ja3requests.exceptions import MaxRetriedException
 from ja3requests.protocol.tls.config import TlsConfig
 from ja3requests.pool import ConnectionPool, get_default_pool
 from ja3requests.cookies import Ja3RequestsCookieJar, merge_cookies
+from ja3requests.protocol.tls.session_cache import TLSSessionCache
 from ja3requests.retry import HTTPRetry
 
 # Preferred clock, based on which one is more accurate on a given system.
@@ -46,6 +47,9 @@ class Session(BaseSession):
     ):
         super().__init__()
         self._tls_config = tls_config or TlsConfig()
+        # Enable session resumption by default
+        if self._tls_config.session_cache is None:
+            self._tls_config.session_cache = TLSSessionCache()
         self._use_pooling = use_pooling
         self._pool = (
             pool if pool is not None else (get_default_pool() if use_pooling else None)

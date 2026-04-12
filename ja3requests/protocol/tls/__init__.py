@@ -59,7 +59,7 @@ ECDHE_CIPHER_SUITES = frozenset(
 class TLS:
     """TLS 1.2 handshake handler with support for custom JA3 fingerprints."""
 
-    def __init__(self, conn, handshake_timeout=None):
+    def __init__(self, conn, handshake_timeout=None, session_cache=None, server_host=None, server_port=None):
         self._tls_version = None
         self._body = None
         self.conn = conn
@@ -72,6 +72,10 @@ class TLS:
         self._signature_algorithms = None
         self._cipher_suites = None
         self._handshake_timeout = handshake_timeout
+        self._session_cache = session_cache
+        self._server_host = server_host
+        self._server_port = server_port
+        self._server_session_id = None  # session ID from ServerHello
 
         # Sequence numbers for record layer encryption/decryption
         # These are reset to 0 after ChangeCipherSpec
@@ -156,6 +160,13 @@ class TLS:
                 _extensions=getattr(tls_config, 'extensions', None),
             )
 
+            # Set cached session ID for resumption
+            if self._session_cache is not None and self._server_host:
+                cached = self._session_cache.get(self._server_host, self._server_port or 443)
+                if cached:
+                    debug(f"Using cached session ID for {self._server_host}")
+                    self._body.session_id = cached.session_id
+
     def handshake(self):
         """
         Complete TLS handshake process with improved error handling and parsing
@@ -193,6 +204,8 @@ class TLS:
                 success = self._wait_for_server_handshake_completion()
                 if success:
                     debug("✅ Full TLS handshake completed successfully!")
+                    # Cache session for resumption
+                    self._save_session_to_cache()
                     self.conn.settimeout(None)
                     return True
                 raise TLSHandshakeError("Server did not complete handshake")
@@ -202,6 +215,21 @@ class TLS:
         except Exception as e:  # pylint: disable=broad-exception-caught
             debug(f"TLS Handshake failed: {e}")
             return False
+
+    def _save_session_to_cache(self):
+        """Save the current session to the session cache for future resumption."""
+        if (self._session_cache is not None and self._server_host
+                and self._server_session_id and self._master_secret):
+            cipher = getattr(self, '_selected_cipher_suite', 0)
+            self._session_cache.put(
+                self._server_host,
+                self._server_port or 443,
+                self._server_session_id,
+                self._master_secret,
+                cipher,
+                tls_version=self._tls_version,
+            )
+            debug(f"Saved TLS session for {self._server_host}:{self._server_port}")
 
     def _parse_server_handshake_messages(
         self,
@@ -370,7 +398,8 @@ class TLS:
         if session_id_length > 0:
             if offset + session_id_length > len(data):
                 return
-            _session_id = data[offset : offset + session_id_length]
+            self._server_session_id = data[offset : offset + session_id_length]
+            debug(f"Server session ID: {self._server_session_id.hex()[:16]}...")
             offset += session_id_length
 
         # Cipher suite (2 bytes)
