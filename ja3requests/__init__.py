@@ -8,6 +8,7 @@ Ja3Request
 from .sessions import Session
 from .protocol.tls.config import TlsConfig
 from .response import Response
+from .retry import HTTPRetry
 from .exceptions import (
     RequestException,
     HTTPError,
