@@ -1,7 +1,7 @@
 # pylint: disable=too-many-lines
 """TLS handshake implementation with JA3 fingerprint customization.
 
-This module provides a custom TLS 1.2 handshake implementation that supports
+This module provides a custom TLS 1.2/1.3 handshake implementation that supports
 both RSA and ECDHE key exchange, allowing JA3 fingerprint configuration.
 """
 import hashlib
@@ -76,6 +76,9 @@ class TLS:
         self._server_host = server_host
         self._server_port = server_port
         self._server_session_id = None  # session ID from ServerHello
+        self._is_tls13 = False
+        self._tls13_private_key = None
+        self._tls13_key_share_group = None
 
         # Sequence numbers for record layer encryption/decryption
         # These are reset to 0 after ChangeCipherSpec
@@ -148,8 +151,21 @@ class TLS:
                 self._verify_cert = False  # Default to False for backward compatibility
 
             # Update client hello with new configuration
+            # For TLS 1.3, record layer version stays 0x0303 for compatibility
+            client_hello_version = self.tls_version
+            is_tls13 = (tls_config.tls_version == 0x0304 if isinstance(tls_config.tls_version, int)
+                        else self.tls_version == b'\x03\x04')
+            if is_tls13:
+                # TLS 1.3: ClientHello version must be 0x0303 (TLS 1.2) for compatibility
+                client_hello_version = b'\x03\x03'
+
+            # Merge TLS 1.3 extensions into custom extensions
+            extensions = list(getattr(tls_config, 'extensions', None) or [])
+            if is_tls13:
+                self._setup_tls13_extensions(extensions, tls_config)
+
             self._body = ClientHello(
-                self.tls_version,
+                client_hello_version,
                 cipher_suites=self._cipher_suites,
                 client_random=self._client_random,
                 server_name=self._server_name,
@@ -157,8 +173,10 @@ class TLS:
                 signature_algorithms=self._signature_algorithms,
                 alpn_protocols=getattr(tls_config, 'alpn_protocols', None),
                 use_grease=getattr(tls_config, 'use_grease', True),
-                _extensions=getattr(tls_config, 'extensions', None),
+                _extensions=extensions,
             )
+
+            self._is_tls13 = is_tls13
 
             # Set cached session ID for resumption
             if self._session_cache is not None and self._server_host:
@@ -215,6 +233,33 @@ class TLS:
         except Exception as e:  # pylint: disable=broad-exception-caught
             debug(f"TLS Handshake failed: {e}")
             return False
+
+    def _setup_tls13_extensions(self, extensions, tls_config):
+        """Add TLS 1.3-specific extensions and generate key_share."""
+        from ja3requests.protocol.tls.extensions import (  # pylint: disable=import-outside-toplevel
+            SupportedVersionsExtension,
+            KeyShareExtension,
+            PSKKeyExchangeModesExtension,
+        )
+        from ja3requests.protocol.tls.tls13 import TLS13KeyExchange  # pylint: disable=import-outside-toplevel
+
+        existing_types = {ext.extension_type for ext in extensions if hasattr(ext, 'extension_type')}
+
+        # supported_versions: advertise TLS 1.3 + 1.2
+        if SupportedVersionsExtension.extension_type not in existing_types:
+            extensions.append(SupportedVersionsExtension([0x0304, 0x0303]))
+
+        # key_share: generate ECDHE key pair and include public key
+        if KeyShareExtension.extension_type not in existing_types:
+            # Default to x25519 (most widely supported for TLS 1.3)
+            private_key, public_bytes = TLS13KeyExchange.generate_x25519_keypair()
+            self._tls13_private_key = private_key
+            self._tls13_key_share_group = 0x001D  # x25519
+            extensions.append(KeyShareExtension([(0x001D, public_bytes)]))
+
+        # psk_key_exchange_modes (required even without PSK for some servers)
+        if PSKKeyExchangeModesExtension.extension_type not in existing_types:
+            extensions.append(PSKKeyExchangeModesExtension([1]))  # psk_dhe_ke
 
     def _save_session_to_cache(self):
         """Save the current session to the session cache for future resumption."""
