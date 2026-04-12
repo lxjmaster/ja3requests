@@ -367,7 +367,9 @@ class Request:
 
     def __read_proxies(self):
         """
-        Read proxies
+        Read proxies.
+        Supports http, https, socks4, socks5 schemes.
+        Format: {'https': 'socks5://user:pass@host:port'} or {'https': 'host:port'}
         :return:
         """
         proxies = self.proxies
@@ -381,8 +383,9 @@ class Request:
                 "{'http': 'username:password@host:port', 'https': 'username:password@host:port'}"
             )
 
+        valid_keys = ("http", "https")
         for schema in proxies:
-            if schema not in ("http", "https"):
+            if schema not in valid_keys:
                 raise AttributeError(
                     f"Invalid proxy schema: {schema!r}.",
                     "The schema is only support http or https.",

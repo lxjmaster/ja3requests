@@ -10,6 +10,7 @@ from ja3requests.base import BaseRequest
 from ja3requests.contexts.context import HTTPSContext
 from ja3requests.sockets.https import HttpsSocket
 from ja3requests.sockets.proxy import ProxySocket
+from ja3requests.sockets.socks import SocksProxySocket
 from ja3requests.response import HTTPSResponse
 
 
@@ -32,7 +33,12 @@ class HttpsRequest(BaseRequest):
         :return:
         """
         if context.proxy:
-            sock = ProxySocket(context)
+            scheme = getattr(context, 'proxy_scheme', None)
+            if scheme in ('socks5', 'socks4'):
+                socks_ver = 5 if scheme == 'socks5' else 4
+                sock = SocksProxySocket(context, socks_version=socks_ver)
+            else:
+                sock = ProxySocket(context)
         else:
             sock = HttpsSocket(context, pool=pool)
 
