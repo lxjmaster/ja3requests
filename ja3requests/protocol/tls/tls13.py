@@ -326,3 +326,233 @@ class TLS13RecordProtection:
         content_type = inner[i]
         plaintext = inner[:i]
         return content_type, plaintext
+
+
+# ============================================================================
+# TLS 1.3 Handshake Handler
+# ============================================================================
+
+# Named group IDs
+GROUP_X25519 = 0x001D
+GROUP_SECP256R1 = 0x0017
+
+# Cipher suite → (key_length, hash_algo)
+TLS13_CIPHER_PARAMS = {
+    0x1301: (16, hashlib.sha256),  # TLS_AES_128_GCM_SHA256
+    0x1302: (32, hashlib.sha384),  # TLS_AES_256_GCM_SHA384
+    0x1303: (32, hashlib.sha256),  # TLS_CHACHA20_POLY1305_SHA256
+}
+
+
+class TLS13Handshake:
+    """
+    TLS 1.3 handshake state machine.
+
+    Orchestrates: ClientHello → ServerHello → [encrypted handshake] → Finished
+    Using the HKDF key schedule, key exchange, and record protection primitives.
+    """
+
+    def __init__(self, conn, private_key, key_share_group, client_hello_bytes):
+        """
+        :param conn: Raw TCP socket
+        :param private_key: ECDHE private key (from ClientHello key_share)
+        :param key_share_group: Named group ID used in key_share
+        :param client_hello_bytes: Raw ClientHello handshake message (for transcript)
+        """
+        self.conn = conn
+        self._private_key = private_key
+        self._key_share_group = key_share_group
+        self._transcript = client_hello_bytes  # Accumulates handshake messages
+        self._key_schedule = None
+        self._server_handshake_rp = None  # Record protection for decrypting server
+        self._client_handshake_rp = None  # Record protection for encrypting to server
+        self._server_app_rp = None
+        self._client_app_rp = None
+        self._cipher_suite = None
+        self._hash_algo = hashlib.sha256
+        self._key_length = 16
+        self._cipher_type = "aes-gcm"
+
+    def process_server_hello(self, server_hello_data):
+        """
+        Parse ServerHello, extract key_share, compute shared secret,
+        and derive handshake traffic keys.
+
+        :param server_hello_data: Raw ServerHello handshake message bytes
+        :return: True if successful
+        """
+        self._transcript += server_hello_data
+
+        # Parse ServerHello to extract cipher suite and key_share
+        offset = 0
+        if len(server_hello_data) < 38:
+            return False
+
+        # Version (2) + Random (32) = 34 bytes
+        offset = 2 + 32
+
+        # Session ID
+        if offset >= len(server_hello_data):
+            return False
+        sid_len = server_hello_data[offset]
+        offset += 1 + sid_len
+
+        # Cipher suite
+        if offset + 2 > len(server_hello_data):
+            return False
+        self._cipher_suite = struct.unpack("!H", server_hello_data[offset:offset + 2])[0]
+        offset += 2
+
+        # Compression
+        offset += 1
+
+        # Configure cipher parameters
+        if self._cipher_suite in TLS13_CIPHER_PARAMS:
+            self._key_length, self._hash_algo = TLS13_CIPHER_PARAMS[self._cipher_suite]
+        if self._cipher_suite == 0x1303:
+            self._cipher_type = "chacha20-poly1305"
+
+        # Parse extensions to find key_share
+        server_public_key = None
+        server_group = None
+        if offset + 2 <= len(server_hello_data):
+            ext_length = struct.unpack("!H", server_hello_data[offset:offset + 2])[0]
+            offset += 2
+            ext_end = offset + ext_length
+
+            while offset + 4 <= ext_end:
+                ext_type = struct.unpack("!H", server_hello_data[offset:offset + 2])[0]
+                ext_len = struct.unpack("!H", server_hello_data[offset + 2:offset + 4])[0]
+                offset += 4
+                ext_data = server_hello_data[offset:offset + ext_len]
+                offset += ext_len
+
+                if ext_type == 0x0033:  # key_share
+                    if len(ext_data) >= 4:
+                        server_group = struct.unpack("!H", ext_data[:2])[0]
+                        key_len = struct.unpack("!H", ext_data[2:4])[0]
+                        server_public_key = ext_data[4:4 + key_len]
+
+        if server_public_key is None:
+            debug("TLS 1.3: No key_share in ServerHello")
+            return False
+
+        # Compute shared secret
+        if server_group == GROUP_X25519:
+            shared_secret = TLS13KeyExchange.compute_x25519_shared_secret(
+                self._private_key, server_public_key
+            )
+        elif server_group == GROUP_SECP256R1:
+            shared_secret = TLS13KeyExchange.compute_secp256r1_shared_secret(
+                self._private_key, server_public_key
+            )
+        else:
+            debug(f"TLS 1.3: Unsupported group 0x{server_group:04X}")
+            return False
+
+        debug(f"TLS 1.3: Shared secret computed ({len(shared_secret)} bytes)")
+
+        # Derive handshake traffic keys
+        self._key_schedule = TLS13KeySchedule(self._hash_algo)
+        self._key_schedule.compute_early_secret()
+        self._key_schedule.compute_handshake_secret(shared_secret, self._transcript)
+
+        # Create record protection for handshake phase
+        s_key, s_iv = self._key_schedule.derive_traffic_keys(
+            self._key_schedule.server_handshake_traffic_secret, self._key_length
+        )
+        c_key, c_iv = self._key_schedule.derive_traffic_keys(
+            self._key_schedule.client_handshake_traffic_secret, self._key_length
+        )
+
+        self._server_handshake_rp = TLS13RecordProtection(s_key, s_iv, self._cipher_type)
+        self._client_handshake_rp = TLS13RecordProtection(c_key, c_iv, self._cipher_type)
+
+        debug("TLS 1.3: Handshake traffic keys derived")
+        return True
+
+    def decrypt_handshake_record(self, ciphertext, record_header):
+        """Decrypt a server handshake record and add to transcript."""
+        content_type, plaintext = self._server_handshake_rp.decrypt(ciphertext, record_header)
+        if content_type == 0x16:  # Handshake
+            self._transcript += plaintext
+        return content_type, plaintext
+
+    def parse_encrypted_handshake(self, plaintext):
+        """
+        Parse decrypted handshake messages (EncryptedExtensions,
+        Certificate, CertificateVerify, Finished).
+
+        :return: List of (msg_type, msg_data) tuples
+        """
+        messages = []
+        offset = 0
+        while offset + 4 <= len(plaintext):
+            msg_type = plaintext[offset]
+            msg_len = struct.unpack("!I", b"\x00" + plaintext[offset + 1:offset + 4])[0]
+            offset += 4
+            msg_data = plaintext[offset:offset + msg_len]
+            offset += msg_len
+            messages.append((msg_type, msg_data))
+            debug(f"TLS 1.3: Parsed handshake message type={msg_type} len={msg_len}")
+        return messages
+
+    def verify_server_finished(self, finished_data):
+        """
+        Verify the server's Finished message.
+
+        :param finished_data: The verify_data from server's Finished message
+        :return: True if valid
+        """
+        finished_key = self._key_schedule.compute_finished_key(
+            self._key_schedule.server_handshake_traffic_secret
+        )
+        # Transcript up to (but not including) server Finished
+        expected = self._key_schedule.compute_finished_verify_data(
+            finished_key, self._transcript
+        )
+        return hmac.compare_digest(finished_data, expected)
+
+    def build_client_finished(self):
+        """
+        Build and encrypt the client's Finished message.
+
+        :return: Encrypted TLS record bytes ready to send
+        """
+        finished_key = self._key_schedule.compute_finished_key(
+            self._key_schedule.client_handshake_traffic_secret
+        )
+        verify_data = self._key_schedule.compute_finished_verify_data(
+            finished_key, self._transcript
+        )
+
+        # Finished message: type(1) + length(3) + verify_data
+        finished_msg = struct.pack("B", 20)  # Finished type
+        finished_msg += struct.pack("!I", len(verify_data))[1:]
+        finished_msg += verify_data
+
+        self._transcript += finished_msg
+
+        # Encrypt with client handshake key
+        return self._client_handshake_rp.encrypt(0x16, finished_msg)
+
+    def derive_application_keys(self):
+        """
+        Derive application traffic keys after handshake completion.
+
+        :return: (client_app_rp, server_app_rp)
+        """
+        self._key_schedule.compute_master_secret(self._transcript)
+
+        s_key, s_iv = self._key_schedule.derive_traffic_keys(
+            self._key_schedule.server_application_traffic_secret, self._key_length
+        )
+        c_key, c_iv = self._key_schedule.derive_traffic_keys(
+            self._key_schedule.client_application_traffic_secret, self._key_length
+        )
+
+        self._server_app_rp = TLS13RecordProtection(s_key, s_iv, self._cipher_type)
+        self._client_app_rp = TLS13RecordProtection(c_key, c_iv, self._cipher_type)
+
+        debug("TLS 1.3: Application traffic keys derived")
+        return self._client_app_rp, self._server_app_rp
