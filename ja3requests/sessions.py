@@ -20,6 +20,7 @@ from ja3requests.requests.request import Request
 from ja3requests.exceptions import MaxRetriedException
 from ja3requests.protocol.tls.config import TlsConfig
 from ja3requests.pool import ConnectionPool, get_default_pool
+from ja3requests.cookies import Ja3RequestsCookieJar, merge_cookies
 
 # Preferred clock, based on which one is more accurate on a given system.
 if sys.platform == "win32":
@@ -121,13 +122,20 @@ class Session(BaseSession):
             tls_config = copy.deepcopy(self._tls_config)
             tls_config.verify_cert = verify
 
+        # Merge session-level cookies with per-request cookies
+        merged_cookies = Ja3RequestsCookieJar()
+        if len(self._cookies) > 0:
+            merge_cookies(merged_cookies, self._cookies)
+        if cookies is not None:
+            merge_cookies(merged_cookies, cookies)
+
         self.Request = Request(
             method=method,
             url=url,
             params=params,
             data=data,
             headers=headers,
-            cookies=cookies,
+            cookies=merged_cookies if len(merged_cookies) > 0 else None,
             files=files,
             auth=auth,
             json=json,
@@ -250,6 +258,11 @@ class Session(BaseSession):
 
         rep = request.send(**kwargs)
         response = Response(request, rep)
+
+        # Persist response cookies into the session cookie jar
+        if response.cookies:
+            merge_cookies(self._cookies, response.cookies)
+
         allow_redirects = kwargs.get("allow_redirects", True)
         if allow_redirects and response.is_redirected:
             response = self.resolve_redirects(response.location, **kwargs)
@@ -280,7 +293,7 @@ class Session(BaseSession):
                 method="GET",
                 url=url,
                 headers=self.Request.headers,
-                cookies=self.Request.cookies,
+                cookies=self._cookies,
                 proxies=self.Request.proxies,
                 tls_config=self._tls_config,
             ).request()
