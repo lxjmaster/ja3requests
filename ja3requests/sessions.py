@@ -40,6 +40,7 @@ class Session(BaseSession):
         tls_config: TlsConfig = None,
         pool: Optional[ConnectionPool] = None,
         use_pooling: bool = True,
+        hooks: Dict = None,
     ):
         super().__init__()
         self._tls_config = tls_config or TlsConfig()
@@ -47,6 +48,14 @@ class Session(BaseSession):
         self._pool = (
             pool if pool is not None else (get_default_pool() if use_pooling else None)
         )
+        self.hooks = {
+            "before_request": [],
+            "after_request": [],
+        }
+        if hooks:
+            for event, callbacks in hooks.items():
+                if event in self.hooks:
+                    self.hooks[event].extend(callbacks)
 
     @property
     def tls_config(self) -> TlsConfig:
@@ -244,6 +253,23 @@ class Session(BaseSession):
 
         return self.request("DELETE", url, **kwargs)
 
+    def _dispatch_hooks(self, event, hook_data, per_request_hooks=None):
+        """
+        Call all registered hooks for a given event.
+        :param event: Hook event name (e.g., 'before_request', 'after_request')
+        :param hook_data: The object passed to each hook callback.
+        :param per_request_hooks: Optional per-request hooks dict.
+        :return: The hook_data (possibly modified by callbacks).
+        """
+        callbacks = list(self.hooks.get(event, []))
+        if per_request_hooks and event in per_request_hooks:
+            callbacks.extend(per_request_hooks[event])
+        for callback in callbacks:
+            result = callback(hook_data)
+            if result is not None:
+                hook_data = result
+        return hook_data
+
     def send(self, request: BaseRequest, **kwargs):
         """
         Send request.
@@ -252,6 +278,11 @@ class Session(BaseSession):
 
         if not isinstance(request, BaseRequest):
             raise ValueError("You can only send HttpRequest/HttpsRequest.")
+
+        per_request_hooks = kwargs.pop("hooks", None)
+
+        # Dispatch before_request hooks
+        request = self._dispatch_hooks("before_request", request, per_request_hooks)
 
         # Pass connection pool to request
         kwargs['pool'] = self._pool
@@ -266,6 +297,9 @@ class Session(BaseSession):
         allow_redirects = kwargs.get("allow_redirects", True)
         if allow_redirects and response.is_redirected:
             response = self.resolve_redirects(response.location, **kwargs)
+
+        # Dispatch after_request hooks
+        response = self._dispatch_hooks("after_request", response, per_request_hooks)
 
         self.response = response
 
