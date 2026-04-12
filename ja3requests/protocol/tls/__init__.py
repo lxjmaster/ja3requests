@@ -152,6 +152,7 @@ class TLS:
                 signature_algorithms=self._signature_algorithms,
                 alpn_protocols=getattr(tls_config, 'alpn_protocols', None),
                 use_grease=getattr(tls_config, 'use_grease', True),
+                _extensions=getattr(tls_config, 'extensions', None),
             )
 
     def handshake(self):

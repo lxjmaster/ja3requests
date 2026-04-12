@@ -243,19 +243,42 @@ class TlsConfig:
         Generate JA3 fingerprint string based on current configuration.
         Format: TLSVersion,CipherSuites,Extensions,EllipticCurves,EllipticCurvePointFormats
         """
+        from ja3requests.protocol.tls.extensions import (  # pylint: disable=import-outside-toplevel
+            Extension,
+            SNIExtension,
+            SupportedGroupsExtension,
+            SignatureAlgorithmsExtension,
+            ALPNExtension,
+        )
+
         # TLS Version
         tls_version = str(self._tls_version)
 
         # Cipher Suites
         cipher_suites = "-".join([str(suite.value) for suite in self._cipher_suites])
 
-        # Extensions (placeholder - would need actual extension values)
-        extensions = (
-            "-".join([str(ext) for ext in self._extensions]) if self._extensions else ""
-        )
+        # Extensions: collect type IDs from Extension objects + auto-generated ones
+        ext_types = []
+        custom_types = set()
+        for ext in self._extensions:
+            if isinstance(ext, Extension):
+                ext_types.append(ext.extension_type)
+                custom_types.add(ext.extension_type)
+
+        # Auto-generated extensions (same logic as ClientHello._build_extensions)
+        if self._server_name and SNIExtension.extension_type not in custom_types:
+            ext_types.append(SNIExtension.extension_type)
+        if self._supported_groups and SupportedGroupsExtension.extension_type not in custom_types:
+            ext_types.append(SupportedGroupsExtension.extension_type)
+        if self._signature_algorithms and SignatureAlgorithmsExtension.extension_type not in custom_types:
+            ext_types.append(SignatureAlgorithmsExtension.extension_type)
+        if self._alpn_protocols and ALPNExtension.extension_type not in custom_types:
+            ext_types.append(ALPNExtension.extension_type)
+
+        extensions = "-".join([str(t) for t in ext_types])
 
         # Elliptic Curves (Supported Groups)
-        elliptic_curves = "-".join([str(group) for group in self._supported_groups])
+        elliptic_curves = "-".join([str(group) for group in self._supported_groups]) if self._supported_groups else ""
 
         # Elliptic Curve Point Formats (commonly 0 for uncompressed)
         ec_point_formats = "0"
