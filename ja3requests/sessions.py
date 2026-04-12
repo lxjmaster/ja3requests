@@ -21,6 +21,7 @@ from ja3requests.exceptions import MaxRetriedException
 from ja3requests.protocol.tls.config import TlsConfig
 from ja3requests.pool import ConnectionPool, get_default_pool
 from ja3requests.cookies import Ja3RequestsCookieJar, merge_cookies
+from ja3requests.retry import HTTPRetry
 
 # Preferred clock, based on which one is more accurate on a given system.
 if sys.platform == "win32":
@@ -41,6 +42,7 @@ class Session(BaseSession):
         pool: Optional[ConnectionPool] = None,
         use_pooling: bool = True,
         hooks: Dict = None,
+        retry: HTTPRetry = None,
     ):
         super().__init__()
         self._tls_config = tls_config or TlsConfig()
@@ -56,6 +58,7 @@ class Session(BaseSession):
             for event, callbacks in hooks.items():
                 if event in self.hooks:
                     self.hooks[event].extend(callbacks)
+        self._retry = retry
 
     @property
     def tls_config(self) -> TlsConfig:
@@ -272,7 +275,7 @@ class Session(BaseSession):
 
     def send(self, request: BaseRequest, **kwargs):
         """
-        Send request.
+        Send request with optional HTTP-level retry.
         :return:
         """
 
@@ -288,23 +291,67 @@ class Session(BaseSession):
         kwargs['pool'] = self._pool
 
         stream = kwargs.pop("stream", False)
-        rep = request.send(**kwargs)
-        response = Response(request, rep, stream=stream)
+        retry = self._retry
+        method = getattr(self.Request, 'method', 'GET') if self.Request else 'GET'
+        max_attempts = 1 + (retry.total if retry and retry.is_retryable_method(method) else 0)
 
-        # Persist response cookies into the session cookie jar
-        if response.cookies:
-            merge_cookies(self._cookies, response.cookies)
+        last_response = None
+        last_error = None
 
-        allow_redirects = kwargs.get("allow_redirects", True)
-        if allow_redirects and response.is_redirected:
-            response = self.resolve_redirects(response.location, **kwargs)
+        for attempt in range(max_attempts):
+            try:
+                rep = request.send(**kwargs)
+                response = Response(request, rep, stream=stream)
 
-        # Dispatch after_request hooks
-        response = self._dispatch_hooks("after_request", response, per_request_hooks)
+                # Persist response cookies into the session cookie jar
+                if response.cookies:
+                    merge_cookies(self._cookies, response.cookies)
 
-        self.response = response
+                # Check if we should retry based on status code
+                if (retry and attempt < max_attempts - 1
+                        and retry.is_retryable_method(method)
+                        and retry.is_retryable_status(response.status_code)):
+                    retry.sleep_for_retry(response, attempt + 1)
+                    last_response = response
+                    continue
 
-        return response
+                allow_redirects = kwargs.get("allow_redirects", True)
+                if allow_redirects and response.is_redirected:
+                    response = self.resolve_redirects(response.location, **kwargs)
+
+                # Dispatch after_request hooks
+                response = self._dispatch_hooks("after_request", response, per_request_hooks)
+
+                self.response = response
+                return response
+
+            except (ConnectionError, OSError) as err:
+                last_error = err
+                if retry and attempt < max_attempts - 1 and retry.is_retryable_method(method):
+                    retry.sleep_for_retry(None, attempt + 1)
+                    continue
+                raise
+
+        # All retries exhausted
+        if last_response is not None:
+            # Return the last response even if status was retryable
+            allow_redirects = kwargs.get("allow_redirects", True)
+            if allow_redirects and last_response.is_redirected:
+                last_response = self.resolve_redirects(last_response.location, **kwargs)
+            last_response = self._dispatch_hooks("after_request", last_response, per_request_hooks)
+            self.response = last_response
+            if retry and retry.raise_on_status:
+                raise MaxRetriedException(
+                    f"Max retries ({retry.total}) exceeded, last status: {last_response.status_code}"
+                )
+            return last_response
+
+        if last_error is not None:
+            raise MaxRetriedException(
+                f"Max retries ({retry.total}) exceeded"
+            ) from last_error
+
+        raise MaxRetriedException("Max retries exceeded")
 
     def resolve_redirects(self, url, **kwargs):
         """
