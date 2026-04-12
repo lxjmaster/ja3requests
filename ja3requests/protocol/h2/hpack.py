@@ -151,7 +151,7 @@ def encode_string(s):
 
 def decode_string(data, offset):
     """
-    Decode an HPACK string literal.
+    Decode an HPACK string literal (with Huffman support).
 
     :return: (string_bytes, new_offset)
     """
@@ -161,8 +161,8 @@ def decode_string(data, offset):
     offset += length
 
     if huffman:
-        # Huffman decoding not implemented — return raw bytes
-        pass
+        from ja3requests.protocol.h2.huffman import huffman_decode  # pylint: disable=import-outside-toplevel
+        string_bytes = huffman_decode(string_bytes)
 
     return string_bytes, offset
 

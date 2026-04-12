@@ -79,6 +79,7 @@ class TLS:
         self._is_tls13 = False
         self._tls13_private_key = None
         self._tls13_key_share_group = None
+        self._negotiated_protocol = None  # ALPN result (e.g., "h2", "http/1.1")
 
         # Sequence numbers for record layer encryption/decryption
         # These are reset to 0 after ChangeCipherSpec
@@ -460,6 +461,26 @@ class TLS:
         if offset < len(data):
             _compression_method = data[offset]
             offset += 1
+
+        # Parse extensions (if present)
+        if offset + 2 <= len(data):
+            extensions_length = struct.unpack("!H", data[offset:offset + 2])[0]
+            offset += 2
+            ext_end = offset + extensions_length
+            while offset + 4 <= ext_end:
+                ext_type = struct.unpack("!H", data[offset:offset + 2])[0]
+                ext_len = struct.unpack("!H", data[offset + 2:offset + 4])[0]
+                offset += 4
+                ext_data = data[offset:offset + ext_len]
+                offset += ext_len
+
+                # ALPN (0x0010): extract negotiated protocol
+                if ext_type == 0x0010 and len(ext_data) >= 4:
+                    proto_list_len = struct.unpack("!H", ext_data[:2])[0]
+                    if proto_list_len > 0:
+                        proto_len = ext_data[2]
+                        self._negotiated_protocol = ext_data[3:3 + proto_len].decode("ascii")
+                        debug(f"ALPN negotiated: {self._negotiated_protocol}")
 
     def _parse_certificate(self, data):
         """Parse Certificate message, verify certificate, and extract server public key"""
