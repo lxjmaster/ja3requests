@@ -256,8 +256,9 @@ class Session(BaseSession):
         # Pass connection pool to request
         kwargs['pool'] = self._pool
 
+        stream = kwargs.pop("stream", False)
         rep = request.send(**kwargs)
-        response = Response(request, rep)
+        response = Response(request, rep, stream=stream)
 
         # Persist response cookies into the session cookie jar
         if response.cookies:
