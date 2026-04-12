@@ -2,33 +2,18 @@
 
 import struct
 from ja3requests.protocol.tls.layers import HandShake
+from ja3requests.protocol.tls.extensions import (
+    Extension,
+    SNIExtension,
+    SupportedGroupsExtension,
+    SignatureAlgorithmsExtension,
+    ALPNExtension,
+)
 
 
 class ClientHello(HandShake):
     """
     The ClientHello message includes a random structure, which is used later in the protocol.
-
-    opaque SessionID<0..32>;
-    uint8 CipherSuite[2];    /* Cryptographic suite selector */
-    enum { null(0), (255) } CompressionMethod;
-
-    struct {
-        ExtensionType extension_type;
-        opaque extension_data<0..2^16-1>;
-    } Extension;
-
-    enum {
-        signature_algorithms(13), (65535)
-    } ExtensionType;
-    -  "extension_type" identifies the particular extension type.
-    -  "extension_data" contains information specific to the particular extension type.
-
-    struct {
-        uint8 major;
-        uint8 minor;
-    } ProtocolVersion;
-
-    ProtocolVersion version = { 3, 3 };     /* TLS v1.2*/
 
     struct {
         ProtocolVersion client_version;
@@ -43,88 +28,6 @@ class ClientHello(HandShake):
                 Extension extensions<0..2^16-1>;
         };
     } ClientHello;
-
-    cipher_suites
-        This is a list of the cryptographic options supported by the
-        client, with the client's first preference first.  If the
-        session_id field is not empty (implying a session resumption
-        request), this vector MUST include at least the cipher_suite from
-        that session.
-
-        A cipher suite defines a cipher specification supported in TLS
-        Version 1.2.
-            CipherSuite TLS_NULL_WITH_NULL_NULL               = { 0x00,0x00 };
-
-        The following CipherSuite definitions require that the server provide
-        an RSA certificate that can be used for key exchange.  The server may
-        request any signature-capable certificate in the certificate request
-        message.
-            CipherSuite TLS_RSA_WITH_NULL_MD5                 = { 0x00,0x01 };
-            CipherSuite TLS_RSA_WITH_NULL_SHA                 = { 0x00,0x02 };
-            CipherSuite TLS_RSA_WITH_NULL_SHA256              = { 0x00,0x3B };
-            CipherSuite TLS_RSA_WITH_RC4_128_MD5              = { 0x00,0x04 };
-            CipherSuite TLS_RSA_WITH_RC4_128_SHA              = { 0x00,0x05 };
-            CipherSuite TLS_RSA_WITH_3DES_EDE_CBC_SHA         = { 0x00,0x0A };
-            CipherSuite TLS_RSA_WITH_AES_128_CBC_SHA          = { 0x00,0x2F };
-            CipherSuite TLS_RSA_WITH_AES_256_CBC_SHA          = { 0x00,0x35 };
-            CipherSuite TLS_RSA_WITH_AES_128_CBC_SHA256       = { 0x00,0x3C };
-            CipherSuite TLS_RSA_WITH_AES_256_CBC_SHA256       = { 0x00,0x3D };
-
-        The following cipher suite definitions are used for server-
-        authenticated (and optionally client-authenticated) Diffie-Hellman.
-        DH denotes cipher suites in which the server's certificate contains
-        the Diffie-Hellman parameters signed by the certificate authority
-        (CA).  DHE denotes ephemeral Diffie-Hellman, where the Diffie-Hellman
-        parameters are signed by a signature-capable certificate, which has
-        been signed by the CA.  The signing algorithm used by the server is
-        specified after the DHE component of the CipherSuite name.  The
-        server can request any signature-capable certificate from the client
-        for client authentication, or it may request a Diffie-Hellman
-        certificate.  Any Diffie-Hellman certificate provided by the client
-        must use the parameters (group and generator) described by the
-        server.
-            CipherSuite TLS_DH_DSS_WITH_3DES_EDE_CBC_SHA      = { 0x00,0x0D };
-            CipherSuite TLS_DH_RSA_WITH_3DES_EDE_CBC_SHA      = { 0x00,0x10 };
-            CipherSuite TLS_DHE_DSS_WITH_3DES_EDE_CBC_SHA     = { 0x00,0x13 };
-            CipherSuite TLS_DHE_RSA_WITH_3DES_EDE_CBC_SHA     = { 0x00,0x16 };
-            CipherSuite TLS_DH_DSS_WITH_AES_128_CBC_SHA       = { 0x00,0x30 };
-            CipherSuite TLS_DH_RSA_WITH_AES_128_CBC_SHA       = { 0x00,0x31 };
-            CipherSuite TLS_DHE_DSS_WITH_AES_128_CBC_SHA      = { 0x00,0x32 };
-            CipherSuite TLS_DHE_RSA_WITH_AES_128_CBC_SHA      = { 0x00,0x33 };
-            CipherSuite TLS_DH_DSS_WITH_AES_256_CBC_SHA       = { 0x00,0x36 };
-            CipherSuite TLS_DH_RSA_WITH_AES_256_CBC_SHA       = { 0x00,0x37 };
-            CipherSuite TLS_DHE_DSS_WITH_AES_256_CBC_SHA      = { 0x00,0x38 };
-            CipherSuite TLS_DHE_RSA_WITH_AES_256_CBC_SHA      = { 0x00,0x39 };
-            CipherSuite TLS_DH_DSS_WITH_AES_128_CBC_SHA256    = { 0x00,0x3E };
-            CipherSuite TLS_DH_RSA_WITH_AES_128_CBC_SHA256    = { 0x00,0x3F };
-            CipherSuite TLS_DHE_DSS_WITH_AES_128_CBC_SHA256   = { 0x00,0x40 };
-            CipherSuite TLS_DHE_RSA_WITH_AES_128_CBC_SHA256   = { 0x00,0x67 };
-            CipherSuite TLS_DH_DSS_WITH_AES_256_CBC_SHA256    = { 0x00,0x68 };
-            CipherSuite TLS_DH_RSA_WITH_AES_256_CBC_SHA256    = { 0x00,0x69 };
-            CipherSuite TLS_DHE_DSS_WITH_AES_256_CBC_SHA256   = { 0x00,0x6A };
-            CipherSuite TLS_DHE_RSA_WITH_AES_256_CBC_SHA256   = { 0x00,0x6B };
-
-        The following cipher suites are used for completely anonymous
-        Diffie-Hellman communications in which neither party is
-        authenticated.  Note that this mode is vulnerable to man-in-the-
-        middle attacks.  Using this mode therefore is of limited use: These
-        cipher suites MUST NOT be used by TLS 1.2 implementations unless the
-        application layer has specifically requested to allow anonymous key
-        exchange.  (Anonymous key exchange may sometimes be acceptable, for
-        example, to support opportunistic encryption when no set-up for
-        authentication is in place, or when TLS is used as part of more
-        complex security protocols that have other means to ensure
-        authentication.)
-            CipherSuite TLS_DH_anon_WITH_RC4_128_MD5          = { 0x00,0x18 };
-            CipherSuite TLS_DH_anon_WITH_3DES_EDE_CBC_SHA     = { 0x00,0x1B };
-            CipherSuite TLS_DH_anon_WITH_AES_128_CBC_SHA      = { 0x00,0x34 };
-            CipherSuite TLS_DH_anon_WITH_AES_256_CBC_SHA      = { 0x00,0x3A };
-            CipherSuite TLS_DH_anon_WITH_AES_128_CBC_SHA256   = { 0x00,0x6C };
-            CipherSuite TLS_DH_anon_WITH_AES_256_CBC_SHA256   = { 0x00,0x6D };
-
-        Note: The cipher suite values { 0x00, 0x1C } and { 0x00, 0x1D } are
-        reserved to avoid collision with Fortezza-based cipher suites in
-        SSL 3.
     """
 
     def __init__(
@@ -147,10 +50,11 @@ class ClientHello(HandShake):
         self._cipher_suites = None
         self._extensions = None
         self._server_name = server_name
-        self._supported_groups = supported_groups  # Don't set defaults
-        self._signature_algorithms = signature_algorithms  # Don't set defaults
+        self._supported_groups = supported_groups
+        self._signature_algorithms = signature_algorithms
         self._alpn_protocols = alpn_protocols or []
         self._use_grease = use_grease
+        self._custom_extensions = _extensions or []
 
         # Set cipher suites
         if cipher_suites:
@@ -183,7 +87,6 @@ class ClientHello(HandShake):
 
         if not self._version:
             self._version = struct.pack("B", 3) + struct.pack("B", 3)
-            # self._version = struct.pack("I", 771)[:2]
 
         return self._version
 
@@ -217,81 +120,42 @@ class ClientHello(HandShake):
 
     def _build_extensions(self):
         """
-        Build TLS extensions based on configuration
+        Build TLS extensions from Extension objects and configuration parameters.
+
+        Priority order:
+        1. Custom Extension objects passed via _extensions (from TlsConfig)
+        2. Extensions auto-generated from individual parameters (server_name, etc.)
+
+        If a custom extension has the same type as an auto-generated one,
+        the custom extension takes precedence.
         """
-        extensions = b""
+        extension_list = []
 
-        # Server Name Indication (SNI) - Extension Type 0
-        if self._server_name:
-            sni_data = self._build_sni_extension()
-            extensions += struct.pack("!H", 0)  # Extension type
-            extensions += struct.pack("!H", len(sni_data))  # Extension length
-            extensions += sni_data
+        # Collect custom Extension objects first
+        custom_types = set()
+        for ext in self._custom_extensions:
+            if isinstance(ext, Extension):
+                extension_list.append(ext)
+                custom_types.add(ext.extension_type)
 
-        # Supported Groups (Elliptic Curves) - Extension Type 10
-        if self._supported_groups and len(self._supported_groups) > 0:
-            groups_data = self._build_supported_groups_extension()
-            extensions += struct.pack("!H", 10)  # Extension type
-            extensions += struct.pack("!H", len(groups_data))  # Extension length
-            extensions += groups_data
+        # Auto-generate extensions from parameters (skip if custom one exists)
+        if self._server_name and SNIExtension.extension_type not in custom_types:
+            extension_list.append(SNIExtension(self._server_name))
 
-        # Signature Algorithms - Extension Type 13
-        if self._signature_algorithms and len(self._signature_algorithms) > 0:
-            sig_algs_data = self._build_signature_algorithms_extension()
-            extensions += struct.pack("!H", 13)  # Extension type
-            extensions += struct.pack("!H", len(sig_algs_data))  # Extension length
-            extensions += sig_algs_data
+        if (self._supported_groups and len(self._supported_groups) > 0
+                and SupportedGroupsExtension.extension_type not in custom_types):
+            extension_list.append(SupportedGroupsExtension(self._supported_groups))
 
-        # Application Layer Protocol Negotiation (ALPN) - Extension Type 16
-        if self._alpn_protocols:
-            alpn_data = self._build_alpn_extension()
-            extensions += struct.pack("!H", 16)  # Extension type
-            extensions += struct.pack("!H", len(alpn_data))  # Extension length
-            extensions += alpn_data
+        if (self._signature_algorithms and len(self._signature_algorithms) > 0
+                and SignatureAlgorithmsExtension.extension_type not in custom_types):
+            extension_list.append(SignatureAlgorithmsExtension(self._signature_algorithms))
 
-        # For compatibility, only include basic extensions
-        # Extended Master Secret and Session Ticket can cause issues with some servers
+        if self._alpn_protocols and ALPNExtension.extension_type not in custom_types:
+            extension_list.append(ALPNExtension(self._alpn_protocols))
 
-        if extensions:
-            # Add extensions length header
-            self._extensions = struct.pack("!H", len(extensions)) + extensions
-
-    def _build_sni_extension(self):
-        """Build Server Name Indication extension"""
-        server_name_bytes = self._server_name.encode('utf-8')
-        sni_data = struct.pack(
-            "!H", len(server_name_bytes) + 3
-        )  # Server name list length
-        sni_data += struct.pack("!B", 0)  # Name type (hostname)
-        sni_data += struct.pack("!H", len(server_name_bytes))  # Name length
-        sni_data += server_name_bytes
-        return sni_data
-
-    def _build_supported_groups_extension(self):
-        """Build Supported Groups extension"""
-        groups_data = struct.pack("!H", len(self._supported_groups) * 2)  # Length
-        for group in self._supported_groups:
-            groups_data += struct.pack("!H", group)
-        return groups_data
-
-    def _build_signature_algorithms_extension(self):
-        """Build Signature Algorithms extension"""
-        sig_data = struct.pack("!H", len(self._signature_algorithms) * 2)  # Length
-        for sig_alg in self._signature_algorithms:
-            sig_data += struct.pack("!H", sig_alg)
-        return sig_data
-
-    def _build_alpn_extension(self):
-        """Build Application Layer Protocol Negotiation extension"""
-        protocols_data = b""
-        for protocol in self._alpn_protocols:
-            protocol_bytes = protocol.encode('utf-8')
-            protocols_data += struct.pack("!B", len(protocol_bytes))
-            protocols_data += protocol_bytes
-
-        alpn_data = struct.pack("!H", len(protocols_data))  # Protocol list length
-        alpn_data += protocols_data
-        return alpn_data
+        if extension_list:
+            extensions_data = b"".join(ext.to_bytes() for ext in extension_list)
+            self._extensions = struct.pack("!H", len(extensions_data)) + extensions_data
 
 
 if __name__ == '__main__':
