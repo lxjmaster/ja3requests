@@ -69,6 +69,9 @@ class TlsConfig:
         # Certificate verification
         self._verify_cert = False  # Default to False for backward compatibility
 
+        # Session cache for TLS session resumption
+        self._session_cache = None
+
     @property
     def tls_version(self) -> int:
         """Get TLS version"""
@@ -226,6 +229,16 @@ class TlsConfig:
     def verify_cert(self, verify: bool):
         """Set certificate verification flag"""
         self._verify_cert = verify
+
+    @property
+    def session_cache(self):
+        """Get session cache for TLS session resumption."""
+        return self._session_cache
+
+    @session_cache.setter
+    def session_cache(self, cache):
+        """Set session cache for TLS session resumption."""
+        self._session_cache = cache
 
     def get_cipher_suite_values(self) -> List[int]:
         """Get cipher suite values as integers for JA3 fingerprint"""
