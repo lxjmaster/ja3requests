@@ -55,14 +55,21 @@ class HttpsSocket(BaseSocket):
         debug(f"Connecting to {host}:{port}")
         self.conn = self._new_conn(host, port)
 
-        # TLS handshake
-        handshake_timeout = getattr(self.context, 'connect_timeout', None)
-        tls = TLS(self.conn, handshake_timeout=handshake_timeout)
-
         # Get TLS config and set default server_name
         tls_config = getattr(self.context, 'tls_config', None)
         if tls_config and not getattr(tls_config, 'server_name', None):
             tls_config.server_name = host
+
+        # TLS handshake
+        handshake_timeout = getattr(self.context, 'connect_timeout', None)
+        session_cache = getattr(tls_config, 'session_cache', None) if tls_config else None
+        tls = TLS(
+            self.conn,
+            handshake_timeout=handshake_timeout,
+            session_cache=session_cache,
+            server_host=host,
+            server_port=port,
+        )
 
         # Set JA3 parameters
         tls.set_payload(tls_config=tls_config)
