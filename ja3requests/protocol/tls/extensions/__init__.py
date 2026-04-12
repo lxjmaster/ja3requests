@@ -204,3 +204,68 @@ class StatusRequestExtension(Extension):
     def encode(self):
         # status_type = ocsp(1), responder_id_list = empty, request_extensions = empty
         return struct.pack("!BHH", 1, 0, 0)
+
+
+class SupportedVersionsExtension(Extension):
+    """Supported Versions extension (type 0x002B).
+
+    Required for TLS 1.3. Indicates which TLS versions the client supports.
+    In TLS 1.3, the client_version field in ClientHello is set to 0x0303 (TLS 1.2)
+    for compatibility, and the actual supported versions are listed here.
+    (RFC 8446 Section 4.2.1)
+    """
+
+    extension_type = 0x002B
+
+    def __init__(self, versions=None):
+        # Default: support TLS 1.3 and TLS 1.2
+        self.versions = versions or [0x0304, 0x0303]
+
+    def encode(self):
+        versions_bytes = b"".join(struct.pack("!H", v) for v in self.versions)
+        return struct.pack("B", len(versions_bytes)) + versions_bytes
+
+
+class KeyShareExtension(Extension):
+    """Key Share extension (type 0x0033).
+
+    Carries the client's ECDHE public key(s) in the ClientHello,
+    enabling 1-RTT handshake in TLS 1.3.
+    (RFC 8446 Section 4.2.8)
+
+    Named group IDs: 0x001D = x25519, 0x0017 = secp256r1
+    """
+
+    extension_type = 0x0033
+
+    def __init__(self, key_shares=None):
+        """
+        :param key_shares: List of (group_id, public_key_bytes) tuples.
+        """
+        self.key_shares = key_shares or []
+
+    def encode(self):
+        entries = b""
+        for group_id, key_bytes in self.key_shares:
+            entries += struct.pack("!HH", group_id, len(key_bytes)) + key_bytes
+        return struct.pack("!H", len(entries)) + entries
+
+
+class PSKKeyExchangeModesExtension(Extension):
+    """PSK Key Exchange Modes extension (type 0x002D).
+
+    Required when offering PSK. Indicates which PSK key exchange modes
+    the client supports.
+    (RFC 8446 Section 4.2.9)
+
+    Modes: 0 = psk_ke, 1 = psk_dhe_ke
+    """
+
+    extension_type = 0x002D
+
+    def __init__(self, modes=None):
+        self.modes = modes or [1]  # psk_dhe_ke by default
+
+    def encode(self):
+        modes_bytes = b"".join(struct.pack("B", m) for m in self.modes)
+        return struct.pack("B", len(modes_bytes)) + modes_bytes
