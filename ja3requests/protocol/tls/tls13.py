@@ -12,7 +12,7 @@ import struct
 
 from cryptography.hazmat.primitives.asymmetric import x25519, ec
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM, ChaCha20Poly1305
 from cryptography.hazmat.backends import default_backend
 
 from ja3requests.protocol.tls.debug import debug
@@ -266,11 +266,15 @@ class TLS13KeyExchange:
 class TLS13RecordProtection:
     """TLS 1.3 record layer encryption/decryption using AES-GCM."""
 
-    def __init__(self, key, iv):
+    def __init__(self, key, iv, cipher="aes-gcm"):
         self.key = key
         self.iv = iv
         self.seq_num = 0
-        self._aesgcm = AESGCM(key)
+        self._cipher_name = cipher
+        if cipher == "chacha20-poly1305":
+            self._aead = ChaCha20Poly1305(key)
+        else:
+            self._aead = AESGCM(key)
 
     def _compute_nonce(self):
         """Compute per-record nonce: IV XOR sequence number."""
@@ -295,7 +299,7 @@ class TLS13RecordProtection:
         length = len(inner) + 16
         header = struct.pack("!BHH", 0x17, 0x0303, length)
 
-        encrypted = self._aesgcm.encrypt(nonce, inner, header)
+        encrypted = self._aead.encrypt(nonce, inner, header)
 
         return header + encrypted
 
@@ -308,7 +312,7 @@ class TLS13RecordProtection:
         nonce = self._compute_nonce()
         aad = record_header  # AAD is the 5-byte record header in TLS 1.3
 
-        inner = self._aesgcm.decrypt(nonce, ciphertext, aad)
+        inner = self._aead.decrypt(nonce, ciphertext, aad)
 
         # Strip padding zeros and extract content type (last non-zero byte)
         # TLSInnerPlaintext: content + content_type + zeros
