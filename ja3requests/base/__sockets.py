@@ -57,7 +57,7 @@ class BaseSocket(ABC):
                 create_connection,
                 socket.error,
                 (dest_address, port),
-                self.context.timeout,
+                self.context.connect_timeout,
                 self.context.source_address,
             )
         except SocketTimeout as err:

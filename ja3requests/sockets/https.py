@@ -56,7 +56,8 @@ class HttpsSocket(BaseSocket):
         self.conn = self._new_conn(host, port)
 
         # TLS handshake
-        tls = TLS(self.conn)
+        handshake_timeout = getattr(self.context, 'connect_timeout', None)
+        tls = TLS(self.conn, handshake_timeout=handshake_timeout)
 
         # Get TLS config and set default server_name
         tls_config = getattr(self.context, 'tls_config', None)
@@ -131,7 +132,8 @@ class HttpsSocket(BaseSocket):
         try:
             # Brief delay for server to process our Finished message
             time.sleep(0.3)
-            self.conn.settimeout(15.0)
+            read_timeout = getattr(self.context, 'read_timeout', None)
+            self.conn.settimeout(read_timeout if read_timeout is not None else 15.0)
 
             # Encrypt and send HTTP request
             encrypted_data = self._encrypt_application_data(self.context.message)
