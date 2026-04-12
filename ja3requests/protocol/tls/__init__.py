@@ -188,7 +188,8 @@ class TLS:
 
     def handshake(self):
         """
-        Complete TLS handshake process with improved error handling and parsing
+        Complete TLS handshake process.
+        Automatically selects TLS 1.2 or 1.3 based on configuration.
         """
         try:
             # Initialize handshake message tracking
@@ -198,13 +199,136 @@ class TLS:
             client_hello = self.body
             self._client_random = client_hello.random
             debug("Sending Client Hello...")
-            debug(f"Client Hello message hex: {client_hello.message.hex()}")
-            debug(f"Client Hello length: {len(client_hello.message)} bytes")
             self.conn.sendall(client_hello.message)
 
             # Add Client Hello to handshake messages (without TLS record header)
             self._handshake_messages += client_hello.handshake_message
 
+            if self._is_tls13:
+                return self._handshake_tls13()
+
+            return self._handshake_tls12()
+
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            debug(f"TLS Handshake failed: {e}")
+            return False
+
+    def _handshake_tls13(self):
+        """
+        TLS 1.3 handshake flow after ClientHello is sent.
+        Uses TLS13Handshake to manage key derivation and encrypted messages.
+        """
+        from ja3requests.protocol.tls.tls13 import TLS13Handshake  # pylint: disable=import-outside-toplevel
+
+        try:
+            # Receive ServerHello (unencrypted)
+            self.conn.settimeout(self._handshake_timeout if self._handshake_timeout is not None else 5.0)
+            buffer = b""
+            server_hello_msg = None
+
+            # Read until we get a complete ServerHello
+            while True:
+                data = self.conn.recv(4096)
+                if not data:
+                    break
+                buffer += data
+
+                # Parse TLS records
+                if len(buffer) >= 5:
+                    record_type = buffer[0]
+                    record_length = struct.unpack("!H", buffer[3:5])[0]
+                    if len(buffer) >= 5 + record_length:
+                        if record_type == 22:  # Handshake
+                            record_data = buffer[5:5 + record_length]
+                            if record_data[0] == 2:  # ServerHello
+                                msg_len = struct.unpack("!I", b"\x00" + record_data[1:4])[0]
+                                server_hello_msg = record_data[4:4 + msg_len]
+                                # Also parse with our existing method for cipher suite etc.
+                                self._parse_server_hello(server_hello_msg)
+                                self._handshake_messages += record_data
+                        break
+
+            if server_hello_msg is None:
+                debug("TLS 1.3: No ServerHello received")
+                return False
+
+            # Initialize TLS 1.3 handshake handler
+            hs = TLS13Handshake(
+                self.conn,
+                self._tls13_private_key,
+                self._tls13_key_share_group,
+                self._handshake_messages,
+            )
+
+            if not hs.process_server_hello(server_hello_msg):
+                debug("TLS 1.3: Failed to process ServerHello")
+                return False
+
+            # Read and decrypt encrypted handshake messages
+            # (EncryptedExtensions, Certificate, CertificateVerify, Finished)
+            server_finished_received = False
+            while not server_finished_received:
+                data = self.conn.recv(4096)
+                if not data:
+                    break
+                buffer = data
+
+                # Parse TLS records from buffer
+                offset = 0
+                while offset + 5 <= len(buffer):
+                    rec_type = buffer[offset]
+                    rec_len = struct.unpack("!H", buffer[offset + 3:offset + 5])[0]
+                    if offset + 5 + rec_len > len(buffer):
+                        break
+
+                    record_header = buffer[offset:offset + 5]
+                    ciphertext = buffer[offset + 5:offset + 5 + rec_len]
+                    offset += 5 + rec_len
+
+                    if rec_type == 20:  # ChangeCipherSpec (compatibility)
+                        continue
+
+                    if rec_type == 0x17:  # Application data (encrypted handshake)
+                        content_type, plaintext = hs.decrypt_handshake_record(
+                            ciphertext, record_header
+                        )
+                        if content_type == 0x16:  # Handshake
+                            messages = hs.parse_encrypted_handshake(plaintext)
+                            for msg_type, msg_data in messages:
+                                if msg_type == 20:  # Finished
+                                    server_finished_received = True
+
+            if not server_finished_received:
+                debug("TLS 1.3: Server Finished not received")
+                return False
+
+            # Send client Finished
+            finished_record = hs.build_client_finished()
+            self.conn.sendall(finished_record)
+
+            # Derive application traffic keys
+            client_rp, server_rp = hs.derive_application_keys()
+
+            # Store for use by HttpsSocket
+            self._tls13_client_rp = client_rp
+            self._tls13_server_rp = server_rp
+            self._tls13_handshake = hs
+
+            debug("✅ TLS 1.3 handshake completed successfully!")
+            self._save_session_to_cache()
+            self.conn.settimeout(None)
+            return True
+
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            debug(f"TLS 1.3 handshake failed: {e}")
+            traceback.print_exc()
+            return False
+        finally:
+            self.conn.settimeout(None)
+
+    def _handshake_tls12(self):
+        """TLS 1.2 handshake flow after ClientHello is sent."""
+        try:
             # Step 2-6: Receive server handshake messages
             self._parse_server_handshake_messages()
 
@@ -213,17 +337,11 @@ class TLS:
 
             # Step 10: Wait for server's response to our Finished message
             try:
-                # Give server time to process our messages
                 time.sleep(0.3)
-
-                # Check for server's response with longer timeout
                 self.conn.settimeout(self._handshake_timeout if self._handshake_timeout is not None else 5.0)
-
-                # Try to properly handle server's Change Cipher Spec + Finished
                 success = self._wait_for_server_handshake_completion()
                 if success:
-                    debug("✅ Full TLS handshake completed successfully!")
-                    # Cache session for resumption
+                    debug("✅ Full TLS 1.2 handshake completed successfully!")
                     self._save_session_to_cache()
                     self.conn.settimeout(None)
                     return True
@@ -232,7 +350,7 @@ class TLS:
                 self.conn.settimeout(None)
 
         except Exception as e:  # pylint: disable=broad-exception-caught
-            debug(f"TLS Handshake failed: {e}")
+            debug(f"TLS 1.2 Handshake failed: {e}")
             return False
 
     def _setup_tls13_extensions(self, extensions, tls_config):

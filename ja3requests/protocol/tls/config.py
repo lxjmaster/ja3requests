@@ -72,6 +72,10 @@ class TlsConfig:
         # Session cache for TLS session resumption
         self._session_cache = None
 
+        # HTTP/2 fingerprint settings
+        self._h2_settings = None
+        self._h2_window_update = None
+
     @property
     def tls_version(self) -> int:
         """Get TLS version"""
@@ -239,6 +243,26 @@ class TlsConfig:
     def session_cache(self, cache):
         """Set session cache for TLS session resumption."""
         self._session_cache = cache
+
+    @property
+    def h2_settings(self):
+        """Get HTTP/2 SETTINGS for H2 fingerprint."""
+        return self._h2_settings
+
+    @h2_settings.setter
+    def h2_settings(self, settings):
+        """Set HTTP/2 SETTINGS dict (e.g., {0x01: 65535, 0x03: 1000})."""
+        self._h2_settings = settings
+
+    @property
+    def h2_window_update(self):
+        """Get HTTP/2 initial WINDOW_UPDATE increment."""
+        return self._h2_window_update
+
+    @h2_window_update.setter
+    def h2_window_update(self, value):
+        """Set HTTP/2 initial WINDOW_UPDATE increment."""
+        self._h2_window_update = value
 
     def get_cipher_suite_values(self) -> List[int]:
         """Get cipher suite values as integers for JA3 fingerprint"""
