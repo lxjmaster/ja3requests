@@ -9,6 +9,7 @@ import hashlib
 import hmac
 import os
 import socket
+import struct
 import time
 
 from cryptography.hazmat.backends import default_backend
@@ -128,7 +129,8 @@ class HttpsSocket(BaseSocket):
 
     def send(self):
         """
-        Send HTTP message over TLS connection
+        Send HTTP message over TLS connection.
+        Routes to HTTP/2 if ALPN negotiated 'h2', otherwise HTTP/1.1.
         :return:
         """
         if not (hasattr(self, 'tls') and self.tls):
@@ -136,6 +138,15 @@ class HttpsSocket(BaseSocket):
             self.conn.sendall(self.context.message)
             return self.conn
 
+        # Check if ALPN negotiated HTTP/2
+        negotiated = getattr(self.tls, '_negotiated_protocol', None)
+        if negotiated == 'h2':
+            return self._send_h2()
+
+        return self._send_h1()
+
+    def _send_h1(self):
+        """Send HTTP/1.1 request over TLS."""
         try:
             # Brief delay for server to process our Finished message
             time.sleep(0.3)
@@ -160,6 +171,92 @@ class HttpsSocket(BaseSocket):
             raise ConnectionError(f"TLS communication failed: {e}") from e
         finally:
             self.conn.settimeout(None)
+
+    def _send_h2(self):
+        """Send HTTP/2 request over TLS using H2Connection."""
+        from ja3requests.protocol.h2.connection import H2Connection  # pylint: disable=import-outside-toplevel
+
+        try:
+            read_timeout = getattr(self.context, 'read_timeout', None)
+            self.conn.settimeout(read_timeout if read_timeout is not None else 15.0)
+
+            tls = self.tls
+
+            def h2_send(data):
+                encrypted = self._encrypt_application_data(data)
+                self.conn.sendall(encrypted)
+
+            def h2_recv(n):
+                return self._decrypt_single_record() or b""
+
+            # Get H2 fingerprint settings from session
+            h2_settings = getattr(self.context, '_h2_settings', None)
+            h2_window = getattr(self.context, '_h2_window_update', None)
+
+            h2 = H2Connection(h2_send, h2_recv, settings=h2_settings)
+            h2.initiate(
+                window_update_increment=int(h2_window) if h2_window else None
+            )
+
+            # Parse HTTP request to extract method, path, headers
+            method = getattr(self.context, 'method', 'GET')
+            host = getattr(self.context, 'destination_address', '')
+            path = getattr(self.context, 'path', '/')
+
+            # Build headers from context
+            req_headers = []
+            ctx_headers = getattr(self.context, 'headers', None) or {}
+            if isinstance(ctx_headers, dict):
+                for k, v in ctx_headers.items():
+                    req_headers.append((k, v))
+
+            # Extract body
+            body = getattr(self.context, '_data', None)
+            if isinstance(body, str):
+                body = body.encode('utf-8')
+
+            stream_id = h2.send_request(method, host, path, headers=req_headers, body=body)
+            resp_headers, resp_body = h2.receive_response(stream_id)
+
+            # Convert H2 response to HTTP/1.1-like format for Response class compatibility
+            status = "200"
+            for name, value in resp_headers:
+                if name == ":status":
+                    status = value
+                    break
+
+            http_response = f"HTTP/1.1 {status} OK\r\n"
+            for name, value in resp_headers:
+                if not name.startswith(":"):
+                    http_response += f"{name}: {value}\r\n"
+            http_response += f"Content-Length: {len(resp_body)}\r\n"
+            http_response += "\r\n"
+
+            # Build a mock socket connection for HTTPSResponse
+            response_data = http_response.encode() + resp_body
+            return self._create_mock_connection(response_data)
+
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            debug(f"H2 communication failed: {e}")
+            raise ConnectionError(f"HTTP/2 communication failed: {e}") from e
+        finally:
+            self.conn.settimeout(None)
+
+    def _decrypt_single_record(self):
+        """Read and decrypt a single TLS record, return plaintext."""
+        header = self._recv_exact(5)
+        if not header or len(header) < 5:
+            return None
+        record_type = header[0]
+        length = struct.unpack("!H", header[3:5])[0]
+        payload = self._recv_exact(length)
+        if not payload:
+            return None
+        try:
+            plaintext = self._decrypt_record(payload, record_type)
+            return plaintext
+        except Exception:  # pylint: disable=broad-exception-caught
+            return None
 
     def _handle_encrypted_response(
         self,
