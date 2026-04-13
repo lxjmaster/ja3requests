@@ -102,14 +102,14 @@ class BaseSession:
         :return:
         """
         cookies = Ja3RequestsCookieJar()
-        if self._cookies:
+        if len(self._cookies) > 0:
             cookies = self.resolve_cookies(cookies, self._cookies)
 
-        if self.Request.cookies:
-            cookies = self.resolve_cookies(cookies, self.Request.cookies)
+        if self._request is not None and getattr(self._request, 'cookies', None):
+            cookies = self.resolve_cookies(cookies, self._request.cookies)
 
-        if self.response.cookies:
-            cookies = self.resolve_cookies(cookies, self.response.cookies)
+        if self._response is not None and getattr(self._response, 'cookies', None):
+            cookies = self.resolve_cookies(cookies, self._response.cookies)
 
         return cookies
 
