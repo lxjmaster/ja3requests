@@ -169,12 +169,15 @@ def decode_string(data, offset):
 
 class HPACKEncoder:
     """
-    Simplified HPACK encoder.
-    Uses static table + literal headers without indexing.
+    HPACK encoder with static and dynamic table support.
+    Uses incremental indexing for repeated headers to improve compression.
     """
 
+    MAX_DYNAMIC_TABLE_SIZE = 4096
+
     def __init__(self):
-        self.dynamic_table = []
+        self.dynamic_table = []  # List of (name, value) tuples, newest first
+        self._dynamic_table_size = 0
 
     def encode_headers(self, headers):
         """
@@ -188,28 +191,71 @@ class HPACKEncoder:
             result += self._encode_header(name, value)
         return result
 
+    def _find_in_dynamic_table(self, name, value):
+        """Search dynamic table for exact match or name match.
+        Returns (exact_index, name_index) where index is 1-based from static table end.
+        """
+        name_match = None
+        for i, (n, v) in enumerate(self.dynamic_table):
+            idx = len(STATIC_TABLE) + i
+            if n == name and v == value:
+                return idx, idx  # exact match
+            if n == name and name_match is None:
+                name_match = idx
+        return None, name_match
+
+    def _add_to_dynamic_table(self, name, value):
+        """Add a header to the dynamic table."""
+        entry_size = len(name) + len(value) + 32  # per RFC 7541 Section 4.1
+        # Evict entries if table would exceed max size
+        while self._dynamic_table_size + entry_size > self.MAX_DYNAMIC_TABLE_SIZE and self.dynamic_table:
+            evicted = self.dynamic_table.pop()
+            self._dynamic_table_size -= len(evicted[0]) + len(evicted[1]) + 32
+
+        if entry_size <= self.MAX_DYNAMIC_TABLE_SIZE:
+            self.dynamic_table.insert(0, (name, value))
+            self._dynamic_table_size += entry_size
+
     def _encode_header(self, name, value):
         """Encode a single header field."""
         name_lower = name.lower() if isinstance(name, str) else name.decode().lower()
 
-        # Check static table for exact match
+        # Check static table for exact match → indexed
         pair_key = (name_lower, value)
         if pair_key in _STATIC_PAIR_INDEX:
             idx = _STATIC_PAIR_INDEX[pair_key]
             return encode_integer(idx, 7, 0x80)
 
-        # Check static table for name match → literal with name index
-        if name_lower in _STATIC_NAME_INDEX:
-            idx = _STATIC_NAME_INDEX[name_lower]
-            # Literal without indexing (0000xxxx)
-            result = encode_integer(idx, 4, 0x00)
+        # Check dynamic table for exact match → indexed
+        exact_idx, name_idx = self._find_in_dynamic_table(name_lower, value)
+        if exact_idx is not None:
+            return encode_integer(exact_idx, 7, 0x80)
+
+        # Sensitive headers: literal without indexing (never indexed)
+        if name_lower in ("authorization", "proxy-authorization", "cookie", "set-cookie"):
+            if name_lower in _STATIC_NAME_INDEX:
+                idx = _STATIC_NAME_INDEX[name_lower]
+                result = encode_integer(idx, 4, 0x10)  # Never indexed
+            else:
+                result = b"\x10"
+                result += encode_string(name_lower)
             result += encode_string(value)
             return result
 
-        # Literal without indexing, new name
-        result = b"\x00"  # 0000 0000
-        result += encode_string(name_lower)
-        result += encode_string(value)
+        # Non-sensitive headers: literal with incremental indexing → adds to dynamic table
+        if name_lower in _STATIC_NAME_INDEX:
+            idx = _STATIC_NAME_INDEX[name_lower]
+            result = encode_integer(idx, 6, 0x40)
+            result += encode_string(value)
+        elif name_idx is not None:
+            result = encode_integer(name_idx, 6, 0x40)
+            result += encode_string(value)
+        else:
+            result = b"\x40"  # 0100 0000, new name
+            result += encode_string(name_lower)
+            result += encode_string(value)
+
+        self._add_to_dynamic_table(name_lower, value)
         return result
 
 

@@ -151,6 +151,13 @@ class TLS:
             else:
                 self._verify_cert = False  # Default to False for backward compatibility
 
+            # Load client certificate if configured
+            if getattr(tls_config, 'client_cert', None):
+                self._client_cert_pem = self._load_cert_data(tls_config.client_cert)
+                self._client_key_pem = self._load_cert_data(
+                    getattr(tls_config, 'client_key', None)
+                ) if getattr(tls_config, 'client_key', None) else None
+
             # Update client hello with new configuration
             # For TLS 1.3, record layer version stays 0x0303 for compatibility
             client_hello_version = self.tls_version
@@ -674,9 +681,40 @@ class TLS:
             self._key_exchange_type = 'RSA'
             debug(f"RSA key exchange for cipher suite 0x{cipher_suite:04X}")
 
-    def _parse_certificate_request(self, _data):
-        """Parse CertificateRequest message"""
+    def _parse_certificate_request(self, data):
+        """
+        Parse CertificateRequest message.
+        Extracts certificate types, signature algorithms, and distinguished names.
+        """
         self._client_cert_requested = True
+        offset = 0
+
+        # certificate_types (1-byte length + types)
+        if offset < len(data):
+            cert_types_len = data[offset]
+            offset += 1
+            self._cert_types = list(data[offset:offset + cert_types_len])
+            offset += cert_types_len
+            debug(f"CertificateRequest: cert_types={self._cert_types}")
+
+        # signature_algorithms (2-byte length + algorithms)
+        if offset + 2 <= len(data):
+            sig_algs_len = struct.unpack("!H", data[offset:offset + 2])[0]
+            offset += 2
+            self._cert_sig_algs = []
+            for i in range(0, sig_algs_len, 2):
+                if offset + 2 <= len(data):
+                    self._cert_sig_algs.append(
+                        struct.unpack("!H", data[offset:offset + 2])[0]
+                    )
+                    offset += 2
+            debug(f"CertificateRequest: sig_algs={[hex(a) for a in self._cert_sig_algs]}")
+
+        # distinguished_names (2-byte length + DN list) — optional, often empty
+        if offset + 2 <= len(data):
+            dn_len = struct.unpack("!H", data[offset:offset + 2])[0]
+            offset += 2
+            self._cert_dn_data = data[offset:offset + dn_len]
 
     def _parse_server_hello_done(self, _data):
         """Parse ServerHelloDone message"""
@@ -688,11 +726,17 @@ class TLS:
         """
         Send client finishing messages
         """
-        # Send empty Certificate if requested
-        if hasattr(self, '_client_cert_requested'):
-            empty_cert = self._build_empty_certificate()
-            self.conn.sendall(empty_cert)
-            debug("Sent empty Certificate")
+        # Send Certificate if requested
+        if getattr(self, '_client_cert_requested', False):
+            client_cert_pem = getattr(self, '_client_cert_pem', None)
+            if client_cert_pem:
+                cert_msg = self._build_client_certificate(client_cert_pem)
+                self.conn.sendall(cert_msg)
+                debug("Sent client Certificate")
+            else:
+                empty_cert = self._build_empty_certificate()
+                self.conn.sendall(empty_cert)
+                debug("Sent empty Certificate (no client cert configured)")
 
         # Send ClientKeyExchange
         client_key_exchange = self._build_client_key_exchange()
@@ -803,13 +847,65 @@ class TLS:
             debug(f"Failed to wait for server handshake completion: {e}")
             return False
 
+    @staticmethod
+    def _load_cert_data(cert_input):
+        """Load certificate/key data from file path or raw bytes/string."""
+        if cert_input is None:
+            return None
+        if isinstance(cert_input, bytes):
+            return cert_input
+        if isinstance(cert_input, str):
+            import os  # pylint: disable=import-outside-toplevel
+            if os.path.isfile(cert_input):
+                with open(cert_input, 'rb') as f:
+                    return f.read()
+            return cert_input.encode('utf-8')
+        return None
+
     def _build_empty_certificate(self):
         """Build an empty certificate message"""
-        # Certificate message with empty certificate list
         cert_list_length = b'\x00\x00\x00'  # 0 length certificate list
         cert_msg = b'\x0b' + struct.pack("!I", 3)[1:] + cert_list_length
+        record = b'\x16\x03\x03' + struct.pack("!H", len(cert_msg)) + cert_msg
+        return record
 
-        # Wrap in TLS record
+    def _build_client_certificate(self, cert_pem):
+        """
+        Build a Certificate message with the client's certificate.
+        Parses PEM to extract DER-encoded certificate(s).
+        """
+        import base64  # pylint: disable=import-outside-toplevel
+
+        # Extract DER certificates from PEM
+        certs_der = []
+        if isinstance(cert_pem, bytes):
+            cert_pem = cert_pem.decode('utf-8', errors='replace')
+
+        in_cert = False
+        cert_lines = []
+        for line in cert_pem.splitlines():
+            if '-----BEGIN CERTIFICATE-----' in line:
+                in_cert = True
+                cert_lines = []
+            elif '-----END CERTIFICATE-----' in line:
+                in_cert = False
+                der = base64.b64decode(''.join(cert_lines))
+                certs_der.append(der)
+            elif in_cert:
+                cert_lines.append(line.strip())
+
+        if not certs_der:
+            return self._build_empty_certificate()
+
+        # Build certificate list: each cert is 3-byte length + DER data
+        cert_list = b""
+        for der in certs_der:
+            cert_list += struct.pack("!I", len(der))[1:] + der  # 3-byte length
+
+        # Certificate message: type(11) + 3-byte total length + 3-byte list length + certs
+        list_length = struct.pack("!I", len(cert_list))[1:]
+        cert_msg = b'\x0b' + struct.pack("!I", len(cert_list) + 3)[1:] + list_length + cert_list
+
         record = b'\x16\x03\x03' + struct.pack("!H", len(cert_msg)) + cert_msg
         return record
 
