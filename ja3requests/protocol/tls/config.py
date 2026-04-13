@@ -76,6 +76,10 @@ class TlsConfig:
         self._h2_settings = None
         self._h2_window_update = None
 
+        # Client certificate for mutual TLS
+        self._client_cert = None  # PEM-encoded certificate bytes or file path
+        self._client_key = None   # PEM-encoded private key bytes or file path
+
     @property
     def tls_version(self) -> int:
         """Get TLS version"""
@@ -263,6 +267,26 @@ class TlsConfig:
     def h2_window_update(self, value):
         """Set HTTP/2 initial WINDOW_UPDATE increment."""
         self._h2_window_update = value
+
+    @property
+    def client_cert(self):
+        """Get client certificate path or PEM data."""
+        return self._client_cert
+
+    @client_cert.setter
+    def client_cert(self, value):
+        """Set client certificate (file path or PEM bytes)."""
+        self._client_cert = value
+
+    @property
+    def client_key(self):
+        """Get client private key path or PEM data."""
+        return self._client_key
+
+    @client_key.setter
+    def client_key(self, value):
+        """Set client private key (file path or PEM bytes)."""
+        self._client_key = value
 
     def get_cipher_suite_values(self) -> List[int]:
         """Get cipher suite values as integers for JA3 fingerprint"""
