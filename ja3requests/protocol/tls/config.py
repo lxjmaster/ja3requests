@@ -401,3 +401,98 @@ class TlsConfig:
         if server_name is not None:
             self._server_name = server_name
         return self
+
+    # Valid IANA named groups (elliptic curves)
+    VALID_GROUPS = frozenset({
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+        21, 22, 23, 24, 25, 26, 27, 28, 29, 30,  # Named curves through x448
+        256, 257, 258, 259, 260,  # FFDHE groups
+    })
+
+    VALID_TLS_VERSIONS = frozenset({0x0301, 0x0302, 0x0303, 0x0304})
+
+    def validate(self, strict=False):
+        """
+        Validate the TLS configuration for correctness.
+
+        :param strict: If True, raise ValueError on first issue.
+                       If False, return list of issue strings.
+        :return: List of issue descriptions (empty if valid)
+        """
+        issues = []
+
+        # TLS version
+        if self._tls_version not in self.VALID_TLS_VERSIONS:
+            issues.append(f"Invalid TLS version: 0x{self._tls_version:04X}. "
+                          f"Valid: {sorted(hex(v) for v in self.VALID_TLS_VERSIONS)}")
+
+        # Cipher suites
+        if not self._cipher_suites:
+            issues.append("No cipher suites configured")
+        else:
+            for suite in self._cipher_suites:
+                if not hasattr(suite, 'value'):
+                    issues.append(f"Cipher suite {suite!r} missing 'value' attribute")
+
+        # Supported groups
+        if self._supported_groups:
+            for group in self._supported_groups:
+                if group not in self.VALID_GROUPS:
+                    issues.append(f"Unknown supported group: {group}")
+
+        # Signature algorithms (must be 2-byte values)
+        if self._signature_algorithms:
+            for alg in self._signature_algorithms:
+                if not (0x0000 <= alg <= 0xFFFF):
+                    issues.append(f"Invalid signature algorithm: 0x{alg:04X}")
+
+        # ALPN protocols
+        if self._alpn_protocols:
+            for proto in self._alpn_protocols:
+                if not isinstance(proto, str) or len(proto) == 0 or len(proto) > 255:
+                    issues.append(f"Invalid ALPN protocol: {proto!r}")
+
+        # Client random length
+        if self._client_random is not None and len(self._client_random) != 32:
+            issues.append(f"Client random must be 32 bytes, got {len(self._client_random)}")
+
+        # TLS 1.3 requires supported_groups for key exchange
+        if self._tls_version == 0x0304 and not self._supported_groups:
+            issues.append("TLS 1.3 requires supported_groups to be set")
+
+        if strict and issues:
+            raise ValueError(f"TLS config validation failed: {issues[0]}")
+
+        return issues
+
+    @classmethod
+    def from_browser(cls, browser, version=None, server_name=None):
+        """
+        Create a TlsConfig that mimics a specific browser version.
+
+        :param browser: Browser name ("chrome", "firefox", "safari", "edge")
+        :param version: Browser version number (e.g., 120). Defaults to latest.
+        :param server_name: Optional SNI server name.
+        :return: Configured TlsConfig instance
+
+        Usage::
+
+            config = TlsConfig.from_browser("chrome", version=120)
+            session = Session(tls_config=config)
+        """
+        from ja3requests.protocol.tls.browser_presets import get_preset  # pylint: disable=import-outside-toplevel
+
+        preset = get_preset(browser, version)
+        config = cls()
+        config._tls_version = preset["tls_version"]
+        config._cipher_suites = list(preset["cipher_suites"])
+        config._supported_groups = list(preset["supported_groups"])
+        config._signature_algorithms = list(preset["signature_algorithms"])
+        config._alpn_protocols = list(preset["alpn_protocols"])
+        config._use_grease = preset.get("use_grease", False)
+        config._extensions = list(preset.get("extensions", []))
+        config._h2_settings = preset.get("h2_settings")
+        config._h2_window_update = preset.get("h2_window_update")
+        if server_name:
+            config._server_name = server_name
+        return config
