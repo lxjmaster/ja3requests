@@ -29,6 +29,11 @@ and fails below 85%. The coverage table is available in the job summary and in
 a 14-day artifact; same-repository PRs also receive an updated coverage comment.
 Fork PRs run the checks without attempting a write-permission comment.
 
+The CI branch adds three portability regressions for Python 3.7/OpenSSL's ragged
+EOF reporting, bringing the collected suite to 958 cases. Only the local test
+peer normalizes that EOF; authentication errors and timeouts still propagate,
+and incomplete protocol reads still raise `EOFError`.
+
 The source-format gate uses Black 25.1.0, and pylint checks errors across the
 package. Existing style/refactoring warnings are not silently reported as clean;
 they are outside this error-level gate. Legacy manual tests remain explicitly
