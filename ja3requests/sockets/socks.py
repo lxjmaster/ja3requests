@@ -223,7 +223,8 @@ class SocksProxySocket(BaseSocket):
         from ja3requests.sockets.https import HttpsSocket  # pylint: disable=import-outside-toplevel
         from ja3requests.protocol.tls import TLS  # pylint: disable=import-outside-toplevel
 
-        tls = TLS(self.conn)
+        tls = TLS(self.conn, server_host=self.context.destination_address,
+                  server_port=self.context.port)
         tls_config = self.context.tls_config
         if tls_config and not getattr(tls_config, 'server_name', None):
             tls_config.server_name = self.context.destination_address

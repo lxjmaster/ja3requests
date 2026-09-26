@@ -36,7 +36,7 @@ from .crypto import (
     get_cipher_info,
     is_gcm_cipher_suite,
 )
-from .certificate_verify import CertificateVerifier
+from .certificate_verify import CertificateVerifier, verify_tls_signature
 
 # ECDHE Cipher Suite Constants
 # These cipher suites use Elliptic Curve Diffie-Hellman Ephemeral key exchange
@@ -187,7 +187,7 @@ class TLS:
             self._is_tls13 = is_tls13
 
             # Set cached session ID for resumption
-            if self._session_cache is not None and self._server_host:
+            if self._session_cache is not None and self._server_host and not self._verify_cert:
                 cached = self._session_cache.get(self._server_host, self._server_port or 443)
                 if cached:
                     debug(f"Using cached session ID for {self._server_host}")
@@ -252,7 +252,7 @@ class TLS:
                                 server_hello_msg = record_data[4:4 + msg_len]
                                 # Also parse with our existing method for cipher suite etc.
                                 self._parse_server_hello(server_hello_msg)
-                                self._handshake_messages += record_data
+                                buffer = buffer[5 + record_length:]
                         break
 
             if server_hello_msg is None:
@@ -266,6 +266,8 @@ class TLS:
                 self._tls13_key_share_group,
                 self._handshake_messages,
             )
+            if getattr(self, '_verify_cert', False):
+                hs._certificate_verifier = self._verify_server_certificate
 
             if not hs.process_server_hello(server_hello_msg):
                 debug("TLS 1.3: Failed to process ServerHello")
@@ -275,10 +277,12 @@ class TLS:
             # (EncryptedExtensions, Certificate, CertificateVerify, Finished)
             server_finished_received = False
             while not server_finished_received:
-                data = self.conn.recv(4096)
-                if not data:
-                    break
-                buffer = data
+                if len(buffer) < 5 or len(buffer) < 5 + int.from_bytes(buffer[3:5], 'big'):
+                    data = self.conn.recv(4096)
+                    if not data:
+                        break
+                    buffer += data
+                    continue
 
                 # Parse TLS records from buffer
                 offset = 0
@@ -304,6 +308,7 @@ class TLS:
                             for msg_type, msg_data in messages:
                                 if msg_type == 20:  # Finished
                                     server_finished_received = True
+                buffer = buffer[offset:]
 
             if not server_finished_received:
                 debug("TLS 1.3: Server Finished not received")
@@ -320,6 +325,7 @@ class TLS:
             self._tls13_client_rp = client_rp
             self._tls13_server_rp = server_rp
             self._tls13_handshake = hs
+            self._negotiated_protocol = hs._negotiated_protocol
 
             debug("✅ TLS 1.3 handshake completed successfully!")
             self._save_session_to_cache()
@@ -338,6 +344,8 @@ class TLS:
         try:
             # Step 2-6: Receive server handshake messages
             self._parse_server_handshake_messages()
+            if getattr(self, '_verify_cert', False) and not getattr(self, '_cert_verified', False):
+                raise TLSHandshakeError("Server certificate was not verified")
 
             # Step 7-9: Send client finishing messages
             self._send_client_finishing_messages()
@@ -655,6 +663,8 @@ class TLS:
 
         except Exception as e:  # pylint: disable=broad-exception-caught
             debug(f"Error parsing certificate: {e}")
+            if getattr(self, '_verify_cert', False):
+                raise TLSHandshakeError(f"Invalid server certificate: {e}") from e
             warn_no_certificate_verification()
 
     def _parse_server_key_exchange(self, data):
@@ -668,6 +678,18 @@ class TLS:
             ecdhe_params = ECDHEKeyExchange.parse_server_ecdhe_params(data)
 
             if ecdhe_params:
+                if getattr(self, '_verify_cert', False):
+                    signed_end = 4 + data[3]
+                    if signed_end + 4 > len(data):
+                        raise TLSHandshakeError("Missing ServerKeyExchange signature")
+                    scheme, size = struct.unpack('!HH', data[signed_end:signed_end + 4])
+                    signature = data[signed_end + 4:]
+                    if len(signature) != size:
+                        raise TLSHandshakeError("Truncated ServerKeyExchange signature")
+                    verify_tls_signature(
+                        serialization.load_der_public_key(self._server_public_key), scheme, signature,
+                        self._client_random + self._server_random + data[:signed_end],
+                    )
                 self._ecdhe_curve_id = ecdhe_params['curve_id']
                 self._ecdhe_server_pubkey = ecdhe_params['public_key']
                 debug(f"ECDHE key exchange: curve_id={self._ecdhe_curve_id}")
@@ -760,91 +782,114 @@ class TLS:
         self.conn.sendall(finished_message)
         debug("Sent Finished")
 
-    def _wait_for_server_handshake_completion(
-        self,
-    ):  # pylint: disable=too-many-branches,too-many-return-statements,too-many-nested-blocks
-        """
-        Wait for server's final handshake messages (ChangeCipherSpec + Finished)
-        Returns True if server accepts the handshake, False otherwise
-        """
-        try:
-            # Try to read server's response with reasonable timeout
-            buffer = b""
-            received_change_cipher_spec = False
-            received_finished = False
+    def _read_server_handshake_record(self):
+        """Read exactly one record without consuming later application data."""
+        def read_exact(size):
+            data = b''
+            while len(data) < size:
+                chunk = self.conn.recv(size - len(data))
+                if not chunk:
+                    raise TLSHandshakeError("Truncated server handshake record")
+                data += chunk
+            return data
 
-            # Read with timeout, expecting server's response
-            try:
-                data = self.conn.recv(4096)
-                if data:
-                    buffer += data
-                    debug(f"Received {len(data)} bytes from server after our Finished")
-                else:
-                    debug("No response from server after our Finished")
-                    return False
-            except Exception as recv_error:  # pylint: disable=broad-exception-caught
-                debug(f"Error receiving server response: {recv_error}")
-                return False
+        header = read_exact(5)
+        length = int.from_bytes(header[3:5], 'big')
+        if header[1:3] != b'\x03\x03' or length > 18432:
+            raise TLSHandshakeError("Invalid TLS 1.2 record header")
+        return header, read_exact(length)
 
-            # Parse TLS records from buffer
-            offset = 0
-            while offset < len(buffer):
-                if offset + 5 > len(buffer):
-                    break
-
-                record_type = buffer[offset]
-                record_length = struct.unpack("!H", buffer[offset + 3 : offset + 5])[0]
-
-                if offset + 5 + record_length > len(buffer):
-                    # Incomplete record, might need more data
-                    break
-
-                record_data = buffer[offset + 5 : offset + 5 + record_length]
-
-                debug(
-                    f"Processing server record: type={record_type}, length={record_length}"
-                )
-
-                if record_type == 20:  # ChangeCipherSpec
-                    debug("✅ Received server ChangeCipherSpec")
-                    received_change_cipher_spec = True
-                    # Reset server sequence number for encrypted messages
-                    self._server_seq_num = 0
-                elif record_type == 22:  # Handshake (encrypted Finished)
-                    debug("✅ Received server encrypted Finished")
-                    received_finished = True
-                    # Server's Finished message uses seq=0, increment for next message
-                    self._server_seq_num = 1
-                elif record_type == 21:  # Alert
-                    if len(record_data) >= 2:
-                        alert_level = record_data[0]
-                        alert_description = record_data[1]
-                        debug(
-                            f"Received TLS Alert: level={alert_level}, description={alert_description}"
-                        )
-                        if alert_level == 2:  # Fatal alert
-                            if alert_description == 20:  # bad_record_mac
-                                debug(
-                                    "Server rejected our Finished message (bad_record_mac)"
-                                )
-                                # This is expected with our current implementation
-                                return False
-                            debug(f"Server sent fatal alert: {alert_description}")
-                            return False
-                        debug(f"Server sent warning alert: {alert_description}")
-
-                offset += 5 + record_length
-
-            # If we received both messages, handshake is complete
-            if received_change_cipher_spec and received_finished:
-                return True
-            debug(
-                f"Incomplete handshake: ChangeCipherSpec={received_change_cipher_spec}, Finished={received_finished}"
+    def _decrypt_server_handshake_record(self, header, encrypted):
+        """Authenticate a TLS 1.2 handshake record using the server write keys."""
+        prefix = self._server_seq_num.to_bytes(8, 'big') + header[:3]
+        if self._is_gcm:
+            if len(encrypted) < 24:
+                raise TLSHandshakeError("Truncated GCM handshake record")
+            explicit, ciphertext, tag = encrypted[:8], encrypted[8:-16], encrypted[-16:]
+            aad = prefix + len(ciphertext).to_bytes(2, 'big')
+            plaintext = AESCipher.decrypt_gcm(
+                ciphertext, self._server_write_key,
+                self._server_write_iv + explicit, tag, aad,
             )
-            return False
+        else:
+            if len(encrypted) < 32 or len(encrypted) % 16:
+                raise TLSHandshakeError("Invalid CBC handshake record length")
+            padded = AESCipher.decrypt_cbc(
+                encrypted[16:], self._server_write_key, encrypted[:16],
+                remove_padding=False,
+            )
+            padding_length = padded[-1] + 1
+            if (padding_length > len(padded)
+                    or not hmac.compare_digest(
+                        padded[-padding_length:], bytes([padding_length - 1]) * padding_length)):
+                raise TLSHandshakeError("Invalid CBC handshake padding")
+            fragment = padded[:-padding_length]
+            info = get_cipher_info(self._selected_cipher_suite)
+            hash_algo = {'SHA1': hashlib.sha1, 'SHA256': hashlib.sha256,
+                         'SHA384': hashlib.sha384}[info['mac']]
+            mac_length = hash_algo().digest_size
+            if len(fragment) < mac_length:
+                raise TLSHandshakeError("Truncated handshake MAC")
+            plaintext, received_mac = fragment[:-mac_length], fragment[-mac_length:]
+            mac_data = prefix + len(plaintext).to_bytes(2, 'big') + plaintext
+            expected_mac = hmac.new(self._server_write_mac_key, mac_data, hash_algo).digest()
+            if not hmac.compare_digest(received_mac, expected_mac):
+                raise TLSHandshakeError("Invalid handshake MAC")
+        self._server_seq_num += 1
+        return plaintext
 
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            debug(f"Failed to wait for server handshake completion: {e}")
+    def _verify_server_finished(self, message, transcript):
+        """Check the Finished message against the transcript through client Finished."""
+        if len(message) != 16 or message[:4] != b'\x14\x00\x00\x0c':
+            raise TLSHandshakeError("Invalid server Finished message")
+        expected = TLSCrypto.compute_verify_data(
+            self._master_secret, transcript, is_client=False,
+            _cipher_suite=self._selected_cipher_suite,
+        )
+        if not hmac.compare_digest(message[4:], expected):
+            raise TLSHandshakeError("Invalid server Finished verify_data")
+
+    def _wait_for_server_handshake_completion(self):
+        """Require ChangeCipherSpec and an authenticated server Finished."""
+        try:
+            received_ccs = False
+            pending = b''
+            transcript = self._handshake_messages
+            while True:
+                header, payload = self._read_server_handshake_record()
+                if header[0] == 20:
+                    if received_ccs or payload != b'\x01' or pending:
+                        raise TLSHandshakeError("Unexpected ChangeCipherSpec")
+                    received_ccs = True
+                    self._server_seq_num = 0
+                    continue
+                if header[0] != 22:
+                    raise TLSHandshakeError("Expected server Finished, received other record type")
+                if received_ccs:
+                    payload = self._decrypt_server_handshake_record(header, payload)
+                pending += payload
+                while len(pending) >= 4:
+                    kind = pending[0]
+                    size = int.from_bytes(pending[1:4], 'big')
+                    if received_ccs:
+                        if kind != 20 or size != 12:
+                            raise TLSHandshakeError("Expected encrypted server Finished")
+                    elif kind != 4 or size < 6 or size > 65541:
+                        raise TLSHandshakeError("Expected NewSessionTicket before ChangeCipherSpec")
+                    if len(pending) < 4 + size:
+                        break
+                    message, pending = pending[:4 + size], pending[4 + size:]
+                    if received_ccs:
+                        self._verify_server_finished(message, transcript)
+                        if pending:
+                            raise TLSHandshakeError("Unexpected messages after server Finished")
+                        self._handshake_messages = transcript + message
+                        return True
+                    if int.from_bytes(message[8:10], 'big') != len(message) - 10:
+                        raise TLSHandshakeError("Invalid NewSessionTicket length")
+                    transcript += message
+        except Exception as error:  # pylint: disable=broad-exception-caught
+            debug(f"Failed to authenticate server Finished: {error}")
             return False
 
     @staticmethod
@@ -1076,6 +1121,8 @@ class TLS:
         try:
             # Use proper TLS record layer encryption
             encrypted_record = self._encrypt_finished_message(msg)
+            # The server's Finished authenticates our Finished as well.
+            self._handshake_messages += msg
             debug(
                 f"Successfully encrypted Finished message: {len(encrypted_record)} bytes"
             )
@@ -1429,40 +1476,15 @@ class TLS:
             return None
 
     def _verify_server_certificate(self, certificate_data: bytes):
-        """
-        Verify server certificate chain.
-
-        Args:
-            certificate_data: Raw certificate data from Certificate message
-        """
-        try:
-            hostname = getattr(self, '_server_name', None)
-            if not hostname:
-                debug("No server name for certificate verification, skipping")
-                return
-
-            verifier = CertificateVerifier(verify=True)
-            is_valid, error = verifier.verify_certificate(
-                hostname=hostname,
-                certificate_data=certificate_data,
-                check_hostname=True,
-                check_expiry=True,
-            )
-
-            if is_valid:
-                debug(f"Certificate verification passed for {hostname}")
-                self._cert_verified = True
-            else:
-                debug(f"Certificate verification failed: {error}")
-                self._cert_verified = False
-                self._cert_error = error
-                # Don't raise exception - allow connection to continue
-                # Users can check _cert_verified to see the result
-
-        except ImportError as e:
-            debug(f"Certificate verification module not available: {e}")
-            self._cert_verified = False
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            debug(f"Certificate verification error: {e}")
-            self._cert_verified = False
-            self._cert_error = str(e)
+        """Validate the destination identity and stop the handshake on failure."""
+        self._cert_verified = False
+        hostname = self._server_host or self._server_name
+        if not hostname:
+            raise TLSHandshakeError("No hostname for certificate verification")
+        self._certificate_data = certificate_data
+        valid, error = CertificateVerifier(verify=True).verify_certificate(hostname, certificate_data)
+        if not valid:
+            self._cert_error = error
+            raise TLSHandshakeError(f"Certificate verification failed: {error}")
+        self._cert_verified = True
+        self._verified_hostname = hostname

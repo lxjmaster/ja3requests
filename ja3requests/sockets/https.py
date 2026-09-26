@@ -40,10 +40,19 @@ class HttpsSocket(BaseSocket):
     def new_conn(self):
         host = self.context.destination_address
         port = self.context.port
+        tls_config = getattr(self.context, 'tls_config', None)
 
         # Try to get connection from pool
         if self._pool:
             pooled_conn = self._pool.get_connection(host, port, "https")
+            if pooled_conn and getattr(tls_config, 'verify_cert', False):
+                tls = pooled_conn.tls
+                if (getattr(tls, '_cert_verified', False) is not True
+                        or getattr(tls, '_verified_hostname', None) != host):
+                    # A connection created without authentication cannot satisfy
+                    # a later verified request, even for the same pool key.
+                    self._pool.discard_connection(pooled_conn)
+                    pooled_conn = None
             if pooled_conn and pooled_conn.conn and pooled_conn.tls:
                 debug(f"Reusing pooled connection to {host}:{port}")
                 self.conn = pooled_conn.conn
@@ -57,7 +66,6 @@ class HttpsSocket(BaseSocket):
         self.conn = self._new_conn(host, port)
 
         # Get TLS config and set default server_name
-        tls_config = getattr(self.context, 'tls_config', None)
         if tls_config and not getattr(tls_config, 'server_name', None):
             tls_config.server_name = host
 
@@ -235,7 +243,7 @@ class HttpsSocket(BaseSocket):
 
             # Build a mock socket connection for HTTPSResponse
             response_data = http_response.encode() + resp_body
-            return self._create_mock_connection(response_data)
+            return self._create_response_connection(response_data)
 
         except Exception as e:  # pylint: disable=broad-exception-caught
             debug(f"H2 communication failed: {e}")
@@ -245,19 +253,38 @@ class HttpsSocket(BaseSocket):
 
     def _decrypt_single_record(self):
         """Read and decrypt a single TLS record, return plaintext."""
-        header = self._recv_exact(5)
-        if not header or len(header) < 5:
-            return None
-        record_type = header[0]
-        length = struct.unpack("!H", header[3:5])[0]
-        payload = self._recv_exact(length)
-        if not payload:
-            return None
+        while True:
+            header = self._recv_exact(5)
+            if not header or len(header) < 5:
+                return None
+            record_type = header[0]
+            length = struct.unpack("!H", header[3:5])[0]
+            payload = self._recv_exact(length)
+            if not payload:
+                return None
+            if len(payload) != length:
+                raise TLSDecryptionError("Truncated TLS record")
+            if getattr(self.tls, '_is_tls13', False):
+                record_type, payload = self._decrypt_tls13_record(header, payload)
+                if record_type == 0x16:  # NewSessionTicket, not HTTP/2 EOF
+                    continue
+                if record_type == 0x17:
+                    if not payload:
+                        continue
+                    return payload
+                return None
+            if record_type != 0x17:
+                return None
+            return self._decrypt_application_data(payload)
+
+    def _decrypt_tls13_record(self, header, payload):
+        """Unwrap TLSInnerPlaintext using the negotiated application keys."""
+        if header[0] != 0x17:
+            raise TLSDecryptionError("Expected encrypted TLS 1.3 record")
         try:
-            plaintext = self._decrypt_record(payload, record_type)
-            return plaintext
-        except Exception:  # pylint: disable=broad-exception-caught
-            return None
+            return self.tls._tls13_server_rp.decrypt(payload, header)
+        except Exception as error:  # pylint: disable=broad-exception-caught
+            raise TLSDecryptionError("TLS 1.3 record authentication failed") from error
 
     def _handle_encrypted_response(
         self,
@@ -285,8 +312,12 @@ class HttpsSocket(BaseSocket):
                 debug("Failed to read complete TLS record payload")
                 break
 
+            is_tls13 = getattr(self.tls, '_is_tls13', False)
+            if is_tls13:
+                record_type, record_data = self._decrypt_tls13_record(header, record_data)
+
             if record_type == 0x17:  # Application data
-                decrypted_data = self._decrypt_application_data(record_data)
+                decrypted_data = record_data if is_tls13 else self._decrypt_application_data(record_data)
                 if decrypted_data:
                     http_response_data += decrypted_data
                     debug(f"Decrypted {len(decrypted_data)} bytes of HTTP data")
@@ -576,6 +607,8 @@ class HttpsSocket(BaseSocket):
         """
         Encrypt HTTP data as TLS application data record (supports CBC and GCM)
         """
+        if getattr(self.tls, '_is_tls13', False):
+            return self.tls._tls13_client_rp.encrypt(0x17, data)
         if getattr(self.tls, '_is_gcm', False):
             return self._encrypt_application_data_gcm(data)
         return self._encrypt_application_data_cbc(data)
