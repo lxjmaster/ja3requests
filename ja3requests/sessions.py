@@ -135,7 +135,9 @@ class Session(BaseSession):
         # Apply verify to TLS config (deep copy to avoid mutating session config)
         tls_config = self._tls_config
         if verify != tls_config.verify_cert:
-            tls_config = copy.deepcopy(self._tls_config)
+            # The thread-safe cache belongs to the session, not the request.
+            cache = self._tls_config.session_cache
+            tls_config = copy.deepcopy(self._tls_config, {id(cache): cache})
             tls_config.verify_cert = verify
 
         # Merge session-level cookies with per-request cookies

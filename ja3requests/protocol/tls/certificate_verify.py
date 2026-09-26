@@ -5,13 +5,18 @@ ja3requests.protocol.tls.certificate_verify
 Certificate verification for TLS connections.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
+import ipaddress
+import ssl
 from typing import List, Optional, Tuple
 
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.asymmetric import padding, ec, rsa
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding, rsa, ec, ed25519, ed448
+from cryptography.exceptions import InvalidSignature
 from cryptography.x509.oid import ExtensionOID, NameOID
+from cryptography.x509.verification import PolicyBuilder, Store, VerificationError
 
 from ja3requests.protocol.tls.debug import debug
 
@@ -33,6 +38,29 @@ class CertificateHostnameMismatchError(CertificateVerificationError):
 
 class CertificateChainError(CertificateVerificationError):
     """Certificate chain validation failed"""
+
+
+def verify_tls_signature(public_key, scheme, signature, data, tls13=False):
+    """Verify proof of possession for TLS CertificateVerify/ServerKeyExchange."""
+    algorithms = {4: hashes.SHA256, 5: hashes.SHA384, 6: hashes.SHA512}
+    try:
+        if scheme in (0x0804, 0x0805, 0x0806) and isinstance(public_key, rsa.RSAPublicKey):
+            digest = algorithms[scheme & 0xff]()
+            public_key.verify(signature, data, padding.PSS(mgf=padding.MGF1(digest), salt_length=digest.digest_size), digest)
+        elif not tls13 and scheme in (0x0401, 0x0501, 0x0601) and isinstance(public_key, rsa.RSAPublicKey):
+            public_key.verify(signature, data, padding.PKCS1v15(), algorithms[scheme >> 8]())
+        elif scheme in (0x0403, 0x0503, 0x0603) and isinstance(public_key, ec.EllipticCurvePublicKey):
+            curves = {0x0403: 'secp256r1', 0x0503: 'secp384r1', 0x0603: 'secp521r1'}
+            if tls13 and public_key.curve.name != curves[scheme]:
+                raise CertificateVerificationError("TLS signature curve mismatch")
+            public_key.verify(signature, data, ec.ECDSA(algorithms[scheme >> 8]()))
+        elif ((scheme == 0x0807 and isinstance(public_key, ed25519.Ed25519PublicKey))
+              or (scheme == 0x0808 and isinstance(public_key, ed448.Ed448PublicKey))):
+            public_key.verify(signature, data)
+        else:
+            raise CertificateVerificationError(f"Unsupported TLS signature scheme/key: {scheme:#06x}")
+    except (InvalidSignature, ValueError, TypeError) as error:
+        raise CertificateVerificationError("Invalid TLS handshake signature") from error
 
 
 class CertificateVerifier:
@@ -75,6 +103,8 @@ class CertificateVerifier:
         total_length = int.from_bytes(
             certificate_data[0:CERT_LENGTH_FIELD_SIZE], byteorder='big'
         )
+        if total_length != len(certificate_data) - CERT_LENGTH_FIELD_SIZE:
+            return []
         offset = CERT_LENGTH_FIELD_SIZE
 
         while (
@@ -82,7 +112,7 @@ class CertificateVerifier:
             and offset < total_length + CERT_LENGTH_FIELD_SIZE
         ):
             if offset + CERT_LENGTH_FIELD_SIZE > len(certificate_data):
-                break
+                return []
 
             cert_length = int.from_bytes(
                 certificate_data[offset : offset + CERT_LENGTH_FIELD_SIZE],
@@ -90,8 +120,8 @@ class CertificateVerifier:
             )
             offset += CERT_LENGTH_FIELD_SIZE
 
-            if offset + cert_length > len(certificate_data):
-                break
+            if not cert_length or offset + cert_length > len(certificate_data):
+                return []
 
             cert_der = certificate_data[offset : offset + cert_length]
             certificates.append(cert_der)
@@ -114,8 +144,10 @@ class CertificateVerifier:
         Args:
             hostname: Expected server hostname
             certificate_data: Raw certificate list from TLS handshake
-            check_hostname: Whether to verify hostname matches certificate
-            check_expiry: Whether to check certificate expiration
+            check_hostname: Enable the preliminary identity check. Trust-path
+                validation always enforces endpoint identity.
+            check_expiry: Enable the preliminary validity check. Trust-path
+                validation always enforces validity.
 
         Returns:
             Tuple of (is_valid, error_message)
@@ -142,7 +174,7 @@ class CertificateVerifier:
             if check_hostname:
                 self._verify_hostname(leaf_cert, hostname)
 
-            self._verify_chain(certificates)
+            self._verify_chain(certificates, hostname)
 
             debug(f"Certificate verification successful for {hostname}")
             return True, None
@@ -150,7 +182,7 @@ class CertificateVerifier:
         except CertificateVerificationError as e:
             debug(f"Certificate verification failed: {e}")
             return False, str(e)
-        except (ValueError, TypeError, AttributeError) as e:
+        except (ValueError, TypeError, AttributeError, OSError, VerificationError) as e:
             debug(f"Certificate verification error: {e}")
             return False, str(e)
 
@@ -170,7 +202,7 @@ class CertificateVerifier:
             CertificateExpiredError: If certificate is expired or not yet valid
         """
         try:
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
 
             # Try new API first (cryptography >= 42.0)
             try:
@@ -196,8 +228,7 @@ class CertificateVerifier:
         except CertificateExpiredError:  # pylint: disable=try-except-raise
             raise
         except (ValueError, TypeError, AttributeError) as e:
-            debug(f"Expiration check error: {e}")
-            # Don't fail on unexpected errors during date parsing
+            raise CertificateExpiredError(f"Invalid validity period: {e}") from e
 
     def _verify_hostname(self, cert, hostname: str) -> None:
         """
@@ -212,12 +243,22 @@ class CertificateVerifier:
                 san_ext = cert.extensions.get_extension_for_oid(
                     ExtensionOID.SUBJECT_ALTERNATIVE_NAME
                 )
-                san_names = san_ext.value.get_values_for_type(x509.DNSName)
+                try:
+                    address = ipaddress.ip_address(hostname)
+                except ValueError:
+                    address = None
+                if address is not None:
+                    if address in san_ext.value.get_values_for_type(x509.IPAddress):
+                        return
+                san_names = san_ext.value.get_values_for_type(x509.DNSName) if address is None else []
 
                 for name in san_names:
                     if self._match_hostname(hostname, name):
                         debug(f"Hostname {hostname} matches SAN {name}")
                         return
+                raise CertificateHostnameMismatchError(
+                    f"Hostname {hostname} does not match certificate SAN"
+                )
             except x509.ExtensionNotFound:
                 pass
 
@@ -258,87 +299,23 @@ class CertificateVerifier:
             return False
         return hostname == pattern
 
-    def _verify_chain(self, certificates: List[bytes]) -> None:
-        """
-        Verify certificate chain structure.
-
-        Checks:
-        - Chain has at least one certificate
-        - Each certificate's issuer matches the next certificate's subject
-        - Signatures are valid (using cryptography library)
-
-        Raises:
-            CertificateChainError: If chain validation fails
-        """
-        if len(certificates) < 1:
+    def _verify_chain(self, certificates: List[bytes], hostname: str) -> None:
+        """Validate signatures and constraints to independently trusted roots."""
+        if not certificates:
             raise CertificateChainError("Empty certificate chain")
-
+        loaded = [x509.load_der_x509_certificate(cert) for cert in certificates]
+        if self.ca_certs is not None:
+            with open(self.ca_certs, 'rb') as bundle:
+                roots = x509.load_pem_x509_certificates(bundle.read())
+        else:
+            roots = [x509.load_der_x509_certificate(cert) for cert in
+                     ssl.create_default_context().get_ca_certs(binary_form=True)]
         try:
-            # Load all certificates
-            loaded_certs = []
-            for cert_der in certificates:
-                cert = self._load_certificate(cert_der)
-                if cert is None:
-                    raise CertificateChainError("Failed to load certificate in chain")
-                loaded_certs.append(cert)
-
-            # Verify chain structure: each cert should be issued by the next
-            for i in range(len(loaded_certs) - 1):
-                current_cert = loaded_certs[i]
-                issuer_cert = loaded_certs[i + 1]
-
-                # Check issuer/subject relationship
-                if current_cert.issuer != issuer_cert.subject:
-                    raise CertificateChainError(
-                        f"Certificate chain broken: cert {i} issuer does not match cert {i+1} subject"
-                    )
-
-                # Verify signature
-                try:
-                    self._verify_signature(current_cert, issuer_cert)
-                except (ValueError, TypeError, AttributeError, KeyError) as e:
-                    debug(f"Signature verification failed for cert {i}: {e}")
-                    # Continue without failing - signature verification is complex
-
-            debug(
-                f"Certificate chain structure verified ({len(loaded_certs)} certificates)"
-            )
-
-        except CertificateChainError:  # pylint: disable=try-except-raise
-            raise
-        except (ValueError, TypeError, AttributeError) as e:
-            debug(f"Chain verification error: {e}")
-            raise CertificateChainError(f"Chain verification failed: {e}") from e
-
-    def _verify_signature(self, cert, issuer_cert) -> None:
-        """
-        Verify that cert was signed by issuer_cert.
-
-        This is a best-effort verification using the cryptography library.
-        """
-        try:
-            issuer_public_key = issuer_cert.public_key()
-
-            # Get signature algorithm
-            if isinstance(issuer_public_key, rsa.RSAPublicKey):
-                issuer_public_key.verify(
-                    cert.signature,
-                    cert.tbs_certificate_bytes,
-                    padding.PKCS1v15(),
-                    cert.signature_hash_algorithm,
-                )
-            elif isinstance(issuer_public_key, ec.EllipticCurvePublicKey):
-                issuer_public_key.verify(
-                    cert.signature,
-                    cert.tbs_certificate_bytes,
-                    ec.ECDSA(cert.signature_hash_algorithm),
-                )
-            else:
-                debug(f"Unknown public key type: {type(issuer_public_key)}")
-
-        except (ValueError, TypeError, AttributeError) as e:
-            debug(f"Signature verification error: {e}")
-            # Don't raise - signature verification can fail for various reasons
+            subject = x509.IPAddress(ipaddress.ip_address(hostname))
+        except ValueError:
+            subject = x509.DNSName(hostname.encode('idna').decode('ascii'))
+        verifier = PolicyBuilder().store(Store(roots)).build_server_verifier(subject)
+        verifier.verify(loaded[0], loaded[1:])
 
     def get_certificate_info(self, cert_der: bytes) -> dict:
         """
