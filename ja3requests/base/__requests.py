@@ -10,7 +10,7 @@ from io import IOBase
 from abc import ABC, abstractmethod
 from http.cookiejar import CookieJar
 from urllib.parse import urlparse, urlencode
-from typing import Any, AnyStr, List, Dict, Tuple, Union
+from typing import Any, AnyStr, List, Dict, Tuple, Union, Optional
 from ja3requests.const import DEFAULT_HTTP_SCHEME, DEFAULT_HTTP_PORT
 from ja3requests.exceptions import InvalidParams, InvalidData
 from ja3requests.utils import (
@@ -281,7 +281,7 @@ class BaseRequest(ABC):
         self._headers = headers
 
     @property
-    def cookies(self) -> Dict | None:
+    def cookies(self) -> Optional[Dict]:
         """
         Request property cookies
         :return:
