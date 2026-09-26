@@ -54,8 +54,9 @@ jobs:
           always() && github.event_name == 'pull_request' &&
           github.event.pull_request.head.repo.full_name == github.repository &&
           hashFiles('coverage.md') != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: gh pr comment "$PR_NUMBER" --body-file coverage.md --edit-last --create-if-none
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('node:fs');
+            const update = require('./.github/scripts/coverage-comment.cjs');
+            await update({ github, context, report: fs.readFileSync('coverage.md', 'utf8') });

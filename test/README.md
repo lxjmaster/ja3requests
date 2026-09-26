@@ -30,9 +30,13 @@ a 14-day artifact; same-repository PRs also receive an updated coverage comment.
 Fork PRs run the checks without attempting a write-permission comment.
 
 The CI branch adds three portability regressions for Python 3.7/OpenSSL's ragged
-EOF reporting, bringing the collected suite to 958 cases. Only the local test
+EOF reporting. Together with three pool-reset regressions, the collected suite
+now has 961 cases. Only the local test
 peer normalizes that EOF; authentication errors and timeouts still propagate,
 and incomplete protocol reads still raise `EOFError`.
+
+Coverage comments use a dedicated marker and bot ownership check, so reruns do
+not overwrite unrelated automation comments. Two Node tests exercise this selection.
 
 The source-format gate uses Black 25.1.0, and pylint checks errors across the
 package. Existing style/refactoring warnings are not silently reported as clean;
