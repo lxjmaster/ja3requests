@@ -80,7 +80,9 @@ class H2Connection:
             self._send(wu_frame.serialize())
             debug(f"H2: Sent WINDOW_UPDATE increment={window_update_increment}")
 
-    def send_request(self, method, authority, path, headers=None, body=None, scheme="https"):
+    def send_request(
+        self, method, authority, path, headers=None, body=None, scheme="https"
+    ):
         """
         Send an HTTP/2 request.
 
@@ -115,7 +117,9 @@ class H2Connection:
 
         # Send HEADERS frame
         end_stream = body is None or len(body) == 0
-        headers_frame = build_headers_frame(stream_id, header_block, end_stream=end_stream)
+        headers_frame = build_headers_frame(
+            stream_id, header_block, end_stream=end_stream
+        )
         self._send(headers_frame.serialize())
         debug(f"H2: Sent HEADERS on stream {stream_id}")
 
@@ -209,6 +213,7 @@ class H2Connection:
     def close(self):
         """Send GOAWAY and close connection."""
         from ja3requests.protocol.h2.frame import build_goaway_frame
+
         goaway = build_goaway_frame(0)
         try:
             self._send(goaway.serialize())

@@ -121,8 +121,12 @@ class ProxySocket(BaseSocket):
         """
         Create an HTTPS socket that works through the proxy tunnel
         """
-        from ja3requests.sockets.https import HttpsSocket  # pylint: disable=import-outside-toplevel
-        from ja3requests.protocol.tls import TLS  # pylint: disable=import-outside-toplevel
+        from ja3requests.sockets.https import (
+            HttpsSocket,
+        )  # pylint: disable=import-outside-toplevel
+        from ja3requests.protocol.tls import (
+            TLS,
+        )  # pylint: disable=import-outside-toplevel
 
         # Create a proxy-wrapped context that uses the tunnel connection
         class TunnelContext:
@@ -151,8 +155,11 @@ class ProxySocket(BaseSocket):
                 self.conn = self.tunnel_conn
 
                 # Now perform TLS handshake through the tunnel
-                tls = TLS(self.conn, server_host=self.context.destination_address,
-                          server_port=self.context.port)
+                tls = TLS(
+                    self.conn,
+                    server_host=self.context.destination_address,
+                    server_port=self.context.port,
+                )
 
                 # Set up TLS configuration
                 tls_config = getattr(self.context, 'tls_config', None)

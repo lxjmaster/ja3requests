@@ -44,21 +44,39 @@ def verify_tls_signature(public_key, scheme, signature, data, tls13=False):
     """Verify proof of possession for TLS CertificateVerify/ServerKeyExchange."""
     algorithms = {4: hashes.SHA256, 5: hashes.SHA384, 6: hashes.SHA512}
     try:
-        if scheme in (0x0804, 0x0805, 0x0806) and isinstance(public_key, rsa.RSAPublicKey):
-            digest = algorithms[scheme & 0xff]()
-            public_key.verify(signature, data, padding.PSS(mgf=padding.MGF1(digest), salt_length=digest.digest_size), digest)
-        elif not tls13 and scheme in (0x0401, 0x0501, 0x0601) and isinstance(public_key, rsa.RSAPublicKey):
-            public_key.verify(signature, data, padding.PKCS1v15(), algorithms[scheme >> 8]())
-        elif scheme in (0x0403, 0x0503, 0x0603) and isinstance(public_key, ec.EllipticCurvePublicKey):
+        if scheme in (0x0804, 0x0805, 0x0806) and isinstance(
+            public_key, rsa.RSAPublicKey
+        ):
+            digest = algorithms[scheme & 0xFF]()
+            public_key.verify(
+                signature,
+                data,
+                padding.PSS(mgf=padding.MGF1(digest), salt_length=digest.digest_size),
+                digest,
+            )
+        elif (
+            not tls13
+            and scheme in (0x0401, 0x0501, 0x0601)
+            and isinstance(public_key, rsa.RSAPublicKey)
+        ):
+            public_key.verify(
+                signature, data, padding.PKCS1v15(), algorithms[scheme >> 8]()
+            )
+        elif scheme in (0x0403, 0x0503, 0x0603) and isinstance(
+            public_key, ec.EllipticCurvePublicKey
+        ):
             curves = {0x0403: 'secp256r1', 0x0503: 'secp384r1', 0x0603: 'secp521r1'}
             if tls13 and public_key.curve.name != curves[scheme]:
                 raise CertificateVerificationError("TLS signature curve mismatch")
             public_key.verify(signature, data, ec.ECDSA(algorithms[scheme >> 8]()))
-        elif ((scheme == 0x0807 and isinstance(public_key, ed25519.Ed25519PublicKey))
-              or (scheme == 0x0808 and isinstance(public_key, ed448.Ed448PublicKey))):
+        elif (
+            scheme == 0x0807 and isinstance(public_key, ed25519.Ed25519PublicKey)
+        ) or (scheme == 0x0808 and isinstance(public_key, ed448.Ed448PublicKey)):
             public_key.verify(signature, data)
         else:
-            raise CertificateVerificationError(f"Unsupported TLS signature scheme/key: {scheme:#06x}")
+            raise CertificateVerificationError(
+                f"Unsupported TLS signature scheme/key: {scheme:#06x}"
+            )
     except (InvalidSignature, ValueError, TypeError) as error:
         raise CertificateVerificationError("Invalid TLS handshake signature") from error
 
@@ -250,7 +268,11 @@ class CertificateVerifier:
                 if address is not None:
                     if address in san_ext.value.get_values_for_type(x509.IPAddress):
                         return
-                san_names = san_ext.value.get_values_for_type(x509.DNSName) if address is None else []
+                san_names = (
+                    san_ext.value.get_values_for_type(x509.DNSName)
+                    if address is None
+                    else []
+                )
 
                 for name in san_names:
                     if self._match_hostname(hostname, name):
@@ -308,8 +330,10 @@ class CertificateVerifier:
             with open(self.ca_certs, 'rb') as bundle:
                 roots = x509.load_pem_x509_certificates(bundle.read())
         else:
-            roots = [x509.load_der_x509_certificate(cert) for cert in
-                     ssl.create_default_context().get_ca_certs(binary_form=True)]
+            roots = [
+                x509.load_der_x509_certificate(cert)
+                for cert in ssl.create_default_context().get_ca_certs(binary_form=True)
+            ]
         try:
             subject = x509.IPAddress(ipaddress.ip_address(hostname))
         except ValueError:

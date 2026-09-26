@@ -34,7 +34,9 @@ class PooledConnection:
         self.created_at = created_at or time.time()
         self.last_used_at = self.created_at
         self.tls = None  # TLS context for HTTPS connections
-        self.negotiated_protocol: Optional[str] = None  # ALPN result ('h2', 'http/1.1', None)
+        self.negotiated_protocol: Optional[str] = (
+            None  # ALPN result ('h2', 'http/1.1', None)
+        )
 
     def __repr__(self) -> str:
         return f"<PooledConnection {self.scheme}://{self.host}:{self.port} alive={self.is_alive()}>"
@@ -91,9 +93,9 @@ class PooledH2Connection(PooledConnection):
     def __init__(self, conn, scheme, host="", port=0, **kwargs):
         super().__init__(conn, scheme, host, port, **kwargs)
         self.negotiated_protocol = "h2"
-        self.h2_connection = None           # H2Connection instance
+        self.h2_connection = None  # H2Connection instance
         self._active_streams = 0
-        self._max_concurrent_streams = 100   # Conservative default
+        self._max_concurrent_streams = 100  # Conservative default
         self._goaway_received = False
         self._stream_lock = threading.RLock()
 
@@ -222,7 +224,13 @@ class ConnectionPool:
             return None
 
     def put_h2_connection(
-        self, host: str, port: int, scheme: str, conn: Any, *, tls: Any = None,
+        self,
+        host: str,
+        port: int,
+        scheme: str,
+        conn: Any,
+        *,
+        tls: Any = None,
         h2_connection: Any = None,
     ) -> Optional[PooledH2Connection]:
         """
