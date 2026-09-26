@@ -23,7 +23,8 @@
 '<!DOCTYPE html><!--STATUS OK--><html><head><meta http-equiv="Content-Type" content="text/html;char...'
 ```
 
-Ja3Requests currently implements only the HTTP protocol and a few methods.
+Ja3Requests supports HTTP/1.1 over HTTP and HTTPS. HTTPS connections can also
+negotiate HTTP/2 with ALPN. TLS 1.2 is the default; TLS 1.3 can be configured.
 
 ## Installing Ja3Requests and Supported Versions
 
@@ -34,6 +35,24 @@ $ python -m pip install ja3requests
 ```
 
 Ja3Requests officially supports Python 3.7+.
+
+## HTTPS Certificate Verification
+
+Certificate verification is disabled by default for backward compatibility.
+Enable it per request with `verify=True`, or configure it for a session:
+
+```python
+import ja3requests
+
+config = ja3requests.TlsConfig.from_browser("chrome", 120)
+config.verify_cert = True
+with ja3requests.Session(tls_config=config) as session:
+    response = session.get("https://example.com/")
+```
+
+An explicit `verify=True` or `verify=False` overrides the session setting for
+that request, including redirects. See [local protocol tests](test/README.md)
+for the tested TLS and HTTP/2 paths and their current limits.
 
 ## How To Use
 ### Unreasonable Request Method

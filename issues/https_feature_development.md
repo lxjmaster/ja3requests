@@ -79,6 +79,11 @@ All HTTPS features tested and working:
   - Context manager support for Session (`with session as s:`)
 
 ## Next Steps
-- [ ] TLS 1.3 support
-- [ ] HTTP/2 support
-- [ ] Session persistence
+- [x] TLS 1.3 request and response path with local handshake tests
+- [x] HTTP/2 over HTTPS when ALPN negotiates `h2`
+- [x] In-memory cookies, connection reuse, and TLS 1.2 session cache
+- [ ] TLS 1.3 PSK resumption, HelloRetryRequest, and KeyUpdate
+- [ ] TLS 1.2 SHA-384 PRF suite support
+
+See [the local integration test notes](../test/README.md) for the tested paths
+and their limits. Persistent sessions across process restarts are not provided.
