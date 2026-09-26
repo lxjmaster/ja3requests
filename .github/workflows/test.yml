@@ -34,3 +34,35 @@ jobs:
         run: python -m pip install -e . pytest pytest-cov
       - name: Run unit and loopback integration tests
         run: python -m pytest test --ignore=test/test_session.py -q
+
+  wheel:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - name: Build wheel
+        run: python -m pip wheel . --no-deps --wheel-dir "$RUNNER_TEMP/wheels"
+      - name: Install wheel and exercise HTTP/2 request framing
+        run: |
+          python -m venv "$RUNNER_TEMP/wheel-venv"
+          "$RUNNER_TEMP/wheel-venv/bin/python" -m pip install "$RUNNER_TEMP"/wheels/ja3requests-*.whl
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/wheel-venv/bin/python" - <<'PY'
+          import ja3requests
+          from ja3requests.protocol.h2.connection import H2Connection
+          from ja3requests.protocol.h2.frame import CONNECTION_PREFACE
+
+          sent = []
+          connection = H2Connection(sent.append, lambda size: b'')
+          connection.initiate()
+          assert connection.send_request('GET', 'example.com', '/') == 1
+          assert sent[0] == CONNECTION_PREFACE and len(sent) == 3
+          assert 'site-packages' in ja3requests.__file__
+          PY

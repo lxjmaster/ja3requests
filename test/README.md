@@ -24,16 +24,18 @@ in that file before this change.
 ## Continuous integration
 
 GitHub Actions runs the same explicit test selection on Python 3.7–3.13 using
-Ubuntu 22.04 (which supplies the Python 3.7 runtime). Coverage runs on Python 3.12
-and fails below 85%. The coverage table is available in the job summary and in
-a 14-day artifact; same-repository PRs also receive an updated coverage comment.
+Ubuntu 22.04 (which supplies the Python 3.7 runtime). A separate job installs
+the built wheel and checks HTTP/2 request framing outside the source directory.
+Coverage runs on Python 3.12 and fails below 85%. The coverage table is available
+in the job summary and a 14-day artifact; same-repository PRs also receive an
+updated coverage comment.
 Fork PRs run the checks without attempting a write-permission comment.
 
-The CI branch adds three portability regressions for Python 3.7/OpenSSL's ragged
-EOF reporting. Together with three pool-reset regressions, the collected suite
-now has 961 cases. Only the local test
-peer normalizes that EOF; authentication errors and timeouts still propagate,
-and incomplete protocol reads still raise `EOFError`.
+The suite includes three portability regressions for Python 3.7/OpenSSL's ragged
+EOF reporting, three pool-reset regressions, and four regressions for certificate
+verification inheritance and redirects. Only the local test peer normalizes that
+EOF; authentication errors and timeouts still propagate, and incomplete protocol
+reads still raise `EOFError`.
 
 Coverage comments use a dedicated marker and bot ownership check, so reruns do
 not overwrite unrelated automation comments. Two Node tests exercise this selection.
@@ -84,6 +86,8 @@ deploy the repository.
   configured SNI differs from the request hostname.
 - Per-request verification overrides isolate mutable configuration while sharing
   the Session's existing thread-safe cache, without copying its lock.
+- Requests without a verification override inherit the Session's TLS setting;
+  redirects retain an explicit request-level override.
 - TLS 1.2 server Finished authentication for the tested CBC and GCM suites:
   record MAC/AEAD checks, CBC padding, sequence numbers, the transcript through
   client Finished, and constant-time verify_data comparison. Invalid Finished
@@ -140,12 +144,14 @@ TLS 1.3 PSK resumption or 0-RTT support.
 
 ## Issue #34 progress
 
-The integration work now exceeds the issue's 85% coverage target.
-On Python 3.13.3/macOS with cryptography 45.0.5, the regression command above passes
-955 tests (including 114 new cases), with 87% total statement coverage. TLS
-orchestration is at 84%, HTTPS socket handling at 79%, and H2 connection handling
-at 95%. The suite covers the issue's local TLS/H2/SOCKS server, handshake, failure,
-pool-reuse and ALPN scenarios. No remote issue or PR state is changed by these tests.
+The integration work exceeded the issue's 85% coverage target in a recorded run.
+That Python 3.13.3/macOS run with cryptography 45.0.5 passed 955 tests (including
+114 new cases), with 87% total statement coverage. TLS orchestration was at 84%,
+HTTPS socket handling at 79%, and H2 connection handling at 95%. The current
+selected suite passes 965 tests locally; coverage has not been remeasured for
+this count. The suite covers the issue's local TLS/H2/SOCKS
+server, handshake, failure, pool-reuse and ALPN scenarios. No remote issue or PR
+state is changed by these tests.
 
 The TLS 1.2 Finished tests use TLS_RSA_WITH_AES_128_CBC_SHA and
 TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, both with the SHA-256 PRF. The existing
