@@ -113,7 +113,7 @@ class Session(BaseSession):
         json: Union[Dict[AnyStr, AnyStr], AnyStr] = None,
         timeout: Optional[float] = None,
         verify: bool = False,
-        **kwargs
+        **kwargs,
     ):
         """
         Instantiating a request class<Request> and ready request<ReadyRequest> to send.
@@ -299,7 +299,9 @@ class Session(BaseSession):
         stream = kwargs.pop("stream", False)
         retry = self._retry
         method = getattr(self.Request, 'method', 'GET') if self.Request else 'GET'
-        max_attempts = 1 + (retry.total if retry and retry.is_retryable_method(method) else 0)
+        max_attempts = 1 + (
+            retry.total if retry and retry.is_retryable_method(method) else 0
+        )
 
         last_response = None
         last_error = None
@@ -314,9 +316,12 @@ class Session(BaseSession):
                     merge_cookies(self._cookies, response.cookies)
 
                 # Check if we should retry based on status code
-                if (retry and attempt < max_attempts - 1
-                        and retry.is_retryable_method(method)
-                        and retry.is_retryable_status(response.status_code)):
+                if (
+                    retry
+                    and attempt < max_attempts - 1
+                    and retry.is_retryable_method(method)
+                    and retry.is_retryable_status(response.status_code)
+                ):
                     retry.sleep_for_retry(response, attempt + 1)
                     last_response = response
                     continue
@@ -326,14 +331,20 @@ class Session(BaseSession):
                     response = self.resolve_redirects(response.location, **kwargs)
 
                 # Dispatch after_request hooks
-                response = self._dispatch_hooks("after_request", response, per_request_hooks)
+                response = self._dispatch_hooks(
+                    "after_request", response, per_request_hooks
+                )
 
                 self.response = response
                 return response
 
             except (ConnectionError, OSError) as err:
                 last_error = err
-                if retry and attempt < max_attempts - 1 and retry.is_retryable_method(method):
+                if (
+                    retry
+                    and attempt < max_attempts - 1
+                    and retry.is_retryable_method(method)
+                ):
                     retry.sleep_for_retry(None, attempt + 1)
                     continue
                 raise
@@ -344,7 +355,9 @@ class Session(BaseSession):
             allow_redirects = kwargs.get("allow_redirects", True)
             if allow_redirects and last_response.is_redirected:
                 last_response = self.resolve_redirects(last_response.location, **kwargs)
-            last_response = self._dispatch_hooks("after_request", last_response, per_request_hooks)
+            last_response = self._dispatch_hooks(
+                "after_request", last_response, per_request_hooks
+            )
             self.response = last_response
             if retry and retry.raise_on_status:
                 raise MaxRetriedException(
@@ -366,7 +379,10 @@ class Session(BaseSession):
         :param kwargs:
         :return:
         """
-        from urllib.parse import urljoin, urlparse  # pylint: disable=import-outside-toplevel
+        from urllib.parse import (
+            urljoin,
+            urlparse,
+        )  # pylint: disable=import-outside-toplevel
 
         send_kwargs = kwargs
         # Get the original URL to resolve relative redirects

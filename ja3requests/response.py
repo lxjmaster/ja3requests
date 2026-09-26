@@ -329,7 +329,7 @@ class Response(BaseResponse):
             # Body already fully read, yield from buffer
             data = self._body or b""
             for i in range(0, len(data), chunk_size):
-                yield data[i:i + chunk_size]
+                yield data[i : i + chunk_size]
             return
 
         if not self.response or not self.response.fp:
@@ -342,7 +342,7 @@ class Response(BaseResponse):
         self._body_consumed = True
         data = self._body
         for i in range(0, len(data), chunk_size):
-            yield data[i:i + chunk_size]
+            yield data[i : i + chunk_size]
 
     def iter_lines(self, chunk_size=512, delimiter=None):
         """
@@ -381,7 +381,9 @@ class Response(BaseResponse):
         if self._encoding is not None:
             return self._encoding
 
-        content_type = self.headers.get("Content-Type") or self.headers.get("content-type", "")
+        content_type = self.headers.get("Content-Type") or self.headers.get(
+            "content-type", ""
+        )
         if "charset" in content_type.lower():
             # Extract charset value from Content-Type header
             for part in content_type.split(";"):

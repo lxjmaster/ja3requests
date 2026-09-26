@@ -24,6 +24,7 @@ from ja3requests.protocol.tls.certificate_verify import verify_tls_signature
 # HKDF Key Schedule (RFC 5869 + TLS 1.3 RFC 8446 Section 7.1)
 # ============================================================================
 
+
 class HKDF:
     """HKDF (HMAC-based Key Derivation Function) for TLS 1.3."""
 
@@ -80,7 +81,9 @@ class HKDF:
         :param length: Desired output length
         :return: Derived key material
         """
-        tls_label = b"tls13 " + label.encode() if isinstance(label, str) else b"tls13 " + label
+        tls_label = (
+            b"tls13 " + label.encode() if isinstance(label, str) else b"tls13 " + label
+        )
         hkdf_label = struct.pack("!H", length)
         hkdf_label += struct.pack("B", len(tls_label)) + tls_label
         hkdf_label += struct.pack("B", len(context)) + context
@@ -101,12 +104,15 @@ class HKDF:
         :return: Derived secret
         """
         transcript_hash = hash_algo(messages).digest()
-        return HKDF.expand_label(secret, label, transcript_hash, hash_algo().digest_size, hash_algo)
+        return HKDF.expand_label(
+            secret, label, transcript_hash, hash_algo().digest_size, hash_algo
+        )
 
 
 # ============================================================================
 # TLS 1.3 Key Schedule (RFC 8446 Section 7.1)
 # ============================================================================
+
 
 class TLS13KeySchedule:
     """
@@ -174,8 +180,12 @@ class TLS13KeySchedule:
         derived = Derive-Secret(handshake_secret, "derived", "")
         Master Secret = HKDF-Extract(salt=derived, IKM=0)
         """
-        derived = HKDF.derive_secret(self.handshake_secret, "derived", b"", self.hash_algo)
-        self.master_secret = HKDF.extract(derived, b"\x00" * self.hash_len, self.hash_algo)
+        derived = HKDF.derive_secret(
+            self.handshake_secret, "derived", b"", self.hash_algo
+        )
+        self.master_secret = HKDF.extract(
+            derived, b"\x00" * self.hash_len, self.hash_algo
+        )
         debug(f"TLS 1.3 Master Secret: {self.master_secret.hex()[:32]}...")
 
         # Derive application traffic secrets
@@ -205,7 +215,9 @@ class TLS13KeySchedule:
 
         finished_key = HKDF-Expand-Label(BaseKey, "finished", "", Hash.length)
         """
-        return HKDF.expand_label(base_key, "finished", b"", self.hash_len, self.hash_algo)
+        return HKDF.expand_label(
+            base_key, "finished", b"", self.hash_len, self.hash_algo
+        )
 
     def compute_finished_verify_data(self, finished_key, handshake_context):
         """
@@ -220,6 +232,7 @@ class TLS13KeySchedule:
 # ============================================================================
 # TLS 1.3 ECDHE Key Exchange
 # ============================================================================
+
 
 class TLS13KeyExchange:
     """TLS 1.3 ECDHE key exchange for key_share extension."""
@@ -264,6 +277,7 @@ class TLS13KeyExchange:
 # ============================================================================
 # TLS 1.3 Record Layer Encryption
 # ============================================================================
+
 
 class TLS13RecordProtection:
     """TLS 1.3 record layer encryption/decryption using AES-GCM."""
@@ -389,7 +403,9 @@ class TLS13Handshake:
         :param server_hello_data: Raw ServerHello handshake message bytes
         :return: True if successful
         """
-        self._transcript += b"\x02" + len(server_hello_data).to_bytes(3, 'big') + server_hello_data
+        self._transcript += (
+            b"\x02" + len(server_hello_data).to_bytes(3, 'big') + server_hello_data
+        )
 
         # Parse ServerHello to extract cipher suite and key_share
         offset = 0
@@ -408,7 +424,9 @@ class TLS13Handshake:
         # Cipher suite
         if offset + 2 > len(server_hello_data):
             return False
-        self._cipher_suite = struct.unpack("!H", server_hello_data[offset:offset + 2])[0]
+        self._cipher_suite = struct.unpack(
+            "!H", server_hello_data[offset : offset + 2]
+        )[0]
         offset += 2
 
         # Compression
@@ -424,22 +442,26 @@ class TLS13Handshake:
         server_public_key = None
         server_group = None
         if offset + 2 <= len(server_hello_data):
-            ext_length = struct.unpack("!H", server_hello_data[offset:offset + 2])[0]
+            ext_length = struct.unpack("!H", server_hello_data[offset : offset + 2])[0]
             offset += 2
             ext_end = offset + ext_length
 
             while offset + 4 <= ext_end:
-                ext_type = struct.unpack("!H", server_hello_data[offset:offset + 2])[0]
-                ext_len = struct.unpack("!H", server_hello_data[offset + 2:offset + 4])[0]
+                ext_type = struct.unpack("!H", server_hello_data[offset : offset + 2])[
+                    0
+                ]
+                ext_len = struct.unpack(
+                    "!H", server_hello_data[offset + 2 : offset + 4]
+                )[0]
                 offset += 4
-                ext_data = server_hello_data[offset:offset + ext_len]
+                ext_data = server_hello_data[offset : offset + ext_len]
                 offset += ext_len
 
                 if ext_type == 0x0033:  # key_share
                     if len(ext_data) >= 4:
                         server_group = struct.unpack("!H", ext_data[:2])[0]
                         key_len = struct.unpack("!H", ext_data[2:4])[0]
-                        server_public_key = ext_data[4:4 + key_len]
+                        server_public_key = ext_data[4 : 4 + key_len]
 
         if server_public_key is None:
             debug("TLS 1.3: No key_share in ServerHello")
@@ -473,8 +495,12 @@ class TLS13Handshake:
             self._key_schedule.client_handshake_traffic_secret, self._key_length
         )
 
-        self._server_handshake_rp = TLS13RecordProtection(s_key, s_iv, self._cipher_type)
-        self._client_handshake_rp = TLS13RecordProtection(c_key, c_iv, self._cipher_type)
+        self._server_handshake_rp = TLS13RecordProtection(
+            s_key, s_iv, self._cipher_type
+        )
+        self._client_handshake_rp = TLS13RecordProtection(
+            c_key, c_iv, self._cipher_type
+        )
 
         debug("TLS 1.3: Handshake traffic keys derived")
         return True
@@ -497,20 +523,24 @@ class TLS13Handshake:
             msg_len = int.from_bytes(self._pending_handshake[1:4], 'big')
             if len(self._pending_handshake) < 4 + msg_len:
                 break
-            message = self._pending_handshake[:4 + msg_len]
+            message = self._pending_handshake[: 4 + msg_len]
             msg_data = message[4:]
             if msg_type == 11:
                 self._parse_certificate(msg_data)
             elif msg_type == 15:
                 self._verify_certificate_signature(msg_data)
-            elif msg_type == 20 and self._certificate_verifier is not None and not self._certificate_verify_received:
+            elif (
+                msg_type == 20
+                and self._certificate_verifier is not None
+                and not self._certificate_verify_received
+            ):
                 raise ValueError("TLS 1.3: missing server CertificateVerify")
             if msg_type == 20 and not self.verify_server_finished(msg_data):
                 raise ValueError("TLS 1.3: invalid server Finished")
             if msg_type == 8:
                 self._parse_encrypted_extensions(msg_data)
             self._transcript += message
-            self._pending_handshake = self._pending_handshake[4 + msg_len:]
+            self._pending_handshake = self._pending_handshake[4 + msg_len :]
             if msg_type == 20:
                 self._server_finished_transcript = self._transcript
             messages.append((msg_type, msg_data))
@@ -529,15 +559,15 @@ class TLS13Handshake:
         while offset < len(data):
             if offset + 3 > len(data):
                 raise ValueError("TLS 1.3: truncated certificate length")
-            size = int.from_bytes(data[offset:offset + 3], 'big')
+            size = int.from_bytes(data[offset : offset + 3], 'big')
             offset += 3
             if not size or offset + size + 2 > len(data):
                 raise ValueError("TLS 1.3: truncated certificate")
-            cert = data[offset:offset + size]
+            cert = data[offset : offset + size]
             certificates.append(cert)
             entries += size.to_bytes(3, 'big') + cert
             offset += size
-            extension_size = int.from_bytes(data[offset:offset + 2], 'big')
+            extension_size = int.from_bytes(data[offset : offset + 2], 'big')
             offset += 2 + extension_size
             if offset > len(data):
                 raise ValueError("TLS 1.3: truncated certificate extensions")
@@ -545,7 +575,9 @@ class TLS13Handshake:
             raise ValueError("TLS 1.3: empty certificate list")
         if self._certificate_verifier is not None:
             self._certificate_verifier(len(entries).to_bytes(3, 'big') + entries)
-        self._server_public_key = x509.load_der_x509_certificate(certificates[0]).public_key()
+        self._server_public_key = x509.load_der_x509_certificate(
+            certificates[0]
+        ).public_key()
 
     def _verify_certificate_signature(self, data):
         """Authenticate the handshake transcript before adding CertificateVerify."""
@@ -556,7 +588,9 @@ class TLS13Handshake:
             raise ValueError("TLS 1.3: invalid CertificateVerify length")
         signed = b' ' * 64 + b'TLS 1.3, server CertificateVerify\x00'
         signed += self._hash_algo(self._transcript).digest()
-        verify_tls_signature(self._server_public_key, scheme, data[4:], signed, tls13=True)
+        verify_tls_signature(
+            self._server_public_key, scheme, data[4:], signed, tls13=True
+        )
         self._certificate_verify_received = True
 
     def _parse_encrypted_extensions(self, data):
@@ -567,16 +601,18 @@ class TLS13Handshake:
         while offset < len(data):
             if offset + 4 > len(data):
                 raise ValueError("TLS 1.3: truncated extension header")
-            kind, size = struct.unpack('!HH', data[offset:offset + 4])
+            kind, size = struct.unpack('!HH', data[offset : offset + 4])
             offset += 4
-            extension = data[offset:offset + size]
+            extension = data[offset : offset + size]
             if len(extension) != size:
                 raise ValueError("TLS 1.3: truncated extension data")
             offset += size
             if kind == 16:
-                if (len(extension) < 4
-                        or int.from_bytes(extension[:2], 'big') != len(extension) - 2
-                        or extension[2] != len(extension) - 3):
+                if (
+                    len(extension) < 4
+                    or int.from_bytes(extension[:2], 'big') != len(extension) - 2
+                    or extension[2] != len(extension) - 3
+                ):
                     raise ValueError("TLS 1.3: invalid ALPN selection")
                 self._negotiated_protocol = extension[3:].decode('ascii')
 

@@ -197,7 +197,10 @@ class RenegotiationInfoExtension(Extension):
         self.renegotiated_connection = renegotiated_connection or b""
 
     def encode(self):
-        return struct.pack("!B", len(self.renegotiated_connection)) + self.renegotiated_connection
+        return (
+            struct.pack("!B", len(self.renegotiated_connection))
+            + self.renegotiated_connection
+        )
 
 
 class StatusRequestExtension(Extension):

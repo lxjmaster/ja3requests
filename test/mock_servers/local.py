@@ -6,11 +6,23 @@ import struct
 import threading
 
 
+def recv_with_ragged_eof(conn, size):
+    """Normalize old Python/OpenSSL EOF reporting in the test peer only."""
+    try:
+        return conn.recv(size)
+    except ssl.SSLError as error:
+        # Python 3.7 can expose this as SSLError with a stale reason name,
+        # instead of honoring SSLSocket's default suppress_ragged_eofs.
+        if "unexpected eof while reading" in str(error).lower():
+            return b""
+        raise
+
+
 def read_exact(conn, size):
     """Read a wire field, failing promptly on a truncated message."""
     data = b""
     while len(data) < size:
-        chunk = conn.recv(size - len(data))
+        chunk = recv_with_ragged_eof(conn, size - len(data))
         if not chunk:
             raise EOFError("Peer closed before completing a message")
         data += chunk
@@ -128,7 +140,7 @@ def serve_h2(conn, observed):
             conn.sendall(h2_frame(0, 0, stream, b"hello "))
             conn.sendall(h2_frame(0, 1, stream, b"h2"))
             # Drain SETTINGS acknowledgements until the client closes its pool.
-            while conn.recv(4096):
+            while recv_with_ragged_eof(conn, 4096):
                 pass
             return
 

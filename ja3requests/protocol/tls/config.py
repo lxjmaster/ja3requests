@@ -78,7 +78,7 @@ class TlsConfig:
 
         # Client certificate for mutual TLS
         self._client_cert = None  # PEM-encoded certificate bytes or file path
-        self._client_key = None   # PEM-encoded private key bytes or file path
+        self._client_key = None  # PEM-encoded private key bytes or file path
 
     @property
     def tls_version(self) -> int:
@@ -329,9 +329,15 @@ class TlsConfig:
         # Auto-generated extensions (same logic as ClientHello._build_extensions)
         if self._server_name and SNIExtension.extension_type not in custom_types:
             ext_types.append(SNIExtension.extension_type)
-        if self._supported_groups and SupportedGroupsExtension.extension_type not in custom_types:
+        if (
+            self._supported_groups
+            and SupportedGroupsExtension.extension_type not in custom_types
+        ):
             ext_types.append(SupportedGroupsExtension.extension_type)
-        if self._signature_algorithms and SignatureAlgorithmsExtension.extension_type not in custom_types:
+        if (
+            self._signature_algorithms
+            and SignatureAlgorithmsExtension.extension_type not in custom_types
+        ):
             ext_types.append(SignatureAlgorithmsExtension.extension_type)
         if self._alpn_protocols and ALPNExtension.extension_type not in custom_types:
             ext_types.append(ALPNExtension.extension_type)
@@ -339,7 +345,11 @@ class TlsConfig:
         extensions = "-".join([str(t) for t in ext_types])
 
         # Elliptic Curves (Supported Groups)
-        elliptic_curves = "-".join([str(group) for group in self._supported_groups]) if self._supported_groups else ""
+        elliptic_curves = (
+            "-".join([str(group) for group in self._supported_groups])
+            if self._supported_groups
+            else ""
+        )
 
         # Elliptic Curve Point Formats (commonly 0 for uncompressed)
         ec_point_formats = "0"
@@ -403,11 +413,45 @@ class TlsConfig:
         return self
 
     # Valid IANA named groups (elliptic curves)
-    VALID_GROUPS = frozenset({
-        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
-        21, 22, 23, 24, 25, 26, 27, 28, 29, 30,  # Named curves through x448
-        256, 257, 258, 259, 260,  # FFDHE groups
-    })
+    VALID_GROUPS = frozenset(
+        {
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30,  # Named curves through x448
+            256,
+            257,
+            258,
+            259,
+            260,  # FFDHE groups
+        }
+    )
 
     VALID_TLS_VERSIONS = frozenset({0x0301, 0x0302, 0x0303, 0x0304})
 
@@ -423,8 +467,10 @@ class TlsConfig:
 
         # TLS version
         if self._tls_version not in self.VALID_TLS_VERSIONS:
-            issues.append(f"Invalid TLS version: 0x{self._tls_version:04X}. "
-                          f"Valid: {sorted(hex(v) for v in self.VALID_TLS_VERSIONS)}")
+            issues.append(
+                f"Invalid TLS version: 0x{self._tls_version:04X}. "
+                f"Valid: {sorted(hex(v) for v in self.VALID_TLS_VERSIONS)}"
+            )
 
         # Cipher suites
         if not self._cipher_suites:
@@ -454,7 +500,9 @@ class TlsConfig:
 
         # Client random length
         if self._client_random is not None and len(self._client_random) != 32:
-            issues.append(f"Client random must be 32 bytes, got {len(self._client_random)}")
+            issues.append(
+                f"Client random must be 32 bytes, got {len(self._client_random)}"
+            )
 
         # TLS 1.3 requires supported_groups for key exchange
         if self._tls_version == 0x0304 and not self._supported_groups:
@@ -480,7 +528,9 @@ class TlsConfig:
             config = TlsConfig.from_browser("chrome", version=120)
             session = Session(tls_config=config)
         """
-        from ja3requests.protocol.tls.browser_presets import get_preset  # pylint: disable=import-outside-toplevel
+        from ja3requests.protocol.tls.browser_presets import (
+            get_preset,
+        )  # pylint: disable=import-outside-toplevel
 
         preset = get_preset(browser, version)
         config = cls()

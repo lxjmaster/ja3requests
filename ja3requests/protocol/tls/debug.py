@@ -17,10 +17,14 @@ h2_logger = logging.getLogger("ja3requests.h2")
 # Backward compat: JA3_DEBUG env var sets logging level
 _debug_env = int(os.environ.get('JA3_DEBUG', '0'))
 if _debug_env >= 2:
-    logging.basicConfig(level=logging.DEBUG, format="%(name)s [%(levelname)s] %(message)s")
+    logging.basicConfig(
+        level=logging.DEBUG, format="%(name)s [%(levelname)s] %(message)s"
+    )
     tls_logger.setLevel(logging.DEBUG)
 elif _debug_env >= 1:
-    logging.basicConfig(level=logging.DEBUG, format="%(name)s [%(levelname)s] %(message)s")
+    logging.basicConfig(
+        level=logging.DEBUG, format="%(name)s [%(levelname)s] %(message)s"
+    )
     tls_logger.setLevel(logging.DEBUG)
 
 

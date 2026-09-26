@@ -59,7 +59,14 @@ ECDHE_CIPHER_SUITES = frozenset(
 class TLS:
     """TLS 1.2 handshake handler with support for custom JA3 fingerprints."""
 
-    def __init__(self, conn, handshake_timeout=None, session_cache=None, server_host=None, server_port=None):
+    def __init__(
+        self,
+        conn,
+        handshake_timeout=None,
+        session_cache=None,
+        server_host=None,
+        server_port=None,
+    ):
         self._tls_version = None
         self._body = None
         self.conn = conn
@@ -154,15 +161,20 @@ class TLS:
             # Load client certificate if configured
             if getattr(tls_config, 'client_cert', None):
                 self._client_cert_pem = self._load_cert_data(tls_config.client_cert)
-                self._client_key_pem = self._load_cert_data(
-                    getattr(tls_config, 'client_key', None)
-                ) if getattr(tls_config, 'client_key', None) else None
+                self._client_key_pem = (
+                    self._load_cert_data(getattr(tls_config, 'client_key', None))
+                    if getattr(tls_config, 'client_key', None)
+                    else None
+                )
 
             # Update client hello with new configuration
             # For TLS 1.3, record layer version stays 0x0303 for compatibility
             client_hello_version = self.tls_version
-            is_tls13 = (tls_config.tls_version == 0x0304 if isinstance(tls_config.tls_version, int)
-                        else self.tls_version == b'\x03\x04')
+            is_tls13 = (
+                tls_config.tls_version == 0x0304
+                if isinstance(tls_config.tls_version, int)
+                else self.tls_version == b'\x03\x04'
+            )
             if is_tls13:
                 # TLS 1.3: ClientHello version must be 0x0303 (TLS 1.2) for compatibility
                 client_hello_version = b'\x03\x03'
@@ -187,8 +199,14 @@ class TLS:
             self._is_tls13 = is_tls13
 
             # Set cached session ID for resumption
-            if self._session_cache is not None and self._server_host and not self._verify_cert:
-                cached = self._session_cache.get(self._server_host, self._server_port or 443)
+            if (
+                self._session_cache is not None
+                and self._server_host
+                and not self._verify_cert
+            ):
+                cached = self._session_cache.get(
+                    self._server_host, self._server_port or 443
+                )
                 if cached:
                     debug(f"Using cached session ID for {self._server_host}")
                     self._body.session_id = cached.session_id
@@ -225,11 +243,15 @@ class TLS:
         TLS 1.3 handshake flow after ClientHello is sent.
         Uses TLS13Handshake to manage key derivation and encrypted messages.
         """
-        from ja3requests.protocol.tls.tls13 import TLS13Handshake  # pylint: disable=import-outside-toplevel
+        from ja3requests.protocol.tls.tls13 import (
+            TLS13Handshake,
+        )  # pylint: disable=import-outside-toplevel
 
         try:
             # Receive ServerHello (unencrypted)
-            self.conn.settimeout(self._handshake_timeout if self._handshake_timeout is not None else 5.0)
+            self.conn.settimeout(
+                self._handshake_timeout if self._handshake_timeout is not None else 5.0
+            )
             buffer = b""
             server_hello_msg = None
 
@@ -246,13 +268,15 @@ class TLS:
                     record_length = struct.unpack("!H", buffer[3:5])[0]
                     if len(buffer) >= 5 + record_length:
                         if record_type == 22:  # Handshake
-                            record_data = buffer[5:5 + record_length]
+                            record_data = buffer[5 : 5 + record_length]
                             if record_data[0] == 2:  # ServerHello
-                                msg_len = struct.unpack("!I", b"\x00" + record_data[1:4])[0]
-                                server_hello_msg = record_data[4:4 + msg_len]
+                                msg_len = struct.unpack(
+                                    "!I", b"\x00" + record_data[1:4]
+                                )[0]
+                                server_hello_msg = record_data[4 : 4 + msg_len]
                                 # Also parse with our existing method for cipher suite etc.
                                 self._parse_server_hello(server_hello_msg)
-                                buffer = buffer[5 + record_length:]
+                                buffer = buffer[5 + record_length :]
                         break
 
             if server_hello_msg is None:
@@ -277,7 +301,9 @@ class TLS:
             # (EncryptedExtensions, Certificate, CertificateVerify, Finished)
             server_finished_received = False
             while not server_finished_received:
-                if len(buffer) < 5 or len(buffer) < 5 + int.from_bytes(buffer[3:5], 'big'):
+                if len(buffer) < 5 or len(buffer) < 5 + int.from_bytes(
+                    buffer[3:5], 'big'
+                ):
                     data = self.conn.recv(4096)
                     if not data:
                         break
@@ -288,12 +314,12 @@ class TLS:
                 offset = 0
                 while offset + 5 <= len(buffer):
                     rec_type = buffer[offset]
-                    rec_len = struct.unpack("!H", buffer[offset + 3:offset + 5])[0]
+                    rec_len = struct.unpack("!H", buffer[offset + 3 : offset + 5])[0]
                     if offset + 5 + rec_len > len(buffer):
                         break
 
-                    record_header = buffer[offset:offset + 5]
-                    ciphertext = buffer[offset + 5:offset + 5 + rec_len]
+                    record_header = buffer[offset : offset + 5]
+                    ciphertext = buffer[offset + 5 : offset + 5 + rec_len]
                     offset += 5 + rec_len
 
                     if rec_type == 20:  # ChangeCipherSpec (compatibility)
@@ -344,7 +370,9 @@ class TLS:
         try:
             # Step 2-6: Receive server handshake messages
             self._parse_server_handshake_messages()
-            if getattr(self, '_verify_cert', False) and not getattr(self, '_cert_verified', False):
+            if getattr(self, '_verify_cert', False) and not getattr(
+                self, '_cert_verified', False
+            ):
                 raise TLSHandshakeError("Server certificate was not verified")
 
             # Step 7-9: Send client finishing messages
@@ -353,7 +381,11 @@ class TLS:
             # Step 10: Wait for server's response to our Finished message
             try:
                 time.sleep(0.3)
-                self.conn.settimeout(self._handshake_timeout if self._handshake_timeout is not None else 5.0)
+                self.conn.settimeout(
+                    self._handshake_timeout
+                    if self._handshake_timeout is not None
+                    else 5.0
+                )
                 success = self._wait_for_server_handshake_completion()
                 if success:
                     debug("✅ Full TLS 1.2 handshake completed successfully!")
@@ -375,9 +407,13 @@ class TLS:
             KeyShareExtension,
             PSKKeyExchangeModesExtension,
         )
-        from ja3requests.protocol.tls.tls13 import TLS13KeyExchange  # pylint: disable=import-outside-toplevel
+        from ja3requests.protocol.tls.tls13 import (
+            TLS13KeyExchange,
+        )  # pylint: disable=import-outside-toplevel
 
-        existing_types = {ext.extension_type for ext in extensions if hasattr(ext, 'extension_type')}
+        existing_types = {
+            ext.extension_type for ext in extensions if hasattr(ext, 'extension_type')
+        }
 
         # supported_versions: advertise TLS 1.3 + 1.2
         if SupportedVersionsExtension.extension_type not in existing_types:
@@ -397,8 +433,12 @@ class TLS:
 
     def _save_session_to_cache(self):
         """Save the current session to the session cache for future resumption."""
-        if (self._session_cache is not None and self._server_host
-                and self._server_session_id and self._master_secret):
+        if (
+            self._session_cache is not None
+            and self._server_host
+            and self._server_session_id
+            and self._master_secret
+        ):
             cipher = getattr(self, '_selected_cipher_suite', 0)
             self._session_cache.put(
                 self._server_host,
@@ -421,11 +461,17 @@ class TLS:
         ticket_len = struct.unpack("!H", data[4:6])[0]
         if len(data) < 6 + ticket_len:
             return
-        ticket = data[6:6 + ticket_len]
-        debug(f"Received NewSessionTicket: lifetime={lifetime}s, ticket_len={ticket_len}")
+        ticket = data[6 : 6 + ticket_len]
+        debug(
+            f"Received NewSessionTicket: lifetime={lifetime}s, ticket_len={ticket_len}"
+        )
 
         # Store ticket as session ID for resumption
-        if self._session_cache is not None and self._server_host and self._master_secret:
+        if (
+            self._session_cache is not None
+            and self._server_host
+            and self._master_secret
+        ):
             cipher = getattr(self, '_selected_cipher_suite', 0)
             self._session_cache.put(
                 self._server_host,
@@ -449,7 +495,11 @@ class TLS:
         max_timeout = 10
 
         # Set socket timeout for receiving
-        recv_timeout = min(self._handshake_timeout, 5.0) if self._handshake_timeout is not None else 1.0
+        recv_timeout = (
+            min(self._handshake_timeout, 5.0)
+            if self._handshake_timeout is not None
+            else 1.0
+        )
         self.conn.settimeout(recv_timeout)
 
         while True:
@@ -624,14 +674,14 @@ class TLS:
 
         # Parse extensions (if present)
         if offset + 2 <= len(data):
-            extensions_length = struct.unpack("!H", data[offset:offset + 2])[0]
+            extensions_length = struct.unpack("!H", data[offset : offset + 2])[0]
             offset += 2
             ext_end = offset + extensions_length
             while offset + 4 <= ext_end:
-                ext_type = struct.unpack("!H", data[offset:offset + 2])[0]
-                ext_len = struct.unpack("!H", data[offset + 2:offset + 4])[0]
+                ext_type = struct.unpack("!H", data[offset : offset + 2])[0]
+                ext_len = struct.unpack("!H", data[offset + 2 : offset + 4])[0]
                 offset += 4
-                ext_data = data[offset:offset + ext_len]
+                ext_data = data[offset : offset + ext_len]
                 offset += ext_len
 
                 # ALPN (0x0010): extract negotiated protocol
@@ -639,7 +689,9 @@ class TLS:
                     proto_list_len = struct.unpack("!H", ext_data[:2])[0]
                     if proto_list_len > 0:
                         proto_len = ext_data[2]
-                        self._negotiated_protocol = ext_data[3:3 + proto_len].decode("ascii")
+                        self._negotiated_protocol = ext_data[3 : 3 + proto_len].decode(
+                            "ascii"
+                        )
                         debug(f"ALPN negotiated: {self._negotiated_protocol}")
 
     def _parse_certificate(self, data):
@@ -682,12 +734,16 @@ class TLS:
                     signed_end = 4 + data[3]
                     if signed_end + 4 > len(data):
                         raise TLSHandshakeError("Missing ServerKeyExchange signature")
-                    scheme, size = struct.unpack('!HH', data[signed_end:signed_end + 4])
-                    signature = data[signed_end + 4:]
+                    scheme, size = struct.unpack(
+                        '!HH', data[signed_end : signed_end + 4]
+                    )
+                    signature = data[signed_end + 4 :]
                     if len(signature) != size:
                         raise TLSHandshakeError("Truncated ServerKeyExchange signature")
                     verify_tls_signature(
-                        serialization.load_der_public_key(self._server_public_key), scheme, signature,
+                        serialization.load_der_public_key(self._server_public_key),
+                        scheme,
+                        signature,
                         self._client_random + self._server_random + data[:signed_end],
                     )
                 self._ecdhe_curve_id = ecdhe_params['curve_id']
@@ -715,28 +771,30 @@ class TLS:
         if offset < len(data):
             cert_types_len = data[offset]
             offset += 1
-            self._cert_types = list(data[offset:offset + cert_types_len])
+            self._cert_types = list(data[offset : offset + cert_types_len])
             offset += cert_types_len
             debug(f"CertificateRequest: cert_types={self._cert_types}")
 
         # signature_algorithms (2-byte length + algorithms)
         if offset + 2 <= len(data):
-            sig_algs_len = struct.unpack("!H", data[offset:offset + 2])[0]
+            sig_algs_len = struct.unpack("!H", data[offset : offset + 2])[0]
             offset += 2
             self._cert_sig_algs = []
             for i in range(0, sig_algs_len, 2):
                 if offset + 2 <= len(data):
                     self._cert_sig_algs.append(
-                        struct.unpack("!H", data[offset:offset + 2])[0]
+                        struct.unpack("!H", data[offset : offset + 2])[0]
                     )
                     offset += 2
-            debug(f"CertificateRequest: sig_algs={[hex(a) for a in self._cert_sig_algs]}")
+            debug(
+                f"CertificateRequest: sig_algs={[hex(a) for a in self._cert_sig_algs]}"
+            )
 
         # distinguished_names (2-byte length + DN list) — optional, often empty
         if offset + 2 <= len(data):
-            dn_len = struct.unpack("!H", data[offset:offset + 2])[0]
+            dn_len = struct.unpack("!H", data[offset : offset + 2])[0]
             offset += 2
-            self._cert_dn_data = data[offset:offset + dn_len]
+            self._cert_dn_data = data[offset : offset + dn_len]
 
     def _parse_server_hello_done(self, _data):
         """Parse ServerHelloDone message"""
@@ -784,6 +842,7 @@ class TLS:
 
     def _read_server_handshake_record(self):
         """Read exactly one record without consuming later application data."""
+
         def read_exact(size):
             data = b''
             while len(data) < size:
@@ -808,31 +867,41 @@ class TLS:
             explicit, ciphertext, tag = encrypted[:8], encrypted[8:-16], encrypted[-16:]
             aad = prefix + len(ciphertext).to_bytes(2, 'big')
             plaintext = AESCipher.decrypt_gcm(
-                ciphertext, self._server_write_key,
-                self._server_write_iv + explicit, tag, aad,
+                ciphertext,
+                self._server_write_key,
+                self._server_write_iv + explicit,
+                tag,
+                aad,
             )
         else:
             if len(encrypted) < 32 or len(encrypted) % 16:
                 raise TLSHandshakeError("Invalid CBC handshake record length")
             padded = AESCipher.decrypt_cbc(
-                encrypted[16:], self._server_write_key, encrypted[:16],
+                encrypted[16:],
+                self._server_write_key,
+                encrypted[:16],
                 remove_padding=False,
             )
             padding_length = padded[-1] + 1
-            if (padding_length > len(padded)
-                    or not hmac.compare_digest(
-                        padded[-padding_length:], bytes([padding_length - 1]) * padding_length)):
+            if padding_length > len(padded) or not hmac.compare_digest(
+                padded[-padding_length:], bytes([padding_length - 1]) * padding_length
+            ):
                 raise TLSHandshakeError("Invalid CBC handshake padding")
             fragment = padded[:-padding_length]
             info = get_cipher_info(self._selected_cipher_suite)
-            hash_algo = {'SHA1': hashlib.sha1, 'SHA256': hashlib.sha256,
-                         'SHA384': hashlib.sha384}[info['mac']]
+            hash_algo = {
+                'SHA1': hashlib.sha1,
+                'SHA256': hashlib.sha256,
+                'SHA384': hashlib.sha384,
+            }[info['mac']]
             mac_length = hash_algo().digest_size
             if len(fragment) < mac_length:
                 raise TLSHandshakeError("Truncated handshake MAC")
             plaintext, received_mac = fragment[:-mac_length], fragment[-mac_length:]
             mac_data = prefix + len(plaintext).to_bytes(2, 'big') + plaintext
-            expected_mac = hmac.new(self._server_write_mac_key, mac_data, hash_algo).digest()
+            expected_mac = hmac.new(
+                self._server_write_mac_key, mac_data, hash_algo
+            ).digest()
             if not hmac.compare_digest(received_mac, expected_mac):
                 raise TLSHandshakeError("Invalid handshake MAC")
         self._server_seq_num += 1
@@ -843,7 +912,9 @@ class TLS:
         if len(message) != 16 or message[:4] != b'\x14\x00\x00\x0c':
             raise TLSHandshakeError("Invalid server Finished message")
         expected = TLSCrypto.compute_verify_data(
-            self._master_secret, transcript, is_client=False,
+            self._master_secret,
+            transcript,
+            is_client=False,
             _cipher_suite=self._selected_cipher_suite,
         )
         if not hmac.compare_digest(message[4:], expected):
@@ -864,7 +935,9 @@ class TLS:
                     self._server_seq_num = 0
                     continue
                 if header[0] != 22:
-                    raise TLSHandshakeError("Expected server Finished, received other record type")
+                    raise TLSHandshakeError(
+                        "Expected server Finished, received other record type"
+                    )
                 if received_ccs:
                     payload = self._decrypt_server_handshake_record(header, payload)
                 pending += payload
@@ -873,16 +946,22 @@ class TLS:
                     size = int.from_bytes(pending[1:4], 'big')
                     if received_ccs:
                         if kind != 20 or size != 12:
-                            raise TLSHandshakeError("Expected encrypted server Finished")
+                            raise TLSHandshakeError(
+                                "Expected encrypted server Finished"
+                            )
                     elif kind != 4 or size < 6 or size > 65541:
-                        raise TLSHandshakeError("Expected NewSessionTicket before ChangeCipherSpec")
+                        raise TLSHandshakeError(
+                            "Expected NewSessionTicket before ChangeCipherSpec"
+                        )
                     if len(pending) < 4 + size:
                         break
-                    message, pending = pending[:4 + size], pending[4 + size:]
+                    message, pending = pending[: 4 + size], pending[4 + size :]
                     if received_ccs:
                         self._verify_server_finished(message, transcript)
                         if pending:
-                            raise TLSHandshakeError("Unexpected messages after server Finished")
+                            raise TLSHandshakeError(
+                                "Unexpected messages after server Finished"
+                            )
                         self._handshake_messages = transcript + message
                         return True
                     if int.from_bytes(message[8:10], 'big') != len(message) - 10:
@@ -901,6 +980,7 @@ class TLS:
             return cert_input
         if isinstance(cert_input, str):
             import os  # pylint: disable=import-outside-toplevel
+
             if os.path.isfile(cert_input):
                 with open(cert_input, 'rb') as f:
                     return f.read()
@@ -949,7 +1029,12 @@ class TLS:
 
         # Certificate message: type(11) + 3-byte total length + 3-byte list length + certs
         list_length = struct.pack("!I", len(cert_list))[1:]
-        cert_msg = b'\x0b' + struct.pack("!I", len(cert_list) + 3)[1:] + list_length + cert_list
+        cert_msg = (
+            b'\x0b'
+            + struct.pack("!I", len(cert_list) + 3)[1:]
+            + list_length
+            + cert_list
+        )
 
         record = b'\x16\x03\x03' + struct.pack("!H", len(cert_msg)) + cert_msg
         return record
@@ -1482,7 +1567,9 @@ class TLS:
         if not hostname:
             raise TLSHandshakeError("No hostname for certificate verification")
         self._certificate_data = certificate_data
-        valid, error = CertificateVerifier(verify=True).verify_certificate(hostname, certificate_data)
+        valid, error = CertificateVerifier(verify=True).verify_certificate(
+            hostname, certificate_data
+        )
         if not valid:
             self._cert_error = error
             raise TLSHandshakeError(f"Certificate verification failed: {error}")

@@ -76,7 +76,9 @@ class HTTPRetry:
         """Parse Retry-After header value in seconds."""
         if not self.respect_retry_after:
             return None
-        retry_after = response.headers.get("Retry-After") or response.headers.get("retry-after")
+        retry_after = response.headers.get("Retry-After") or response.headers.get(
+            "retry-after"
+        )
         if retry_after is None:
             return None
         try:

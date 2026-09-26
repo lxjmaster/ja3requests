@@ -47,8 +47,10 @@ class HttpsSocket(BaseSocket):
             pooled_conn = self._pool.get_connection(host, port, "https")
             if pooled_conn and getattr(tls_config, 'verify_cert', False):
                 tls = pooled_conn.tls
-                if (getattr(tls, '_cert_verified', False) is not True
-                        or getattr(tls, '_verified_hostname', None) != host):
+                if (
+                    getattr(tls, '_cert_verified', False) is not True
+                    or getattr(tls, '_verified_hostname', None) != host
+                ):
                     # A connection created without authentication cannot satisfy
                     # a later verified request, even for the same pool key.
                     self._pool.discard_connection(pooled_conn)
@@ -71,7 +73,9 @@ class HttpsSocket(BaseSocket):
 
         # TLS handshake
         handshake_timeout = getattr(self.context, 'connect_timeout', None)
-        session_cache = getattr(tls_config, 'session_cache', None) if tls_config else None
+        session_cache = (
+            getattr(tls_config, 'session_cache', None) if tls_config else None
+        )
         tls = TLS(
             self.conn,
             handshake_timeout=handshake_timeout,
@@ -182,7 +186,9 @@ class HttpsSocket(BaseSocket):
 
     def _send_h2(self):
         """Send HTTP/2 request over TLS using H2Connection."""
-        from ja3requests.protocol.h2.connection import H2Connection  # pylint: disable=import-outside-toplevel
+        from ja3requests.protocol.h2.connection import (
+            H2Connection,
+        )  # pylint: disable=import-outside-toplevel
 
         try:
             read_timeout = getattr(self.context, 'read_timeout', None)
@@ -199,13 +205,15 @@ class HttpsSocket(BaseSocket):
 
             # Get H2 fingerprint settings from TLS config
             tls_config = getattr(self.context, 'tls_config', None)
-            h2_settings = getattr(tls_config, 'h2_settings', None) if tls_config else None
-            h2_window = getattr(tls_config, 'h2_window_update', None) if tls_config else None
+            h2_settings = (
+                getattr(tls_config, 'h2_settings', None) if tls_config else None
+            )
+            h2_window = (
+                getattr(tls_config, 'h2_window_update', None) if tls_config else None
+            )
 
             h2 = H2Connection(h2_send, h2_recv, settings=h2_settings)
-            h2.initiate(
-                window_update_increment=int(h2_window) if h2_window else None
-            )
+            h2.initiate(window_update_increment=int(h2_window) if h2_window else None)
 
             # Parse HTTP request to extract method, path, headers
             method = getattr(self.context, 'method', 'GET')
@@ -224,7 +232,9 @@ class HttpsSocket(BaseSocket):
             if isinstance(body, str):
                 body = body.encode('utf-8')
 
-            stream_id = h2.send_request(method, host, path, headers=req_headers, body=body)
+            stream_id = h2.send_request(
+                method, host, path, headers=req_headers, body=body
+            )
             resp_headers, resp_body = h2.receive_response(stream_id)
 
             # Convert H2 response to HTTP/1.1-like format for Response class compatibility
@@ -314,10 +324,16 @@ class HttpsSocket(BaseSocket):
 
             is_tls13 = getattr(self.tls, '_is_tls13', False)
             if is_tls13:
-                record_type, record_data = self._decrypt_tls13_record(header, record_data)
+                record_type, record_data = self._decrypt_tls13_record(
+                    header, record_data
+                )
 
             if record_type == 0x17:  # Application data
-                decrypted_data = record_data if is_tls13 else self._decrypt_application_data(record_data)
+                decrypted_data = (
+                    record_data
+                    if is_tls13
+                    else self._decrypt_application_data(record_data)
+                )
                 if decrypted_data:
                     http_response_data += decrypted_data
                     debug(f"Decrypted {len(decrypted_data)} bytes of HTTP data")

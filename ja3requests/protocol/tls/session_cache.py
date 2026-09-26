@@ -65,7 +65,9 @@ class TLSSessionCache:
                 return None
             return entry
 
-    def put(self, host, port, session_id, master_secret, cipher_suite, tls_version=None):
+    def put(
+        self, host, port, session_id, master_secret, cipher_suite, tls_version=None
+    ):
         """
         Store a TLS session for later resumption.
         """
