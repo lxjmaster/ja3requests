@@ -1,6 +1,10 @@
 
 
 # Ja3Requests
+[![Tests](https://github.com/lxjmaster/ja3requests/actions/workflows/test.yml/badge.svg)](https://github.com/lxjmaster/ja3requests/actions/workflows/test.yml)
+[![Coverage](https://github.com/lxjmaster/ja3requests/actions/workflows/coverage.yml/badge.svg)](https://github.com/lxjmaster/ja3requests/actions/workflows/coverage.yml)
+[![PyPI](https://img.shields.io/pypi/v/ja3requests.svg)](https://pypi.org/project/ja3requests/)
+
 **Ja3Requests** is a http request library that can customize ja3 or h2 fingerprints.
 
 [中文文档](README-zh.md)

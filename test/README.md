@@ -21,6 +21,31 @@ from the second command, not silently skipped by test configuration. An unfilter
 baseline run on this development machine had 850 passing tests and three failures
 in that file before this change.
 
+## Continuous integration
+
+GitHub Actions runs the same explicit test selection on Python 3.7–3.13 using
+Ubuntu 22.04 (which supplies the Python 3.7 runtime). Coverage runs on Python 3.12
+and fails below 85%. The coverage table is available in the job summary and in
+a 14-day artifact; same-repository PRs also receive an updated coverage comment.
+Fork PRs run the checks without attempting a write-permission comment.
+
+The source-format gate uses Black 25.1.0, and pylint checks errors across the
+package. Existing style/refactoring warnings are not silently reported as clean;
+they are outside this error-level gate. Legacy manual tests remain explicitly
+excluded rather than made to pass using a developer's external services.
+
+For local hooks, use an activated Python 3.12+ development environment, install
+`requirements.txt` and `requirements-dev.txt`, then run:
+
+```sh
+pre-commit install
+pre-commit run --all-files
+```
+
+The hook configuration checks package formatting, pylint errors, YAML syntax,
+merge-conflict markers and package whitespace. CI does not publish packages or
+deploy the repository.
+
 ## Covered behavior
 
 - Complete TLS 1.2 RSA/AES-CBC handshake and encrypted HTTP/1.1 request/response.
