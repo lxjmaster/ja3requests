@@ -1,0 +1,35 @@
+name: Lint
+
+on:
+  push:
+    branches: [master, develop]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - run: python -m pip install -e . black==25.1.0 pylint==3.3.8 pre-commit==4.2.0
+      - name: Black and error-level pylint
+        run: |
+          python -m black --check ja3requests
+          python -m pylint --errors-only ja3requests
+      - name: Repository hygiene hooks
+        run: pre-commit run --all-files

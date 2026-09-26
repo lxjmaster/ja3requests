@@ -1,0 +1,23 @@
+repos:
+  - repo: https://github.com/psf/black
+    rev: 25.1.0
+    hooks:
+      - id: black
+        files: ^ja3requests/.*\.py$
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: trailing-whitespace
+        files: ^ja3requests/.*\.py$
+      - id: end-of-file-fixer
+        files: ^ja3requests/.*\.py$
+  - repo: local
+    hooks:
+      - id: pylint
+        name: pylint (errors)
+        entry: python -m pylint --errors-only
+        language: system
+        types: [python]
+        files: ^ja3requests/

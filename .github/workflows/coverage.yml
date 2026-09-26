@@ -1,0 +1,61 @@
+name: Coverage
+
+on:
+  push:
+    branches: [master, develop]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: coverage-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  coverage:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - run: python -m pip install -e . pytest pytest-cov
+      - name: Enforce 85 percent statement coverage
+        run: >-
+          python -m pytest test --ignore=test/test_session.py
+          --cov=ja3requests --cov-report=term --cov-report=xml
+          --cov-report=json --cov-fail-under=85 -q
+      - name: Write coverage summary
+        if: always() && hashFiles('.coverage') != ''
+        run: |
+          python -m coverage report --format=markdown > coverage.md
+          cat coverage.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: |
+            coverage.xml
+            coverage.json
+            coverage.md
+          retention-days: 14
+      - name: Update coverage comment for repository PRs
+        if: >-
+          always() && github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          hashFiles('coverage.md') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: gh pr comment "$PR_NUMBER" --body-file coverage.md --edit-last --create-if-none
