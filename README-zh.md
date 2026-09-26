@@ -17,7 +17,8 @@
 '<!DOCTYPE html><!--STATUS OK--><html><head><meta http-equiv="Content-Type" content="text/html;char...'
 ```
 
-Ja3Requests目前只实现了HTTP协议和部分方法.
+Ja3Requests 支持 HTTP 和 HTTPS 上的 HTTP/1.1；HTTPS 连接也可以通过 ALPN
+协商 HTTP/2。默认使用 TLS 1.2，TLS 1.3 可通过配置启用。
 
 ## 安装 Ja3Requests/ 支持的版本
 
@@ -28,6 +29,23 @@ $ python -m pip install ja3requests
 ```
 
 Ja3Requests正式支持Python 3.7+
+
+## HTTPS 证书验证
+
+为保持兼容，默认不验证服务器证书。可以对单次请求传入 `verify=True`，
+也可以在会话配置中启用：
+
+```python
+import ja3requests
+
+config = ja3requests.TlsConfig.from_browser("chrome", 120)
+config.verify_cert = True
+with ja3requests.Session(tls_config=config) as session:
+    response = session.get("https://example.com/")
+```
+
+请求显式传入的 `verify=True` 或 `verify=False` 会覆盖会话设置，重定向也沿用
+本次请求的设置。已测试的 TLS、HTTP/2 路径及限制见[本地协议测试](test/README.md)。
 
 ## 如何使用
 ### 不同的请求方法
