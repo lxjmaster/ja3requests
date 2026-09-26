@@ -142,13 +142,21 @@ class ClientHello(HandShake):
         if self._server_name and SNIExtension.extension_type not in custom_types:
             extension_list.append(SNIExtension(self._server_name))
 
-        if (self._supported_groups and len(self._supported_groups) > 0
-                and SupportedGroupsExtension.extension_type not in custom_types):
+        if (
+            self._supported_groups
+            and len(self._supported_groups) > 0
+            and SupportedGroupsExtension.extension_type not in custom_types
+        ):
             extension_list.append(SupportedGroupsExtension(self._supported_groups))
 
-        if (self._signature_algorithms and len(self._signature_algorithms) > 0
-                and SignatureAlgorithmsExtension.extension_type not in custom_types):
-            extension_list.append(SignatureAlgorithmsExtension(self._signature_algorithms))
+        if (
+            self._signature_algorithms
+            and len(self._signature_algorithms) > 0
+            and SignatureAlgorithmsExtension.extension_type not in custom_types
+        ):
+            extension_list.append(
+                SignatureAlgorithmsExtension(self._signature_algorithms)
+            )
 
         if self._alpn_protocols and ALPNExtension.extension_type not in custom_types:
             extension_list.append(ALPNExtension(self._alpn_protocols))

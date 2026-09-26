@@ -59,8 +59,17 @@ PRESETS = {
     ("chrome", 100): {
         "tls_version": 0x0303,
         "cipher_suites": _MODERN_CHROME_CIPHERS,
-        "supported_groups": [29, 23, 24],   # x25519, secp256r1, secp384r1
-        "signature_algorithms": [0x0403, 0x0804, 0x0401, 0x0503, 0x0805, 0x0501, 0x0806, 0x0601],
+        "supported_groups": [29, 23, 24],  # x25519, secp256r1, secp384r1
+        "signature_algorithms": [
+            0x0403,
+            0x0804,
+            0x0401,
+            0x0503,
+            0x0805,
+            0x0501,
+            0x0806,
+            0x0601,
+        ],
         "alpn_protocols": ["h2", "http/1.1"],
         "use_grease": True,
         "extensions": [
@@ -77,7 +86,16 @@ PRESETS = {
         "tls_version": 0x0303,
         "cipher_suites": _MODERN_CHROME_CIPHERS,
         "supported_groups": [29, 23, 24],
-        "signature_algorithms": [0x0403, 0x0804, 0x0401, 0x0503, 0x0805, 0x0501, 0x0806, 0x0601],
+        "signature_algorithms": [
+            0x0403,
+            0x0804,
+            0x0401,
+            0x0503,
+            0x0805,
+            0x0501,
+            0x0806,
+            0x0601,
+        ],
         "alpn_protocols": ["h2", "http/1.1"],
         "use_grease": True,
         "extensions": [
@@ -94,7 +112,16 @@ PRESETS = {
         "tls_version": 0x0304,
         "cipher_suites": _MODERN_CHROME_CIPHERS,
         "supported_groups": [29, 23, 24],
-        "signature_algorithms": [0x0403, 0x0804, 0x0401, 0x0503, 0x0805, 0x0501, 0x0806, 0x0601],
+        "signature_algorithms": [
+            0x0403,
+            0x0804,
+            0x0401,
+            0x0503,
+            0x0805,
+            0x0501,
+            0x0806,
+            0x0601,
+        ],
         "alpn_protocols": ["h2", "http/1.1"],
         "use_grease": True,
         "extensions": [
@@ -111,7 +138,16 @@ PRESETS = {
         "tls_version": 0x0304,
         "cipher_suites": _MODERN_CHROME_CIPHERS,
         "supported_groups": [29, 23, 24],
-        "signature_algorithms": [0x0403, 0x0804, 0x0401, 0x0503, 0x0805, 0x0501, 0x0806, 0x0601],
+        "signature_algorithms": [
+            0x0403,
+            0x0804,
+            0x0401,
+            0x0503,
+            0x0805,
+            0x0501,
+            0x0806,
+            0x0601,
+        ],
         "alpn_protocols": ["h2", "http/1.1"],
         "use_grease": True,
         "extensions": [
@@ -124,13 +160,22 @@ PRESETS = {
         "h2_settings": {0x01: 65536, 0x02: 0, 0x03: 1000, 0x04: 6291456, 0x06: 262144},
         "h2_window_update": 15663105,
     },
-
     # ------ Firefox ------
     ("firefox", 100): {
         "tls_version": 0x0303,
         "cipher_suites": _MODERN_FIREFOX_CIPHERS,
-        "supported_groups": [29, 23, 24, 25],   # x25519, P-256, P-384, P-521
-        "signature_algorithms": [0x0403, 0x0503, 0x0603, 0x0804, 0x0805, 0x0806, 0x0401, 0x0501, 0x0601],
+        "supported_groups": [29, 23, 24, 25],  # x25519, P-256, P-384, P-521
+        "signature_algorithms": [
+            0x0403,
+            0x0503,
+            0x0603,
+            0x0804,
+            0x0805,
+            0x0806,
+            0x0401,
+            0x0501,
+            0x0601,
+        ],
         "alpn_protocols": ["h2", "http/1.1"],
         "use_grease": False,
         "extensions": [
@@ -147,7 +192,17 @@ PRESETS = {
         "tls_version": 0x0304,
         "cipher_suites": _MODERN_FIREFOX_CIPHERS,
         "supported_groups": [29, 23, 24, 25],
-        "signature_algorithms": [0x0403, 0x0503, 0x0603, 0x0804, 0x0805, 0x0806, 0x0401, 0x0501, 0x0601],
+        "signature_algorithms": [
+            0x0403,
+            0x0503,
+            0x0603,
+            0x0804,
+            0x0805,
+            0x0806,
+            0x0401,
+            0x0501,
+            0x0601,
+        ],
         "alpn_protocols": ["h2", "http/1.1"],
         "use_grease": False,
         "extensions": [
@@ -160,7 +215,6 @@ PRESETS = {
         "h2_settings": {0x01: 65536, 0x03: 128, 0x04: 131072, 0x06: 65536},
         "h2_window_update": 12517377,
     },
-
     # ------ Safari ------
     ("safari", 16): {
         "tls_version": 0x0303,
@@ -175,7 +229,16 @@ PRESETS = {
             RsaWithAes128CbcSha(),
         ],
         "supported_groups": [29, 23, 24],
-        "signature_algorithms": [0x0403, 0x0804, 0x0401, 0x0503, 0x0805, 0x0501, 0x0806, 0x0601],
+        "signature_algorithms": [
+            0x0403,
+            0x0804,
+            0x0401,
+            0x0503,
+            0x0805,
+            0x0501,
+            0x0806,
+            0x0601,
+        ],
         "alpn_protocols": ["h2", "http/1.1"],
         "use_grease": True,
         "extensions": [
@@ -201,7 +264,16 @@ PRESETS = {
             RsaWithAes128CbcSha(),
         ],
         "supported_groups": [29, 23, 24],
-        "signature_algorithms": [0x0403, 0x0804, 0x0401, 0x0503, 0x0805, 0x0501, 0x0806, 0x0601],
+        "signature_algorithms": [
+            0x0403,
+            0x0804,
+            0x0401,
+            0x0503,
+            0x0805,
+            0x0501,
+            0x0806,
+            0x0601,
+        ],
         "alpn_protocols": ["h2", "http/1.1"],
         "use_grease": True,
         "extensions": [
@@ -214,13 +286,21 @@ PRESETS = {
         "h2_settings": {0x01: 4096, 0x03: 100, 0x04: 2097152, 0x06: 16384},
         "h2_window_update": 10485760,
     },
-
     # ------ Edge ------
     ("edge", 120): {
         "tls_version": 0x0304,
         "cipher_suites": _MODERN_CHROME_CIPHERS,  # Edge uses Chromium
         "supported_groups": [29, 23, 24],
-        "signature_algorithms": [0x0403, 0x0804, 0x0401, 0x0503, 0x0805, 0x0501, 0x0806, 0x0601],
+        "signature_algorithms": [
+            0x0403,
+            0x0804,
+            0x0401,
+            0x0503,
+            0x0805,
+            0x0501,
+            0x0806,
+            0x0601,
+        ],
         "alpn_protocols": ["h2", "http/1.1"],
         "use_grease": True,
         "extensions": [
@@ -268,8 +348,7 @@ def get_preset(browser, version=None):
     if preset is None:
         available = sorted(v for b, v in PRESETS if b == browser)
         raise ValueError(
-            f"No preset for {browser} {version}. "
-            f"Available versions: {available}"
+            f"No preset for {browser} {version}. " f"Available versions: {available}"
         )
 
     return preset

@@ -157,11 +157,14 @@ def decode_string(data, offset):
     """
     huffman = data[offset] & 0x80
     length, offset = decode_integer(data, offset, 7)
-    string_bytes = data[offset:offset + length]
+    string_bytes = data[offset : offset + length]
     offset += length
 
     if huffman:
-        from ja3requests.protocol.h2.huffman import huffman_decode  # pylint: disable=import-outside-toplevel
+        from ja3requests.protocol.h2.huffman import (
+            huffman_decode,
+        )  # pylint: disable=import-outside-toplevel
+
         string_bytes = huffman_decode(string_bytes)
 
     return string_bytes, offset
@@ -208,7 +211,10 @@ class HPACKEncoder:
         """Add a header to the dynamic table."""
         entry_size = len(name) + len(value) + 32  # per RFC 7541 Section 4.1
         # Evict entries if table would exceed max size
-        while self._dynamic_table_size + entry_size > self.MAX_DYNAMIC_TABLE_SIZE and self.dynamic_table:
+        while (
+            self._dynamic_table_size + entry_size > self.MAX_DYNAMIC_TABLE_SIZE
+            and self.dynamic_table
+        ):
             evicted = self.dynamic_table.pop()
             self._dynamic_table_size -= len(evicted[0]) + len(evicted[1]) + 32
 
@@ -232,7 +238,12 @@ class HPACKEncoder:
             return encode_integer(exact_idx, 7, 0x80)
 
         # Sensitive headers: literal without indexing (never indexed)
-        if name_lower in ("authorization", "proxy-authorization", "cookie", "set-cookie"):
+        if name_lower in (
+            "authorization",
+            "proxy-authorization",
+            "cookie",
+            "set-cookie",
+        ):
             if name_lower in _STATIC_NAME_INDEX:
                 idx = _STATIC_NAME_INDEX[name_lower]
                 result = encode_integer(idx, 4, 0x10)  # Never indexed

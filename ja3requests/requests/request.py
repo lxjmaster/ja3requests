@@ -284,7 +284,10 @@ class Request:
             username, password = auth
             credentials = b64encode(b(f"{username}:{password}")).decode("utf-8")
             if headers is None:
-                from ja3requests.utils import default_headers  # pylint: disable=import-outside-toplevel
+                from ja3requests.utils import (
+                    default_headers,
+                )  # pylint: disable=import-outside-toplevel
+
                 headers = default_headers()
             headers["Authorization"] = f"Basic {credentials}"
 
