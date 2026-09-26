@@ -285,6 +285,13 @@ class ConnectionPool:
 
             return None
 
+    def discard_connection(self, pooled_conn):
+        """Close a checked-out connection that cannot safely be reused."""
+        with self._lock:
+            if pooled_conn.conn is not None:
+                pooled_conn.close()
+                self._total_connections -= 1
+
     def put_connection(
         self,
         host: str,

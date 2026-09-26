@@ -165,8 +165,8 @@ class TestTLS13EncryptedHandshake(unittest.TestCase):
 
 
 class TestTLS13DecryptHandshakeRecord(unittest.TestCase):
-    def test_decrypt_and_add_to_transcript(self):
-        """Test that decrypting a handshake record adds plaintext to transcript."""
+    def test_decrypt_and_parse_transcript(self):
+        """Only complete parsed messages enter the handshake transcript."""
         client_priv, _ = TLS13KeyExchange.generate_x25519_keypair()
         server_priv, server_pub = TLS13KeyExchange.generate_x25519_keypair()
 
@@ -192,7 +192,9 @@ class TestTLS13DecryptHandshakeRecord(unittest.TestCase):
         content_type, plaintext = hs.decrypt_handshake_record(ciphertext, header)
         self.assertEqual(content_type, 0x16)
         self.assertEqual(plaintext, test_msg)
-        self.assertGreater(len(hs._transcript), transcript_before)
+        self.assertEqual(len(hs._transcript), transcript_before)
+        hs.parse_encrypted_handshake(plaintext)
+        self.assertEqual(len(hs._transcript), transcript_before + len(test_msg))
 
 
 # ============================================================================

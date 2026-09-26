@@ -10,12 +10,14 @@ import hmac
 import os
 import struct
 
+from cryptography import x509
 from cryptography.hazmat.primitives.asymmetric import x25519, ec
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM, ChaCha20Poly1305
 from cryptography.hazmat.backends import default_backend
 
 from ja3requests.protocol.tls.debug import debug
+from ja3requests.protocol.tls.certificate_verify import verify_tls_signature
 
 
 # ============================================================================
@@ -372,6 +374,12 @@ class TLS13Handshake:
         self._hash_algo = hashlib.sha256
         self._key_length = 16
         self._cipher_type = "aes-gcm"
+        self._pending_handshake = b""
+        self._server_finished_transcript = None
+        self._negotiated_protocol = None
+        self._certificate_verifier = None
+        self._server_public_key = None
+        self._certificate_verify_received = False
 
     def process_server_hello(self, server_hello_data):
         """
@@ -381,7 +389,7 @@ class TLS13Handshake:
         :param server_hello_data: Raw ServerHello handshake message bytes
         :return: True if successful
         """
-        self._transcript += server_hello_data
+        self._transcript += b"\x02" + len(server_hello_data).to_bytes(3, 'big') + server_hello_data
 
         # Parse ServerHello to extract cipher suite and key_share
         offset = 0
@@ -472,11 +480,8 @@ class TLS13Handshake:
         return True
 
     def decrypt_handshake_record(self, ciphertext, record_header):
-        """Decrypt a server handshake record and add to transcript."""
-        content_type, plaintext = self._server_handshake_rp.decrypt(ciphertext, record_header)
-        if content_type == 0x16:  # Handshake
-            self._transcript += plaintext
-        return content_type, plaintext
+        """Decrypt a record; the parser accounts for complete handshake messages."""
+        return self._server_handshake_rp.decrypt(ciphertext, record_header)
 
     def parse_encrypted_handshake(self, plaintext):
         """
@@ -485,17 +490,95 @@ class TLS13Handshake:
 
         :return: List of (msg_type, msg_data) tuples
         """
+        self._pending_handshake += plaintext
         messages = []
-        offset = 0
-        while offset + 4 <= len(plaintext):
-            msg_type = plaintext[offset]
-            msg_len = struct.unpack("!I", b"\x00" + plaintext[offset + 1:offset + 4])[0]
-            offset += 4
-            msg_data = plaintext[offset:offset + msg_len]
-            offset += msg_len
+        while len(self._pending_handshake) >= 4:
+            msg_type = self._pending_handshake[0]
+            msg_len = int.from_bytes(self._pending_handshake[1:4], 'big')
+            if len(self._pending_handshake) < 4 + msg_len:
+                break
+            message = self._pending_handshake[:4 + msg_len]
+            msg_data = message[4:]
+            if msg_type == 11:
+                self._parse_certificate(msg_data)
+            elif msg_type == 15:
+                self._verify_certificate_signature(msg_data)
+            elif msg_type == 20 and self._certificate_verifier is not None and not self._certificate_verify_received:
+                raise ValueError("TLS 1.3: missing server CertificateVerify")
+            if msg_type == 20 and not self.verify_server_finished(msg_data):
+                raise ValueError("TLS 1.3: invalid server Finished")
+            if msg_type == 8:
+                self._parse_encrypted_extensions(msg_data)
+            self._transcript += message
+            self._pending_handshake = self._pending_handshake[4 + msg_len:]
+            if msg_type == 20:
+                self._server_finished_transcript = self._transcript
             messages.append((msg_type, msg_data))
             debug(f"TLS 1.3: Parsed handshake message type={msg_type} len={msg_len}")
         return messages
+
+    def _parse_certificate(self, data):
+        """Convert TLS 1.3 Certificate entries for the existing verifier."""
+        if len(data) < 4 or data[0] != 0:
+            raise ValueError("TLS 1.3: invalid server certificate context")
+        if int.from_bytes(data[1:4], 'big') != len(data) - 4:
+            raise ValueError("TLS 1.3: invalid certificate list length")
+        offset = 4
+        entries = b""
+        certificates = []
+        while offset < len(data):
+            if offset + 3 > len(data):
+                raise ValueError("TLS 1.3: truncated certificate length")
+            size = int.from_bytes(data[offset:offset + 3], 'big')
+            offset += 3
+            if not size or offset + size + 2 > len(data):
+                raise ValueError("TLS 1.3: truncated certificate")
+            cert = data[offset:offset + size]
+            certificates.append(cert)
+            entries += size.to_bytes(3, 'big') + cert
+            offset += size
+            extension_size = int.from_bytes(data[offset:offset + 2], 'big')
+            offset += 2 + extension_size
+            if offset > len(data):
+                raise ValueError("TLS 1.3: truncated certificate extensions")
+        if not certificates:
+            raise ValueError("TLS 1.3: empty certificate list")
+        if self._certificate_verifier is not None:
+            self._certificate_verifier(len(entries).to_bytes(3, 'big') + entries)
+        self._server_public_key = x509.load_der_x509_certificate(certificates[0]).public_key()
+
+    def _verify_certificate_signature(self, data):
+        """Authenticate the handshake transcript before adding CertificateVerify."""
+        if self._server_public_key is None or len(data) < 4:
+            raise ValueError("TLS 1.3: missing certificate or signature")
+        scheme, size = struct.unpack('!HH', data[:4])
+        if len(data) != 4 + size:
+            raise ValueError("TLS 1.3: invalid CertificateVerify length")
+        signed = b' ' * 64 + b'TLS 1.3, server CertificateVerify\x00'
+        signed += self._hash_algo(self._transcript).digest()
+        verify_tls_signature(self._server_public_key, scheme, data[4:], signed, tls13=True)
+        self._certificate_verify_received = True
+
+    def _parse_encrypted_extensions(self, data):
+        """Read ALPN from its TLS 1.3 location, EncryptedExtensions."""
+        if len(data) < 2 or int.from_bytes(data[:2], 'big') != len(data) - 2:
+            raise ValueError("TLS 1.3: invalid EncryptedExtensions length")
+        offset = 2
+        while offset < len(data):
+            if offset + 4 > len(data):
+                raise ValueError("TLS 1.3: truncated extension header")
+            kind, size = struct.unpack('!HH', data[offset:offset + 4])
+            offset += 4
+            extension = data[offset:offset + size]
+            if len(extension) != size:
+                raise ValueError("TLS 1.3: truncated extension data")
+            offset += size
+            if kind == 16:
+                if (len(extension) < 4
+                        or int.from_bytes(extension[:2], 'big') != len(extension) - 2
+                        or extension[2] != len(extension) - 3):
+                    raise ValueError("TLS 1.3: invalid ALPN selection")
+                self._negotiated_protocol = extension[3:].decode('ascii')
 
     def verify_server_finished(self, finished_data):
         """
@@ -542,7 +625,10 @@ class TLS13Handshake:
 
         :return: (client_app_rp, server_app_rp)
         """
-        self._key_schedule.compute_master_secret(self._transcript)
+        # RFC 8446 section 7.1: application secrets stop at server Finished,
+        # even when build_client_finished() has already extended the transcript.
+        transcript = self._server_finished_transcript or self._transcript
+        self._key_schedule.compute_master_secret(transcript)
 
         s_key, s_iv = self._key_schedule.derive_traffic_keys(
             self._key_schedule.server_application_traffic_secret, self._key_length
