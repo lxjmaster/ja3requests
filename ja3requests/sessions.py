@@ -112,7 +112,7 @@ class Session(BaseSession):
         proxies: Dict[AnyStr, AnyStr] = None,
         json: Union[Dict[AnyStr, AnyStr], AnyStr] = None,
         timeout: Optional[float] = None,
-        verify: bool = False,
+        verify: Optional[bool] = None,
         **kwargs,
     ):
         """
@@ -128,13 +128,14 @@ class Session(BaseSession):
         :param proxies:
         :param json:
         :param timeout: Timeout in seconds for connect and read.
-        :param verify: Whether to verify TLS certificates. Default False.
+        :param verify: Override TLS certificate verification for this request.
+                       If omitted, use the session TLS configuration.
         :return:
         """
 
         # Apply verify to TLS config (deep copy to avoid mutating session config)
         tls_config = self._tls_config
-        if verify != tls_config.verify_cert:
+        if verify is not None and verify != tls_config.verify_cert:
             # The thread-safe cache belongs to the session, not the request.
             cache = self._tls_config.session_cache
             tls_config = copy.deepcopy(self._tls_config, {id(cache): cache})
@@ -399,7 +400,7 @@ class Session(BaseSession):
                 headers=self.Request.headers,
                 cookies=self._cookies,
                 proxies=self.Request.proxies,
-                tls_config=self._tls_config,
+                tls_config=self.Request.tls_config,
             ).request()
 
             response = self.send(req, **send_kwargs)
