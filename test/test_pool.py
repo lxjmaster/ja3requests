@@ -167,13 +167,14 @@ class TestConnectionPool(unittest.TestCase):
         self.assertTrue(result)
 
     def test_put_existing_pooled_conn(self):
-        pc = PooledConnection(_make_mock_conn(), "https", "example.com", 443)
+        self.pool.put_connection("example.com", 443, "https", _make_mock_conn())
+        pc = self.pool.get_connection("example.com", 443)
         result = self.pool.put_connection(
             "example.com", 443, "https", pc.conn, pooled_conn=pc
         )
         self.assertTrue(result)
-        # Existing pooled_conn doesn't increment total_connections
-        self.assertEqual(self.pool._total_connections, 0)
+        # Returning a checked-out connection must not count it twice.
+        self.assertEqual(self.pool._total_connections, 1)
 
     def test_put_connection_host_limit(self):
         """Reject when per-host limit reached"""

@@ -34,6 +34,7 @@ class PooledConnection:
         self.created_at = created_at or time.time()
         self.last_used_at = self.created_at
         self.tls = None  # TLS context for HTTPS connections
+        self._pool_generation = None
         self.negotiated_protocol: Optional[str] = None  # ALPN result ('h2', 'http/1.1', None)
 
     def __repr__(self) -> str:
@@ -182,6 +183,7 @@ class ConnectionPool:
         self._idle_timeout = idle_timeout
         self._max_pool_size = max_pool_size
         self._total_connections = 0
+        self._generation = object()
 
     def __repr__(self) -> str:
         return f"<ConnectionPool connections={self._total_connections} pools={len(self._pools)}>"
@@ -286,11 +288,12 @@ class ConnectionPool:
             return None
 
     def discard_connection(self, pooled_conn):
-        """Close a checked-out connection that cannot safely be reused."""
+        """Close a checked-out HTTP/1 connection without counting an old pool."""
         with self._lock:
             if pooled_conn.conn is not None:
                 pooled_conn.close()
-                self._total_connections -= 1
+                if pooled_conn._pool_generation is self._generation:
+                    self._total_connections -= 1
 
     def put_connection(
         self,
@@ -316,7 +319,10 @@ class ConnectionPool:
 
             pool = self._pools[key]
 
-            if pooled_conn is not None:
+            if (
+                pooled_conn is not None
+                and pooled_conn._pool_generation is self._generation
+            ):
                 pooled_conn.touch()
                 pool.append(pooled_conn)
                 return True
@@ -334,6 +340,7 @@ class ConnectionPool:
                 return False
 
             new_pooled_conn = PooledConnection(conn, scheme, host, port)
+            new_pooled_conn._pool_generation = self._generation
             new_pooled_conn.tls = tls
             new_pooled_conn.touch()
 
@@ -405,6 +412,7 @@ class ConnectionPool:
             self._pools.clear()
             self._h2_pools.clear()
             self._total_connections = 0
+            self._generation = object()
 
     def get_stats(self) -> Dict:
         """Get pool statistics"""
