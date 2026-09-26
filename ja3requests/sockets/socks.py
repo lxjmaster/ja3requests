@@ -52,7 +52,9 @@ class SocksProxySocket(BaseSocket):
 
         if self.context.proxy_auth:
             if ":" in self.context.proxy_auth:
-                self.proxy_username, self.proxy_password = self.context.proxy_auth.split(":", 1)
+                self.proxy_username, self.proxy_password = (
+                    self.context.proxy_auth.split(":", 1)
+                )
             else:
                 self.proxy_username, self.proxy_password = self.context.proxy_auth, None
         else:
@@ -85,8 +87,10 @@ class SocksProxySocket(BaseSocket):
         has_auth = self.proxy_username is not None
         if has_auth:
             # Offer both no-auth and username/password
-            self.conn.sendall(struct.pack("BBB", SOCKS5_VERSION, 2, SOCKS5_AUTH_NONE) +
-                              struct.pack("B", SOCKS5_AUTH_PASSWORD))
+            self.conn.sendall(
+                struct.pack("BBB", SOCKS5_VERSION, 2, SOCKS5_AUTH_NONE)
+                + struct.pack("B", SOCKS5_AUTH_PASSWORD)
+            )
         else:
             self.conn.sendall(struct.pack("BBB", SOCKS5_VERSION, 1, SOCKS5_AUTH_NONE))
 
@@ -103,7 +107,9 @@ class SocksProxySocket(BaseSocket):
         # Step 2: Authentication (if required)
         if method == SOCKS5_AUTH_PASSWORD:
             if not has_auth:
-                raise ProxyError("SOCKS5: server requires authentication but no credentials provided")
+                raise ProxyError(
+                    "SOCKS5: server requires authentication but no credentials provided"
+                )
             self._socks5_auth()
         elif method != SOCKS5_AUTH_NONE:
             raise ProxyError(f"SOCKS5: unsupported auth method {method}")
@@ -111,7 +117,9 @@ class SocksProxySocket(BaseSocket):
         # Step 3: Connect request
         # Use domain name (ATYP=0x03) to let proxy resolve DNS
         dest_bytes = dest_host.encode("utf-8")
-        request = struct.pack("BBBB", SOCKS5_VERSION, SOCKS5_CMD_CONNECT, 0x00, SOCKS5_ATYP_DOMAIN)
+        request = struct.pack(
+            "BBBB", SOCKS5_VERSION, SOCKS5_CMD_CONNECT, 0x00, SOCKS5_ATYP_DOMAIN
+        )
         request += struct.pack("B", len(dest_bytes)) + dest_bytes
         request += struct.pack("!H", dest_port)
         self.conn.sendall(request)
@@ -220,11 +228,18 @@ class SocksProxySocket(BaseSocket):
 
     def _send_https_through_socks(self):
         """Perform TLS handshake through the SOCKS tunnel."""
-        from ja3requests.sockets.https import HttpsSocket  # pylint: disable=import-outside-toplevel
-        from ja3requests.protocol.tls import TLS  # pylint: disable=import-outside-toplevel
+        from ja3requests.sockets.https import (
+            HttpsSocket,
+        )  # pylint: disable=import-outside-toplevel
+        from ja3requests.protocol.tls import (
+            TLS,
+        )  # pylint: disable=import-outside-toplevel
 
-        tls = TLS(self.conn, server_host=self.context.destination_address,
-                  server_port=self.context.port)
+        tls = TLS(
+            self.conn,
+            server_host=self.context.destination_address,
+            server_port=self.context.port,
+        )
         tls_config = self.context.tls_config
         if tls_config and not getattr(tls_config, 'server_name', None):
             tls_config.server_name = self.context.destination_address
@@ -237,6 +252,7 @@ class SocksProxySocket(BaseSocket):
         # Create an HttpsSocket wrapper to handle encrypted send
         class SocksTLSSocket(HttpsSocket):
             """HttpsSocket that uses an existing SOCKS tunnel connection."""
+
             def __init__(self, context, conn, tls_ctx):
                 super().__init__(context)
                 self.conn = conn

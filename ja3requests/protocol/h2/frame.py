@@ -117,7 +117,7 @@ class H2Frame:
         if len(data) < total_size:
             return None, data
 
-        payload = data[H2Frame.HEADER_SIZE:total_size]
+        payload = data[H2Frame.HEADER_SIZE : total_size]
         remaining = data[total_size:]
 
         frame = H2Frame(frame_type, flags, stream_id, payload)
@@ -144,6 +144,7 @@ class H2Frame:
 # ============================================================================
 # Frame Builders
 # ============================================================================
+
 
 def build_settings_frame(settings=None, ack=False):
     """
@@ -229,12 +230,13 @@ def build_rst_stream_frame(stream_id, error_code=0):
 # Settings Parser
 # ============================================================================
 
+
 def parse_settings_payload(payload):
     """Parse SETTINGS frame payload into dict."""
     settings = {}
     offset = 0
     while offset + 6 <= len(payload):
-        setting_id, value = struct.unpack("!HI", payload[offset:offset + 6])
+        setting_id, value = struct.unpack("!HI", payload[offset : offset + 6])
         settings[setting_id] = value
         offset += 6
     return settings
