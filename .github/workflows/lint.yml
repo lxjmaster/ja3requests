@@ -33,3 +33,5 @@ jobs:
           python -m pylint --errors-only ja3requests
       - name: Repository hygiene hooks
         run: pre-commit run --all-files
+      - name: Coverage comment ownership tests
+        run: node --test .github/scripts/coverage-comment.test.cjs
