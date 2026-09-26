@@ -177,6 +177,8 @@ class H2Connection:
             self._recv_buffer += data
 
         frames, self._recv_buffer = H2Frame.parse_all(self._recv_buffer)
+        if not data and not frames:
+            raise ConnectionError("HTTP/2 connection closed before END_STREAM")
         return frames
 
     def _handle_connection_frame(self, frame):

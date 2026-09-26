@@ -150,7 +150,8 @@ class ProxySocket(BaseSocket):
                 self.conn = self.tunnel_conn
 
                 # Now perform TLS handshake through the tunnel
-                tls = TLS(self.conn)
+                tls = TLS(self.conn, server_host=self.context.destination_address,
+                          server_port=self.context.port)
 
                 # Set up TLS configuration
                 tls_config = getattr(self.context, 'tls_config', None)
