@@ -47,7 +47,8 @@ class ProxySocket(BaseSocket):
             f"CONNECT {self.context.destination_address}:{self.context.port} HTTP/1.1",
             f"Host: {self.context.destination_address}",
         ]
-        if auth := self.context.headers.get("Proxy-Authorization", None):
+        auth = self.context.headers.get("Proxy-Authorization", None)
+        if auth:
             message.append(f"Proxy-Authorization: Basic {auth}")
         else:
             auth = ""
