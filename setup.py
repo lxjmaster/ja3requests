@@ -60,6 +60,7 @@ setup(
         "ja3requests/base",
         "ja3requests/contexts",
         "ja3requests/protocol",
+        "ja3requests/protocol/h2",
         "ja3requests/protocol/tls",
         "ja3requests/protocol/tls/cipher_suites",
         "ja3requests/protocol/tls/extensions",
