@@ -130,6 +130,19 @@ class TestFromBrowser(unittest.TestCase):
             ja3 = config.get_ja3_string()
             self.assertEqual(len(ja3.split(",")), 5, f"Invalid JA3 for {browser} {version}")
 
+    def test_tls13_presets_offer_tls13_ciphers(self):
+        for (browser, version), preset in PRESETS.items():
+            if preset["tls_version"] != 0x0304:
+                continue
+            suites = {
+                suite.value if hasattr(suite, "value") else suite
+                for suite in preset["cipher_suites"]
+            }
+            self.assertTrue(
+                suites.intersection({0x1301, 0x1302, 0x1303}),
+                f"{browser} {version} has no TLS 1.3 cipher suite",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

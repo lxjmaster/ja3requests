@@ -5,10 +5,31 @@ import pytest
 from ja3requests import Session
 from ja3requests.pool import ConnectionPool
 from ja3requests.protocol.tls import TLS
-from ja3requests.protocol.tls.extensions import SessionTicketExtension
+from ja3requests.protocol.tls.extensions import (
+    ExtendedMasterSecretExtension,
+    SessionTicketExtension,
+)
 from test.integration.test_certificate_verification import config_and_context
 from test.integration.test_local_tls13 import fragmented_reads
 from test.mock_servers.local import LocalServer, read_headers
+
+
+def test_tls12_rsa_extended_master_secret(trusted_certificates, monkeypatch):
+    monkeypatch.setenv("SSL_CERT_FILE", str(trusted_certificates.ca_path))
+    config, context = config_and_context(12, trusted_certificates.leaves["valid"])
+    config.extensions.append(ExtendedMasterSecretExtension())
+    config.verify_cert = True
+
+    def handler(conn):
+        assert read_headers(conn).startswith(b"GET / HTTP/1.1\r\n")
+        conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+
+    with LocalServer(handler, context) as server:
+        with Session(tls_config=config, pool=ConnectionPool()) as session:
+            assert (
+                session.get(f"https://127.0.0.1:{server.port}/", timeout=2).content
+                == b"ok"
+            )
 
 
 @pytest.mark.parametrize("version", [12, "12-ecdhe"])

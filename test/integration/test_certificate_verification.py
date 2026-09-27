@@ -70,6 +70,14 @@ def test_self_signed_peer_is_not_a_trust_anchor(
     assert error
 
 
+def test_ecdsa_leaf_is_trusted(trusted_certificates):
+    verifier = CertificateVerifier(ca_certs=str(trusted_certificates.ca_path))
+    valid, error = verifier.verify_certificate(
+        "127.0.0.1", certificate_message(trusted_certificates.leaves["valid-ecdsa"][0])
+    )
+    assert valid, error
+
+
 @pytest.mark.parametrize("version", [12, 13, "12-ecdhe"])
 def test_verified_request_and_pool_reuse(trusted_certificates, monkeypatch, version):
     monkeypatch.setenv("SSL_CERT_FILE", str(trusted_certificates.ca_path))

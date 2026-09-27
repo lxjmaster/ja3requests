@@ -86,6 +86,10 @@ class TLS:
         self._is_tls13 = False
         self._tls13_private_key = None
         self._tls13_key_share_group = None
+        self._server_legacy_version = None
+        self._server_supported_version = None
+        self._offered_extended_master_secret = False
+        self._extended_master_secret = False
         self._negotiated_protocol = None  # ALPN result (e.g., "h2", "http/1.1")
 
         # Sequence numbers for record layer encryption/decryption
@@ -181,6 +185,9 @@ class TLS:
 
             # Merge TLS 1.3 extensions into custom extensions
             extensions = list(getattr(tls_config, 'extensions', None) or [])
+            self._offered_extended_master_secret = any(
+                getattr(ext, 'extension_type', None) == 0x0017 for ext in extensions
+            )
             if is_tls13:
                 self._setup_tls13_extensions(extensions, tls_config)
 
@@ -238,6 +245,32 @@ class TLS:
             debug(f"TLS Handshake failed: {e}")
             return False
 
+    def _selected_handshake_version(self):
+        offered_suites = {
+            suite.value if hasattr(suite, 'value') else suite
+            for suite in self._cipher_suites
+        }
+        selected_suite = self._selected_cipher_suite
+        if selected_suite not in offered_suites:
+            raise TLSHandshakeError("Server selected an unoffered cipher suite")
+
+        if self._server_supported_version is None:
+            if (
+                self._server_legacy_version != b'\x03\x03'
+                or selected_suite in (0x1301, 0x1302, 0x1303)
+                or self._server_random.endswith(b'DOWNGRD\x01')
+            ):
+                raise TLSHandshakeError("Invalid TLS 1.2 version selection")
+            return b'\x03\x03'
+
+        if self._server_supported_version != b'\x03\x04' or selected_suite not in (
+            0x1301,
+            0x1302,
+            0x1303,
+        ):
+            raise TLSHandshakeError("Invalid TLS 1.3 version selection")
+        return b'\x03\x04'
+
     def _handshake_tls13(self):
         """
         TLS 1.3 handshake flow after ClientHello is sent.
@@ -254,6 +287,7 @@ class TLS:
             )
             buffer = b""
             server_hello_msg = None
+            first_record = b""
 
             # Read until we get a complete ServerHello
             while True:
@@ -276,12 +310,18 @@ class TLS:
                                 server_hello_msg = record_data[4 : 4 + msg_len]
                                 # Also parse with our existing method for cipher suite etc.
                                 self._parse_server_hello(server_hello_msg)
+                                first_record = buffer[: 5 + record_length]
                                 buffer = buffer[5 + record_length :]
                         break
 
             if server_hello_msg is None:
                 debug("TLS 1.3: No ServerHello received")
                 return False
+
+            if self._selected_handshake_version() == b'\x03\x03':
+                self._is_tls13 = False
+                self._tls_version = b'\x03\x03'
+                return self._handshake_tls12(first_record + buffer)
 
             # Initialize TLS 1.3 handshake handler
             hs = TLS13Handshake(
@@ -365,11 +405,11 @@ class TLS:
         finally:
             self.conn.settimeout(None)
 
-    def _handshake_tls12(self):
+    def _handshake_tls12(self, initial_data=b""):
         """TLS 1.2 handshake flow after ClientHello is sent."""
         try:
             # Step 2-6: Receive server handshake messages
-            self._parse_server_handshake_messages()
+            self._parse_server_handshake_messages(initial_data)
             if getattr(self, '_verify_cert', False) and not getattr(
                 self, '_cert_verified', False
             ):
@@ -485,11 +525,13 @@ class TLS:
 
     def _parse_server_handshake_messages(
         self,
+        initial_data=b"",
     ):  # pylint: disable=too-many-branches,too-many-statements,too-many-nested-blocks
         """
         Parse incoming server handshake messages with improved error handling
         """
-        buffer = b""
+        buffer = initial_data
+        initial_pending = bool(initial_data)
         _received_messages = set()
         timeout_count = 0
         max_timeout = 10
@@ -504,19 +546,21 @@ class TLS:
 
         while True:
             try:
-                # Receive data
-                data = self.conn.recv(4096)
-                if not data:
-                    timeout_count += 1
-                    if timeout_count >= max_timeout:
-                        debug("Timeout waiting for server handshake messages")
-                        break
-                    continue
+                if initial_pending:
+                    initial_pending = False
+                else:
+                    data = self.conn.recv(4096)
+                    if not data:
+                        timeout_count += 1
+                        if timeout_count >= max_timeout:
+                            debug("Timeout waiting for server handshake messages")
+                            break
+                        continue
 
-                timeout_count = 0  # Reset timeout counter
-                buffer += data
-                debug(f"Received {len(data)} bytes from server")
-                debug(f"Buffer now has {len(buffer)} bytes: {buffer[:50].hex()}...")
+                    timeout_count = 0  # Reset timeout counter
+                    buffer += data
+                    debug(f"Received {len(data)} bytes from server")
+                    debug(f"Buffer now has {len(buffer)} bytes: {buffer[:50].hex()}...")
 
                 # Parse TLS records from buffer
                 while len(buffer) >= 5:  # Minimum TLS record header size
@@ -637,7 +681,9 @@ class TLS:
         # TLS version (2 bytes)
         if offset + 2 > len(data):
             return
-        _server_version = data[offset : offset + 2]
+        self._server_legacy_version = data[offset : offset + 2]
+        self._server_supported_version = None
+        self._extended_master_secret = False
         offset += 2
 
         # Server random (32 bytes)
@@ -677,12 +723,25 @@ class TLS:
             extensions_length = struct.unpack("!H", data[offset : offset + 2])[0]
             offset += 2
             ext_end = offset + extensions_length
+            if ext_end != len(data):
+                raise TLSHandshakeError("Invalid ServerHello extension length")
             while offset + 4 <= ext_end:
                 ext_type = struct.unpack("!H", data[offset : offset + 2])[0]
                 ext_len = struct.unpack("!H", data[offset + 2 : offset + 4])[0]
                 offset += 4
+                if offset + ext_len > ext_end:
+                    raise TLSHandshakeError("Truncated ServerHello extension")
                 ext_data = data[offset : offset + ext_len]
                 offset += ext_len
+
+                if ext_type == 0x002B:
+                    self._server_supported_version = ext_data
+                elif ext_type == 0x0017:
+                    if ext_data or not self._offered_extended_master_secret:
+                        raise TLSHandshakeError(
+                            "Invalid extended master secret extension"
+                        )
+                    self._extended_master_secret = True
 
                 # ALPN (0x0010): extract negotiated protocol
                 if ext_type == 0x0010 and len(ext_data) >= 4:
@@ -693,6 +752,10 @@ class TLS:
                             "ascii"
                         )
                         debug(f"ALPN negotiated: {self._negotiated_protocol}")
+            if offset != ext_end:
+                raise TLSHandshakeError("Truncated ServerHello extension")
+        elif offset != len(data):
+            raise TLSHandshakeError("Truncated ServerHello extension length")
 
     def _parse_certificate(self, data):
         """Parse Certificate message, verify certificate, and extract server public key"""
@@ -810,13 +873,13 @@ class TLS:
         if getattr(self, '_client_cert_requested', False):
             client_cert_pem = getattr(self, '_client_cert_pem', None)
             if client_cert_pem:
-                cert_msg = self._build_client_certificate(client_cert_pem)
-                self.conn.sendall(cert_msg)
+                certificate_record = self._build_client_certificate(client_cert_pem)
                 debug("Sent client Certificate")
             else:
-                empty_cert = self._build_empty_certificate()
-                self.conn.sendall(empty_cert)
+                certificate_record = self._build_empty_certificate()
                 debug("Sent empty Certificate (no client cert configured)")
+            self.conn.sendall(certificate_record)
+            self._handshake_messages += certificate_record[5:]
 
         # Send ClientKeyExchange
         client_key_exchange = self._build_client_key_exchange()
@@ -1049,6 +1112,20 @@ class TLS:
         # RSA key exchange (default)
         return self._build_rsa_client_key_exchange()
 
+    def _derive_master_secret(self):
+        if not self._server_random:
+            raise TLSHandshakeError("No server random available for master secret")
+        if self._extended_master_secret:
+            session_hash = hashlib.sha256(self._handshake_messages).digest()
+            self._master_secret = TLSCrypto.prf(
+                self._premaster_secret, b"extended master secret", session_hash, 48
+            )
+        else:
+            self._master_secret = TLSCrypto.generate_master_secret(
+                self._premaster_secret, self._client_random, self._server_random
+            )
+        self._generate_session_keys()
+
     def _build_ecdhe_client_key_exchange(self):
         """Build ClientKeyExchange message for ECDHE key exchange.
 
@@ -1079,19 +1156,6 @@ class TLS:
             )
             debug(f"Computed ECDHE shared secret: {len(self._premaster_secret)} bytes")
 
-            # Generate master secret
-            if not (hasattr(self, '_server_random') and self._server_random):
-                raise TLSHandshakeError(
-                    "No server random available for master secret generation"
-                )
-            self._master_secret = TLSCrypto.generate_master_secret(
-                self._premaster_secret, self._client_random, self._server_random
-            )
-            debug(f"Generated master secret: {len(self._master_secret)} bytes")
-
-            # Generate session keys
-            self._generate_session_keys()
-
             # Build ClientKeyExchange message for ECDHE
             # Format: length (1 byte) + public_key
             key_exchange_data = bytes([len(public_key)]) + public_key
@@ -1105,6 +1169,8 @@ class TLS:
             if not hasattr(self, '_handshake_messages'):
                 self._handshake_messages = b''
             self._handshake_messages += msg
+            self._derive_master_secret()
+            debug(f"Generated master secret: {len(self._master_secret)} bytes")
 
             # Wrap in TLS record
             record = b'\x16\x03\x03' + struct.pack("!H", len(msg)) + msg
@@ -1133,21 +1199,6 @@ class TLS:
         except Exception as e:
             raise TLSEncryptionError(f"Failed to encrypt premaster secret: {e}") from e
 
-        # Generate master secret
-        if not (hasattr(self, '_server_random') and self._server_random):
-            raise TLSHandshakeError(
-                "No server random available for master secret generation"
-            )
-        self._master_secret = TLSCrypto.generate_master_secret(
-            self._premaster_secret, self._client_random, self._server_random
-        )
-        debug(
-            f"Generated master secret from premaster: {len(self._master_secret)} bytes"
-        )
-
-        # Generate session keys
-        self._generate_session_keys()
-
         key_exchange_data = (
             struct.pack("!H", len(encrypted_premaster)) + encrypted_premaster
         )
@@ -1159,6 +1210,10 @@ class TLS:
         if not hasattr(self, '_handshake_messages'):
             self._handshake_messages = b''
         self._handshake_messages += msg
+        self._derive_master_secret()
+        debug(
+            f"Generated master secret from premaster: {len(self._master_secret)} bytes"
+        )
 
         # Wrap in TLS record
         record = b'\x16\x03\x03' + struct.pack("!H", len(msg)) + msg
