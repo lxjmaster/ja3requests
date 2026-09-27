@@ -43,11 +43,14 @@ with ja3requests.Session(tls_config=config) as session:
     response = session.get("https://example.com/")
 ```
 
-安全配置验证证书，仅提供 TLS 1.3 套件和 TLS 1.2 ECDHE/AES-GCM 套件，
+安全配置验证证书，仅提供 TLS 1.3 套件和 TLS 1.2 ECDHE/AES-128/256-GCM 套件，
 并通过 ALPN 使用 HTTP/1.1；它不模拟浏览器指纹。TLS 1.3 ClientHello
 同时携带 X25519 和 P-256 密钥份额；服务端要求其他组时，尚不能处理
 HelloRetryRequest。单次请求也可传入
 `verify=True` 启用验证。
+要获得包含目标主机 SNI 扩展的 JA3 字符串，使用
+`config.get_ja3_string(server_name="example.com")`。HTTP/2 请求目前每次新建
+连接，待连接级 HTTP/2 状态可复用后再启用连接复用。
 
 请求显式传入的 `verify=True` 或 `verify=False` 会覆盖会话设置，重定向也沿用
 本次请求的设置。本版本 `TlsConfig()` 保持旧默认；`TlsConfig.legacy()`
