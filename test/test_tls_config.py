@@ -146,6 +146,37 @@ class TestTlsConfigPresets(unittest.TestCase):
         self.assertEqual(config.server_name, "example.com")
 
 
+class TestSecurityProfiles(unittest.TestCase):
+    def test_secure_profile(self):
+        config = TlsConfig.secure()
+        self.assertTrue(config.verify_cert)
+        self.assertEqual(config.tls_version, 0x0304)
+        self.assertEqual(
+            config.get_cipher_suite_values(),
+            [0x1301, 0x1302, 0x1303, 0xC02B, 0xC02F],
+        )
+        self.assertEqual(config.supported_groups, [29, 23])
+        self.assertEqual(config.alpn_protocols, ["http/1.1"])
+        self.assertTrue(any(ext.extension_type == 0x0017 for ext in config.extensions))
+        self.assertEqual(config.validate(), [])
+
+    def test_profiles_are_independent(self):
+        first = TlsConfig.secure()
+        second = TlsConfig.secure()
+        first.cipher_suites.pop()
+        first.supported_groups.append(24)
+        self.assertEqual(len(second.cipher_suites), 5)
+        self.assertEqual(second.supported_groups, [29, 23])
+
+    def test_legacy_profile_pins_old_defaults(self):
+        config = TlsConfig.legacy()
+        self.assertEqual(config.tls_version, 0x0303)
+        self.assertEqual(config.get_cipher_suite_values(), [0x002F])
+        self.assertFalse(config.verify_cert)
+        self.assertEqual(config.supported_groups, [])
+        self.assertEqual(config.alpn_protocols, [])
+
+
 class TestTlsConfigJA3(unittest.TestCase):
     """Test JA3 fingerprint string generation."""
 

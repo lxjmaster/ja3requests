@@ -18,6 +18,7 @@ from ja3requests.protocol.tls.cipher_suites.suites import (
     RsaWithAes128CbcSha,
     RsaWithAes256CbcSha,
 )
+from ja3requests.protocol.tls.extensions import ExtendedMasterSecretExtension
 
 
 class TlsConfig:
@@ -79,6 +80,39 @@ class TlsConfig:
         # Client certificate for mutual TLS
         self._client_cert = None  # PEM-encoded certificate bytes or file path
         self._client_key = None  # PEM-encoded private key bytes or file path
+
+    @classmethod
+    def secure(cls):
+        """Create a verified TLS 1.3 profile with authenticated TLS 1.2 fallback."""
+        config = cls()
+        config._tls_version = 0x0304
+        config._cipher_suites = [
+            0x1301,
+            0x1302,
+            0x1303,
+            EcdheEcdsaWithAes128GcmSha256(),
+            EcdheRsaWithAes128GcmSha256(),
+        ]
+        config._supported_groups = [29, 23]
+        config._signature_algorithms = [0x0804, 0x0403, 0x0401]
+        config._alpn_protocols = ["http/1.1"]
+        config._extensions = [ExtendedMasterSecretExtension()]
+        config._verify_cert = True
+        return config
+
+    @classmethod
+    def legacy(cls):
+        """Pin the pre-migration TLS defaults for explicit compatibility use."""
+        config = cls()
+        config._tls_version = 0x0303
+        config._cipher_suites = [RsaWithAes128CbcSha()]
+        config._extensions = []
+        config._supported_groups = []
+        config._signature_algorithms = []
+        config._alpn_protocols = []
+        config._use_grease = False
+        config._verify_cert = False
+        return config
 
     @property
     def tls_version(self) -> int:
@@ -295,7 +329,7 @@ class TlsConfig:
             values.append(ReservedGrease().value)
 
         for suite in self._cipher_suites:
-            values.append(suite.value)
+            values.append(suite if isinstance(suite, int) else suite.value)
 
         return values
 
@@ -316,7 +350,10 @@ class TlsConfig:
         tls_version = str(self._tls_version)
 
         # Cipher Suites
-        cipher_suites = "-".join([str(suite.value) for suite in self._cipher_suites])
+        cipher_suites = "-".join(
+            str(suite if isinstance(suite, int) else suite.value)
+            for suite in self._cipher_suites
+        )
 
         # Extensions: collect type IDs from Extension objects + auto-generated ones
         ext_types = []
@@ -476,9 +513,20 @@ class TlsConfig:
         if not self._cipher_suites:
             issues.append("No cipher suites configured")
         else:
+            cipher_values = []
             for suite in self._cipher_suites:
-                if not hasattr(suite, 'value'):
+                if not isinstance(suite, int) and not hasattr(suite, 'value'):
                     issues.append(f"Cipher suite {suite!r} missing 'value' attribute")
+                    continue
+                value = suite if isinstance(suite, int) else suite.value
+                if not isinstance(value, int) or not 0 <= value <= 0xFFFF:
+                    issues.append(f"Invalid cipher suite: {suite!r}")
+                else:
+                    cipher_values.append(value)
+            if self._tls_version == 0x0304 and not set(cipher_values).intersection(
+                {0x1301, 0x1302, 0x1303}
+            ):
+                issues.append("TLS 1.3 cipher suite required")
 
         # Supported groups
         if self._supported_groups:

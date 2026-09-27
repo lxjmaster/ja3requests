@@ -75,6 +75,15 @@ deploy the repository.
   application-key derivation at the server Finished boundary.
 - TLS 1.3 session tickets preceding application data, and rejection of tampered
   application records in both HTTP/1.1 and HTTP/2 readers.
+- TLS 1.3 browser presets offering supported cipher suites; the Chrome 120 preset
+  negotiates verified TLS 1.3 or TLS 1.2 ECDHE-RSA/AES-GCM with extended master
+  secret against local OpenSSL peers, including seven-byte reads and rejection
+  of a bad certificate.
+- TLS 1.2 RSA/AES-CBC with extended master secret, and rejection of invalid
+  ServerHello versions, unoffered cipher suites and downgrade markers.
+- The opt-in secure profile with certificate verification enabled by default:
+  TLS 1.3 and TLS 1.2 ECDHE/AES-GCM against RSA and ECDSA certificate peers,
+  including seven-byte reads and rejection of incorrect host identities.
 - Verified TLS 1.2 RSA/AES-CBC, TLS 1.2 ECDHE-RSA/AES-GCM and TLS 1.3 requests
   and connection reuse, using an ephemeral CA trusted only by the test process.
 - Rejection of incorrect DNS/IP identities, expired certificates, invalid chain
@@ -148,8 +157,8 @@ The integration work exceeded the issue's 85% coverage target in a recorded run.
 That Python 3.13.3/macOS run with cryptography 45.0.5 passed 955 tests (including
 114 new cases), with 87% total statement coverage. TLS orchestration was at 84%,
 HTTPS socket handling at 79%, and H2 connection handling at 95%. The current
-selected suite passes 965 tests locally; coverage has not been remeasured for
-this count. The suite covers the issue's local TLS/H2/SOCKS
+selected suite passes 995 tests locally with 87.24% statement coverage. The suite
+covers the issue's local TLS/H2/SOCKS
 server, handshake, failure, pool-reuse and ALPN scenarios. No remote issue or PR
 state is changed by these tests.
 

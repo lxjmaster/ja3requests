@@ -29,6 +29,8 @@ from ja3requests.protocol.tls.extensions import (
 # Cipher suite groups (reusable across presets)
 # ============================================================================
 
+_TLS13_CIPHERS = [0x1301, 0x1302, 0x1303]
+
 _MODERN_CHROME_CIPHERS = [
     EcdheEcdsaWithAes128GcmSha256(),
     EcdheEcdsaWithAes256GcmSha384(),
@@ -110,7 +112,7 @@ PRESETS = {
     },
     ("chrome", 120): {
         "tls_version": 0x0304,
-        "cipher_suites": _MODERN_CHROME_CIPHERS,
+        "cipher_suites": _TLS13_CIPHERS + _MODERN_CHROME_CIPHERS,
         "supported_groups": [29, 23, 24],
         "signature_algorithms": [
             0x0403,
@@ -136,7 +138,7 @@ PRESETS = {
     },
     ("chrome", 124): {
         "tls_version": 0x0304,
-        "cipher_suites": _MODERN_CHROME_CIPHERS,
+        "cipher_suites": _TLS13_CIPHERS + _MODERN_CHROME_CIPHERS,
         "supported_groups": [29, 23, 24],
         "signature_algorithms": [
             0x0403,
@@ -190,7 +192,7 @@ PRESETS = {
     },
     ("firefox", 121): {
         "tls_version": 0x0304,
-        "cipher_suites": _MODERN_FIREFOX_CIPHERS,
+        "cipher_suites": _TLS13_CIPHERS + _MODERN_FIREFOX_CIPHERS,
         "supported_groups": [29, 23, 24, 25],
         "signature_algorithms": [
             0x0403,
@@ -253,7 +255,8 @@ PRESETS = {
     },
     ("safari", 17): {
         "tls_version": 0x0304,
-        "cipher_suites": [
+        "cipher_suites": _TLS13_CIPHERS
+        + [
             EcdheEcdsaWithAes256GcmSha384(),
             EcdheEcdsaWithAes128GcmSha256(),
             EcdheRsaWithAes256GcmSha384(),
@@ -289,7 +292,7 @@ PRESETS = {
     # ------ Edge ------
     ("edge", 120): {
         "tls_version": 0x0304,
-        "cipher_suites": _MODERN_CHROME_CIPHERS,  # Edge uses Chromium
+        "cipher_suites": _TLS13_CIPHERS + _MODERN_CHROME_CIPHERS,  # Edge uses Chromium
         "supported_groups": [29, 23, 24],
         "signature_algorithms": [
             0x0403,
