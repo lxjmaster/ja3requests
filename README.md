@@ -52,6 +52,8 @@ with ja3requests.Session(tls_config=config) as session:
 
 The secure profile verifies certificates, offers only TLS 1.3 suites and TLS 1.2
 ECDHE/AES-GCM suites, and uses HTTP/1.1 ALPN. It does not impersonate a browser.
+Its TLS 1.3 ClientHello includes X25519 and P-256 key shares; servers requesting
+a different group through HelloRetryRequest are not yet supported.
 You can also enable verification for one request with `verify=True`.
 
 An explicit `verify=True` or `verify=False` overrides the session setting for

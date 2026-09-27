@@ -44,7 +44,9 @@ with ja3requests.Session(tls_config=config) as session:
 ```
 
 安全配置验证证书，仅提供 TLS 1.3 套件和 TLS 1.2 ECDHE/AES-GCM 套件，
-并通过 ALPN 使用 HTTP/1.1；它不模拟浏览器指纹。单次请求也可传入
+并通过 ALPN 使用 HTTP/1.1；它不模拟浏览器指纹。TLS 1.3 ClientHello
+同时携带 X25519 和 P-256 密钥份额；服务端要求其他组时，尚不能处理
+HelloRetryRequest。单次请求也可传入
 `verify=True` 启用验证。
 
 请求显式传入的 `verify=True` 或 `verify=False` 会覆盖会话设置，重定向也沿用

@@ -16,7 +16,7 @@
 1. **默认 TLS 设置**：`TlsConfig()` 仍默认为 TLS 1.2 的 RSA/AES-CBC 套件，并关闭证书验证；新调用方应显式采用 `TlsConfig.secure()`。旧服务需要的参数可通过 `TlsConfig.legacy()` 固定。
 2. **默认值迁移**：先在当前版本提供显式安全配置和旧行为入口；只有经过更广的互通验证并给出自签名证书、旧服务和 JA3 指纹的迁移说明后，才应在破坏性版本中改变 `TlsConfig()` 默认值。
 3. **TLS 1.2 密码套件**：密钥计划仍固定使用 SHA-256；SHA-384 PRF 套件尚未由集成测试确认可用。
-4. **TLS 1.3 扩展流程**：HelloRetryRequest、KeyUpdate、PSK 会话恢复和 0-RTT 尚不在当前集成测试范围内；接收 NewSessionTicket 不代表已实现 PSK 恢复。
+4. **TLS 1.3 扩展流程**：安全配置已直接提供 X25519 和 P-256 密钥份额，但其他组所需的 HelloRetryRequest、KeyUpdate、PSK 会话恢复和 0-RTT 尚不在当前集成测试范围内；接收 NewSessionTicket 不代表已实现 PSK 恢复。
 5. **会话持久化**：Cookie 和 TLS 会话状态保存在内存中，尚无跨进程重启的持久化接口。
 
 后续协议能力应按实际使用需求排序，并针对协商、认证和失败边界补充本地集成验证。
