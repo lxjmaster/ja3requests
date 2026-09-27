@@ -84,6 +84,9 @@ deploy the repository.
 - The opt-in secure profile with certificate verification enabled by default:
   TLS 1.3 and TLS 1.2 ECDHE/AES-GCM against RSA and ECDSA certificate peers,
   including seven-byte reads and rejection of incorrect host identities.
+- TLS 1.3 against an OpenSSL peer limited to P-256, with normal and seven-byte
+  reads; the selected server group uses its matching private key, while an
+  unoffered group is rejected. Rebuilding a ClientHello creates fresh shares.
 - Verified TLS 1.2 RSA/AES-CBC, TLS 1.2 ECDHE-RSA/AES-GCM and TLS 1.3 requests
   and connection reuse, using an ephemeral CA trusted only by the test process.
 - Rejection of incorrect DNS/IP identities, expired certificates, invalid chain
@@ -157,7 +160,7 @@ The integration work exceeded the issue's 85% coverage target in a recorded run.
 That Python 3.13.3/macOS run with cryptography 45.0.5 passed 955 tests (including
 114 new cases), with 87% total statement coverage. TLS orchestration was at 84%,
 HTTPS socket handling at 79%, and H2 connection handling at 95%. The current
-selected suite passes 995 tests locally with 87.24% statement coverage. The suite
+selected suite passes 1001 tests locally with 87.37% statement coverage. The suite
 covers the issue's local TLS/H2/SOCKS
 server, handshake, failure, pool-reuse and ALPN scenarios. No remote issue or PR
 state is changed by these tests.

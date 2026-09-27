@@ -245,3 +245,21 @@ def test_secure_profile_rejects_bad_certificate(
                 with pytest.raises(ConnectionError, match="TLS handshake failed"):
                     session.get(f"https://127.0.0.1:{server.port}/", timeout=2)
     assert verified
+
+
+def test_secure_profile_p256_only_peer(
+    trusted_certificates, monkeypatch, fragmented_reads
+):
+    monkeypatch.setenv("SSL_CERT_FILE", str(trusted_certificates.ca_path))
+    certificate = trusted_certificates.leaves["valid"]
+    context = tls13_context(*certificate, group="prime256v1")
+
+    def handler(conn):
+        assert conn.version() == "TLSv1.3"
+        assert read_headers(conn).startswith(b"GET / HTTP/1.1\r\n")
+        conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+
+    with LocalServer(handler, context) as server:
+        with Session(tls_config=TlsConfig.secure(), pool=ConnectionPool()) as session:
+            response = session.get(f"https://127.0.0.1:{server.port}/", timeout=2)
+            assert response.content == b"ok"

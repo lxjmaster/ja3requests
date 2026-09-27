@@ -86,6 +86,7 @@ class TLS:
         self._is_tls13 = False
         self._tls13_private_key = None
         self._tls13_key_share_group = None
+        self._tls13_private_keys = {}
         self._server_legacy_version = None
         self._server_supported_version = None
         self._offered_extended_master_secret = False
@@ -329,6 +330,7 @@ class TLS:
                 self._tls13_private_key,
                 self._tls13_key_share_group,
                 self._handshake_messages,
+                private_keys=self._tls13_private_keys,
             )
             if getattr(self, '_verify_cert', False):
                 hs._certificate_verifier = self._verify_server_certificate
@@ -451,6 +453,9 @@ class TLS:
             TLS13KeyExchange,
         )  # pylint: disable=import-outside-toplevel
 
+        self._tls13_private_keys = {}
+        self._tls13_private_key = None
+        self._tls13_key_share_group = None
         existing_types = {
             ext.extension_type for ext in extensions if hasattr(ext, 'extension_type')
         }
@@ -459,13 +464,33 @@ class TLS:
         if SupportedVersionsExtension.extension_type not in existing_types:
             extensions.append(SupportedVersionsExtension([0x0304, 0x0303]))
 
-        # key_share: generate ECDHE key pair and include public key
+        # key_share: include one share for each supported implemented group.
         if KeyShareExtension.extension_type not in existing_types:
-            # Default to x25519 (most widely supported for TLS 1.3)
-            private_key, public_bytes = TLS13KeyExchange.generate_x25519_keypair()
-            self._tls13_private_key = private_key
-            self._tls13_key_share_group = 0x001D  # x25519
-            extensions.append(KeyShareExtension([(0x001D, public_bytes)]))
+            if not self._supported_groups:
+                self._supported_groups = [0x001D]
+            key_shares = []
+            for group in self._supported_groups:
+                if group in self._tls13_private_keys:
+                    continue
+                if group == 0x001D:
+                    private_key, public_bytes = (
+                        TLS13KeyExchange.generate_x25519_keypair()
+                    )
+                elif group == 0x0017:
+                    private_key, public_bytes = (
+                        TLS13KeyExchange.generate_secp256r1_keypair()
+                    )
+                else:
+                    continue
+                self._tls13_private_keys[group] = private_key
+                key_shares.append((group, public_bytes))
+            if not key_shares:
+                raise TLSHandshakeError("No supported TLS 1.3 key share group")
+            self._tls13_key_share_group = key_shares[0][0]
+            self._tls13_private_key = self._tls13_private_keys[
+                self._tls13_key_share_group
+            ]
+            extensions.append(KeyShareExtension(key_shares))
 
         # psk_key_exchange_modes (required even without PSK for some servers)
         if PSKKeyExchangeModesExtension.extension_type not in existing_types:
