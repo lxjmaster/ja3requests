@@ -85,8 +85,12 @@ class HttpsSocket(BaseSocket):
         )
 
         # Set JA3 parameters
-        tls.set_payload(tls_config=tls_config)
-        handshake_success = tls.handshake()
+        try:
+            tls.set_payload(tls_config=tls_config)
+            handshake_success = tls.handshake()
+        except Exception:  # pylint: disable=broad-exception-caught
+            self.close()
+            raise
 
         if not handshake_success:
             self.conn.close()

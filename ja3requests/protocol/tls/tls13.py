@@ -368,7 +368,9 @@ class TLS13Handshake:
     Using the HKDF key schedule, key exchange, and record protection primitives.
     """
 
-    def __init__(self, conn, private_key, key_share_group, client_hello_bytes):
+    def __init__(
+        self, conn, private_key, key_share_group, client_hello_bytes, private_keys=None
+    ):
         """
         :param conn: Raw TCP socket
         :param private_key: ECDHE private key (from ClientHello key_share)
@@ -378,6 +380,11 @@ class TLS13Handshake:
         self.conn = conn
         self._private_key = private_key
         self._key_share_group = key_share_group
+        self._private_keys = (
+            dict(private_keys)
+            if private_keys is not None
+            else {key_share_group: private_key}
+        )
         self._transcript = client_hello_bytes  # Accumulates handshake messages
         self._key_schedule = None
         self._server_handshake_rp = None  # Record protection for decrypting server
@@ -468,13 +475,19 @@ class TLS13Handshake:
             return False
 
         # Compute shared secret
+        private_key = self._private_keys.get(server_group)
+        if private_key is None:
+            debug(f"TLS 1.3: Server selected an unoffered group {server_group!r}")
+            return False
+        self._private_key = private_key
+        self._key_share_group = server_group
         if server_group == GROUP_X25519:
             shared_secret = TLS13KeyExchange.compute_x25519_shared_secret(
-                self._private_key, server_public_key
+                private_key, server_public_key
             )
         elif server_group == GROUP_SECP256R1:
             shared_secret = TLS13KeyExchange.compute_secp256r1_shared_secret(
-                self._private_key, server_public_key
+                private_key, server_public_key
             )
         else:
             debug(f"TLS 1.3: Unsupported group 0x{server_group:04X}")
