@@ -39,20 +39,27 @@ Ja3Requests officially supports Python 3.7+.
 ## HTTPS Certificate Verification
 
 Certificate verification is disabled by default for backward compatibility.
-Enable it per request with `verify=True`, or configure it for a session:
+For verified HTTPS with TLS 1.3 and a TLS 1.2 ECDHE/AES-GCM fallback, select the
+secure profile explicitly:
 
 ```python
 import ja3requests
 
-config = ja3requests.TlsConfig.from_browser("chrome", 120)
-config.verify_cert = True
+config = ja3requests.TlsConfig.secure()
 with ja3requests.Session(tls_config=config) as session:
     response = session.get("https://example.com/")
 ```
 
+The secure profile verifies certificates, offers only TLS 1.3 suites and TLS 1.2
+ECDHE/AES-GCM suites, and uses HTTP/1.1 ALPN. It does not impersonate a browser.
+You can also enable verification for one request with `verify=True`.
+
 An explicit `verify=True` or `verify=False` overrides the session setting for
-that request, including redirects. See [local protocol tests](test/README.md)
-for the tested TLS and HTTP/2 paths and their current limits.
+that request, including redirects. `TlsConfig()` retains the old defaults in
+this release; `TlsConfig.legacy()` pins them explicitly for compatibility and
+leaves certificate verification disabled. A future change to the constructor's
+defaults needs a breaking release and broader interoperability tests. See
+[local protocol tests](test/README.md) for the tested paths and limits.
 
 ## How To Use
 ### Unreasonable Request Method

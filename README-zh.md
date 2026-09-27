@@ -32,20 +32,25 @@ Ja3Requests正式支持Python 3.7+
 
 ## HTTPS 证书验证
 
-为保持兼容，默认不验证服务器证书。可以对单次请求传入 `verify=True`，
-也可以在会话配置中启用：
+为保持兼容，默认不验证服务器证书。需要验证证书、优先使用 TLS 1.3 并允许
+TLS 1.2 ECDHE/AES-GCM 回退时，显式选择安全配置：
 
 ```python
 import ja3requests
 
-config = ja3requests.TlsConfig.from_browser("chrome", 120)
-config.verify_cert = True
+config = ja3requests.TlsConfig.secure()
 with ja3requests.Session(tls_config=config) as session:
     response = session.get("https://example.com/")
 ```
 
+安全配置验证证书，仅提供 TLS 1.3 套件和 TLS 1.2 ECDHE/AES-GCM 套件，
+并通过 ALPN 使用 HTTP/1.1；它不模拟浏览器指纹。单次请求也可传入
+`verify=True` 启用验证。
+
 请求显式传入的 `verify=True` 或 `verify=False` 会覆盖会话设置，重定向也沿用
-本次请求的设置。已测试的 TLS、HTTP/2 路径及限制见[本地协议测试](test/README.md)。
+本次请求的设置。本版本 `TlsConfig()` 保持旧默认；`TlsConfig.legacy()`
+显式固定旧行为，且关闭证书验证。未来切换构造器默认值需要破坏性版本变更
+和更广的互通测试。已测试的路径及限制见[本地协议测试](test/README.md)。
 
 ## 如何使用
 ### 不同的请求方法
