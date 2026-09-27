@@ -1,5 +1,6 @@
 """Tests for ja3requests.protocol.tls.crypto module."""
 
+import hashlib
 import os
 import unittest
 
@@ -60,6 +61,47 @@ class TestTLSCryptoPRF(unittest.TestCase):
         sha256_result = TLSCrypto.prf(secret, label, seed, 48)
         sha1_result = TLSCrypto.prf_sha1(secret, label, seed, 48)
         self.assertNotEqual(sha256_result, sha1_result)
+
+    def test_sha384_cipher_uses_sha384_for_tls12_secrets(self):
+        premaster = b"\x03\x03" + b"\x01" * 46
+        client_random = b"\x02" * 32
+        server_random = b"\x03" * 32
+        master = TLSCrypto.generate_master_secret(
+            premaster, client_random, server_random, _cipher_suite=0xC030
+        )
+        self.assertEqual(
+            master,
+            TLSCrypto.prf(
+                premaster,
+                b"master secret",
+                client_random + server_random,
+                48,
+                hash_algo=hashlib.sha384,
+            ),
+        )
+        self.assertEqual(
+            TLSCrypto.generate_key_block(
+                master, client_random, server_random, 72, _cipher_suite=0xC030
+            ),
+            TLSCrypto.prf(
+                master,
+                b"key expansion",
+                server_random + client_random,
+                72,
+                hash_algo=hashlib.sha384,
+            ),
+        )
+        messages = b"handshake transcript"
+        self.assertEqual(
+            TLSCrypto.compute_verify_data(master, messages, _cipher_suite=0xC030),
+            TLSCrypto.prf(
+                master,
+                b"client finished",
+                hashlib.sha384(messages).digest(),
+                12,
+                hash_algo=hashlib.sha384,
+            ),
+        )
 
 
 class TestTLSCryptoMasterSecret(unittest.TestCase):

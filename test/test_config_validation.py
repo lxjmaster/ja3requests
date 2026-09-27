@@ -19,7 +19,7 @@ class TestValidateVersions(unittest.TestCase):
         c.supported_groups = [29, 23]
         self.assertEqual(c.validate(), [])
         self.assertEqual(c.get_cipher_suite_values(), [0x1301])
-        self.assertTrue(c.get_ja3_string().startswith("772,4865,"))
+        self.assertTrue(c.get_ja3_string().startswith("771,4865,"))
 
     def test_invalid_version(self):
         c = TlsConfig()
@@ -116,6 +116,14 @@ class TestValidateTLS13Requirements(unittest.TestCase):
         c.supported_groups = [29]
         issues = c.validate()
         self.assertTrue(any("TLS 1.3 cipher" in i for i in issues))
+
+    def test_tls13_needs_an_implemented_key_share_group(self):
+        c = TlsConfig()
+        c.tls_version = 0x0304
+        c.cipher_suites = [0x1301]
+        c.supported_groups = [24]
+        issues = c.validate()
+        self.assertTrue(any("key share" in i for i in issues))
 
 
 class TestBrowserPresetValidation(unittest.TestCase):
