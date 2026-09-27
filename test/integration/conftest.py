@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from cryptography.x509.oid import NameOID, ExtendedKeyUsageOID
 
 
@@ -74,8 +74,12 @@ def trusted_certificates(tmp_path_factory):
     ca_path = directory / "ca.pem"
     ca_path.write_bytes(ca.public_bytes(serialization.Encoding.PEM))
     leaves = {}
-    for variant in ("valid", "wrong-host", "expired", "bad-signature"):
-        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    for variant in ("valid", "valid-ecdsa", "wrong-host", "expired", "bad-signature"):
+        key = (
+            ec.generate_private_key(ec.SECP256R1())
+            if variant == "valid-ecdsa"
+            else rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        )
         names = [
             x509.DNSName("localhost"),
             x509.IPAddress(ipaddress.ip_address("127.0.0.1")),
@@ -102,7 +106,15 @@ def trusted_certificates(tmp_path_factory):
             )
             .add_extension(
                 x509.KeyUsage(
-                    True, False, True, False, False, False, False, False, False
+                    True,
+                    False,
+                    variant != "valid-ecdsa",
+                    False,
+                    False,
+                    False,
+                    False,
+                    False,
+                    False,
                 ),
                 critical=True,
             )
