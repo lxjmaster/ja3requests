@@ -107,13 +107,15 @@ def h2_frame(kind, flags, stream, payload=b""):
     )
 
 
-def tls13_context(cert_path, key_path, alpn="http/1.1"):
+def tls13_context(cert_path, key_path, alpn="http/1.1", group=None):
     """Use OpenSSL's TLS 1.3 implementation as an independent peer."""
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.minimum_version = ssl.TLSVersion.TLSv1_3
     context.maximum_version = ssl.TLSVersion.TLSv1_3
     context.load_cert_chain(str(cert_path), str(key_path))
     context.set_alpn_protocols([alpn])
+    if group is not None:
+        context.set_ecdh_curve(group)
     return context
 
 

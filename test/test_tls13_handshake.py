@@ -4,7 +4,11 @@ import hashlib
 import os
 import struct
 import unittest
+from types import SimpleNamespace
 
+from ja3requests import TlsConfig
+from ja3requests.exceptions import TLSHandshakeError
+from ja3requests.protocol.tls import TLS
 from ja3requests.protocol.tls.tls13 import (
     TLS13Handshake,
     TLS13KeySchedule,
@@ -15,6 +19,7 @@ from ja3requests.protocol.tls.tls13 import (
     TLS13_CIPHER_PARAMS,
 )
 from ja3requests.protocol.tls.extensions import SNIExtension
+from ja3requests.sockets.https import HttpsSocket
 
 
 # ============================================================================
@@ -32,6 +37,43 @@ class TestTLS13HandshakeInit(unittest.TestCase):
         self.assertIn(0x1301, TLS13_CIPHER_PARAMS)
         self.assertIn(0x1302, TLS13_CIPHER_PARAMS)
         self.assertIn(0x1303, TLS13_CIPHER_PARAMS)
+
+
+class TestTLS13ClientShares(unittest.TestCase):
+    def test_rebuilding_client_hello_uses_fresh_private_keys(self):
+        tls = TLS(None)
+        config = TlsConfig.secure()
+        tls.set_payload(config)
+        first = tls._tls13_private_keys.copy()
+        tls.set_payload(config)
+        second = tls._tls13_private_keys
+        self.assertEqual(set(first), {GROUP_X25519, GROUP_SECP256R1})
+        self.assertEqual(set(second), set(first))
+        for group in first:
+            self.assertIsNot(first[group], second[group])
+
+    def test_unsupported_group_closes_connection(self):
+        config = TlsConfig.secure()
+        config.supported_groups = [24]
+        context = SimpleNamespace(
+            destination_address="example.invalid",
+            port=443,
+            tls_config=config,
+            connect_timeout=1,
+        )
+
+        class FakeConnection:
+            closed = False
+
+            def close(self):
+                self.closed = True
+
+        connection = FakeConnection()
+        sock = HttpsSocket(context)
+        sock._new_conn = lambda host, port: connection
+        with self.assertRaises(TLSHandshakeError):
+            sock.new_conn()
+        self.assertTrue(connection.closed)
 
 
 class TestTLS13ServerHelloParsing(unittest.TestCase):
@@ -85,6 +127,37 @@ class TestTLS13ServerHelloParsing(unittest.TestCase):
             group=GROUP_SECP256R1, pub_key=server_pub
         )
         self.assertTrue(hs.process_server_hello(server_hello))
+
+    def test_process_server_hello_selects_matching_private_key(self):
+        x25519_private, _ = TLS13KeyExchange.generate_x25519_keypair()
+        p256_private, _ = TLS13KeyExchange.generate_secp256r1_keypair()
+        _, server_public = TLS13KeyExchange.generate_secp256r1_keypair()
+
+        hs = TLS13Handshake(
+            None,
+            x25519_private,
+            GROUP_X25519,
+            b"ch",
+            private_keys={
+                GROUP_X25519: x25519_private,
+                GROUP_SECP256R1: p256_private,
+            },
+        )
+        server_hello = self._build_server_hello(
+            group=GROUP_SECP256R1, pub_key=server_public
+        )
+        self.assertTrue(hs.process_server_hello(server_hello))
+        self.assertIs(hs._private_key, p256_private)
+        self.assertEqual(hs._key_share_group, GROUP_SECP256R1)
+
+    def test_rejects_group_without_a_matching_private_key(self):
+        x25519_private, _ = TLS13KeyExchange.generate_x25519_keypair()
+        _, server_public = TLS13KeyExchange.generate_secp256r1_keypair()
+        hs = TLS13Handshake(None, x25519_private, GROUP_X25519, b"ch")
+        server_hello = self._build_server_hello(
+            group=GROUP_SECP256R1, pub_key=server_public
+        )
+        self.assertFalse(hs.process_server_hello(server_hello))
 
     def test_process_server_hello_chacha20(self):
         client_priv, _ = TLS13KeyExchange.generate_x25519_keypair()
