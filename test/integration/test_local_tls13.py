@@ -6,9 +6,11 @@ import pytest
 
 from ja3requests import Session, TlsConfig
 from ja3requests.pool import ConnectionPool
+from ja3requests.protocol.tls import TLS
 from ja3requests.protocol.tls.tls13 import TLS13Handshake
 from ja3requests.sockets.https import HttpsSocket
 from test.mock_servers.local import LocalServer, read_headers, serve_h2, tls13_context
+from test.mock_servers.local import tls12_context
 
 
 def tls13_config(cipher=0x1301):
@@ -126,3 +128,120 @@ def test_tls13_verify_true_is_not_silently_ignored(local_certificate):
                         f"https://127.0.0.1:{server.port}/", timeout=2, verify=True
                     )
     assert requests == []
+
+
+@pytest.mark.parametrize("version", [12, 13])
+def test_browser_preset_negotiates_verified_tls(
+    trusted_certificates, monkeypatch, fragmented_reads, version
+):
+    monkeypatch.setenv("SSL_CERT_FILE", str(trusted_certificates.ca_path))
+    certificate = trusted_certificates.leaves["valid"]
+    if version == 12:
+        context = tls12_context(*certificate, cipher="ECDHE-RSA-AES128-GCM-SHA256")
+    else:
+        context = tls13_context(*certificate)
+
+    def handler(conn):
+        assert conn.version() == f"TLSv1.{version - 10}"
+        assert read_headers(conn).startswith(b"GET / HTTP/1.1\r\n")
+        conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+
+    config = TlsConfig.from_browser("chrome", 120)
+    config.verify_cert = True
+    with LocalServer(handler, context) as server:
+        with Session(tls_config=config, pool=ConnectionPool()) as session:
+            response = session.get(f"https://127.0.0.1:{server.port}/", timeout=2)
+            assert response.content == b"ok"
+
+
+def test_browser_preset_rejects_bad_certificate_on_tls12_fallback(
+    trusted_certificates, monkeypatch
+):
+    monkeypatch.setenv("SSL_CERT_FILE", str(trusted_certificates.ca_path))
+    certificate = trusted_certificates.leaves["wrong-host"]
+    context = tls12_context(*certificate, cipher="ECDHE-RSA-AES128-GCM-SHA256")
+    config = TlsConfig.from_browser("chrome", 120)
+    config.verify_cert = True
+    verified = []
+    original_verify = TLS._verify_server_certificate
+
+    def record_verification(tls, certificate_data):
+        verified.append(True)
+        return original_verify(tls, certificate_data)
+
+    monkeypatch.setattr(TLS, "_verify_server_certificate", record_verification)
+    with pytest.raises(ssl.SSLError):
+        with LocalServer(
+            lambda conn: pytest.fail("Unverified request reached server"), context
+        ) as server:
+            with Session(tls_config=config, pool=ConnectionPool()) as session:
+                with pytest.raises(ConnectionError, match="TLS handshake failed"):
+                    session.get(f"https://127.0.0.1:{server.port}/", timeout=2)
+    assert verified
+
+
+@pytest.mark.parametrize(
+    "version,certificate_variant,cipher",
+    [
+        (13, "valid", None),
+        (13, "valid-ecdsa", None),
+        (12, "valid", "ECDHE-RSA-AES128-GCM-SHA256"),
+        (12, "valid-ecdsa", "ECDHE-ECDSA-AES128-GCM-SHA256"),
+    ],
+)
+def test_secure_profile_verified_interop(
+    trusted_certificates,
+    monkeypatch,
+    fragmented_reads,
+    version,
+    certificate_variant,
+    cipher,
+):
+    monkeypatch.setenv("SSL_CERT_FILE", str(trusted_certificates.ca_path))
+    certificate = trusted_certificates.leaves[certificate_variant]
+    context = (
+        tls13_context(*certificate)
+        if version == 13
+        else tls12_context(*certificate, cipher=cipher)
+    )
+
+    def handler(conn):
+        assert conn.version() == f"TLSv1.{version - 10}"
+        assert read_headers(conn).startswith(b"GET / HTTP/1.1\r\n")
+        conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+
+    config = TlsConfig.secure()
+    with LocalServer(handler, context) as server:
+        with Session(tls_config=config, pool=ConnectionPool()) as session:
+            response = session.get(f"https://127.0.0.1:{server.port}/", timeout=2)
+            assert response.content == b"ok"
+
+
+@pytest.mark.parametrize("version", [12, 13])
+def test_secure_profile_rejects_bad_certificate(
+    trusted_certificates, monkeypatch, version
+):
+    monkeypatch.setenv("SSL_CERT_FILE", str(trusted_certificates.ca_path))
+    certificate = trusted_certificates.leaves["wrong-host"]
+    context = (
+        tls13_context(*certificate)
+        if version == 13
+        else tls12_context(*certificate, cipher="ECDHE-RSA-AES128-GCM-SHA256")
+    )
+    verified = []
+    original_verify = TLS._verify_server_certificate
+
+    def record_verification(tls, certificate_data):
+        verified.append(True)
+        return original_verify(tls, certificate_data)
+
+    monkeypatch.setattr(TLS, "_verify_server_certificate", record_verification)
+    config = TlsConfig.secure()
+    with pytest.raises(ssl.SSLError):
+        with LocalServer(
+            lambda conn: pytest.fail("Unverified request reached server"), context
+        ) as server:
+            with Session(tls_config=config, pool=ConnectionPool()) as session:
+                with pytest.raises(ConnectionError, match="TLS handshake failed"):
+                    session.get(f"https://127.0.0.1:{server.port}/", timeout=2)
+    assert verified
