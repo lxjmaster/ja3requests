@@ -145,9 +145,10 @@ class TLS:
             if hasattr(tls_config, 'client_random') and tls_config.client_random:
                 self._client_random = tls_config.client_random
 
-            # Set server name for SNI
-            if hasattr(tls_config, 'server_name') and tls_config.server_name:
-                self._server_name = tls_config.server_name
+            # The destination supplies SNI when the configuration has no explicit override.
+            self._server_name = (
+                getattr(tls_config, 'server_name', None) or self._server_host
+            )
 
             # Set supported groups (allow empty list)
             if hasattr(tls_config, 'supported_groups'):
@@ -1141,13 +1142,21 @@ class TLS:
         if not self._server_random:
             raise TLSHandshakeError("No server random available for master secret")
         if self._extended_master_secret:
-            session_hash = hashlib.sha256(self._handshake_messages).digest()
+            hash_algo = TLSCrypto.prf_hash_for_cipher_suite(self._selected_cipher_suite)
+            session_hash = hash_algo(self._handshake_messages).digest()
             self._master_secret = TLSCrypto.prf(
-                self._premaster_secret, b"extended master secret", session_hash, 48
+                self._premaster_secret,
+                b"extended master secret",
+                session_hash,
+                48,
+                hash_algo=hash_algo,
             )
         else:
             self._master_secret = TLSCrypto.generate_master_secret(
-                self._premaster_secret, self._client_random, self._server_random
+                self._premaster_secret,
+                self._client_random,
+                self._server_random,
+                _cipher_suite=self._selected_cipher_suite,
             )
         self._generate_session_keys()
 
@@ -1336,6 +1345,7 @@ class TLS:
             self._client_random,
             self._server_random,
             key_block_length,
+            _cipher_suite=cipher_suite,
         )
 
         # Derive individual keys

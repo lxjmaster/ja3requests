@@ -51,9 +51,15 @@ class TLSCrypto:
         return version + random_bytes
 
     @staticmethod
-    def prf(secret: bytes, label: bytes, seed: bytes, length: int) -> bytes:
+    def prf(
+        secret: bytes,
+        label: bytes,
+        seed: bytes,
+        length: int,
+        hash_algo=hashlib.sha256,
+    ) -> bytes:
         """
-        TLS 1.2 PRF (Pseudo-Random Function) using HMAC-SHA256
+        TLS 1.2 PRF (Pseudo-Random Function) using the suite's HMAC hash.
         """
 
         def p_hash(secret: bytes, seed: bytes, length: int) -> bytes:
@@ -62,13 +68,18 @@ class TLSCrypto:
             a = seed
 
             while len(result) < length:
-                a = hmac.new(secret, a, hashlib.sha256).digest()
-                result += hmac.new(secret, a + seed, hashlib.sha256).digest()
+                a = hmac.new(secret, a, hash_algo).digest()
+                result += hmac.new(secret, a + seed, hash_algo).digest()
 
             return result[:length]
 
         labeled_seed = label + seed
         return p_hash(secret, labeled_seed, length)
+
+    @staticmethod
+    def prf_hash_for_cipher_suite(cipher_suite: int):
+        """Return the TLS 1.2 PRF hash associated with a cipher suite."""
+        return get_cipher_info(cipher_suite).get("prf_hash", hashlib.sha256)
 
     @staticmethod
     def prf_sha1(secret: bytes, label: bytes, seed: bytes, length: int) -> bytes:
@@ -104,8 +115,13 @@ class TLSCrypto:
         label = b"master secret"
         seed = client_random + server_random
 
-        # TLS 1.2 always uses SHA256 PRF for master secret generation
-        return TLSCrypto.prf(premaster_secret, label, seed, 48)
+        return TLSCrypto.prf(
+            premaster_secret,
+            label,
+            seed,
+            48,
+            hash_algo=TLSCrypto.prf_hash_for_cipher_suite(_cipher_suite),
+        )
 
     @staticmethod
     def generate_key_block(
@@ -122,8 +138,13 @@ class TLSCrypto:
         label = b"key expansion"
         seed = server_random + client_random
 
-        # TLS 1.2 always uses SHA256 PRF for key block generation
-        return TLSCrypto.prf(master_secret, label, seed, key_block_length)
+        return TLSCrypto.prf(
+            master_secret,
+            label,
+            seed,
+            key_block_length,
+            hash_algo=TLSCrypto.prf_hash_for_cipher_suite(_cipher_suite),
+        )
 
     @staticmethod
     def derive_keys(key_block: bytes, cipher_suite: int) -> dict:
@@ -269,14 +290,15 @@ class TLSCrypto:
         According to RFC 5246 (TLS 1.2), Section 7.4.9:
         verify_data = PRF(master_secret, finished_label, Hash(handshake_messages))[0..verify_data_length-1]
 
-        For TLS 1.2, both the PRF and the Hash function always use SHA-256,
-        regardless of the cipher suite's MAC algorithm.
+        The handshake hash and PRF use the cipher suite's TLS 1.2 PRF hash.
         """
         label = b"client finished" if is_client else b"server finished"
 
-        # TLS 1.2: Always use SHA-256 for handshake hash and PRF
-        message_hash = hashlib.sha256(handshake_messages).digest()
-        return TLSCrypto.prf(master_secret, label, message_hash, 12)
+        hash_algo = TLSCrypto.prf_hash_for_cipher_suite(_cipher_suite)
+        message_hash = hash_algo(handshake_messages).digest()
+        return TLSCrypto.prf(
+            master_secret, label, message_hash, 12, hash_algo=hash_algo
+        )
 
 
 class RSAKeyExchange:
@@ -700,6 +722,7 @@ def get_cipher_info(cipher_suite: int) -> dict:
             "iv_size": 4,
             "mac_size": 0,
             "is_aead": True,
+            "prf_hash": hashlib.sha384,
         },
         # ECDHE-RSA with CBC
         0xC013: {
@@ -741,6 +764,7 @@ def get_cipher_info(cipher_suite: int) -> dict:
             "iv_size": 16,
             "mac_size": 48,
             "is_aead": False,
+            "prf_hash": hashlib.sha384,
         },
         # ECDHE-RSA with GCM
         0xC02F: {
@@ -762,6 +786,7 @@ def get_cipher_info(cipher_suite: int) -> dict:
             "iv_size": 4,
             "mac_size": 0,
             "is_aead": True,
+            "prf_hash": hashlib.sha384,
         },
         # ECDHE-ECDSA with GCM
         0xC02B: {
@@ -783,6 +808,7 @@ def get_cipher_info(cipher_suite: int) -> dict:
             "iv_size": 4,
             "mac_size": 0,
             "is_aead": True,
+            "prf_hash": hashlib.sha384,
         },
         # TLS 1.3 cipher suites
         0x1301: {

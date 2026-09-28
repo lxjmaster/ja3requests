@@ -9,6 +9,8 @@ from ja3requests.pool import (
     PooledH2Connection,
     get_default_pool,
 )
+from ja3requests.sockets.https import HttpsSocket
+from types import SimpleNamespace
 
 
 class FakeSocket:
@@ -113,6 +115,30 @@ class TestH2ConnectionPool(unittest.TestCase):
         pc = pool.put_h2_connection("example.com", 443, "https", FakeSocket())
         self.assertIsNotNone(pc)
         self.assertEqual(pc.negotiated_protocol, "h2")
+
+    def test_https_socket_does_not_pool_untracked_h2_state(self):
+        class RecordingPool:
+            puts = 0
+
+            def put_connection(self, *args, **kwargs):
+                self.puts += 1
+                return True
+
+        class FakeConnection:
+            closed = False
+
+            def close(self):
+                self.closed = True
+
+        pool = RecordingPool()
+        conn = FakeConnection()
+        context = SimpleNamespace(destination_address="example.com", port=443)
+        sock = HttpsSocket(context, pool=pool)
+        sock.conn = conn
+        sock.tls = SimpleNamespace(_negotiated_protocol="h2")
+        sock.return_to_pool()
+        self.assertTrue(conn.closed)
+        self.assertEqual(pool.puts, 0)
 
     def test_get_h2_connection_acquires_stream(self):
         pool = ConnectionPool()

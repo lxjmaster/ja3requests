@@ -153,7 +153,7 @@ class TestSecurityProfiles(unittest.TestCase):
         self.assertEqual(config.tls_version, 0x0304)
         self.assertEqual(
             config.get_cipher_suite_values(),
-            [0x1301, 0x1302, 0x1303, 0xC02B, 0xC02F],
+            [0x1301, 0x1302, 0x1303, 0xC02B, 0xC02F, 0xC02C, 0xC030],
         )
         self.assertEqual(config.supported_groups, [29, 23])
         self.assertEqual(config.alpn_protocols, ["http/1.1"])
@@ -165,7 +165,7 @@ class TestSecurityProfiles(unittest.TestCase):
         second = TlsConfig.secure()
         first.cipher_suites.pop()
         first.supported_groups.append(24)
-        self.assertEqual(len(second.cipher_suites), 5)
+        self.assertEqual(len(second.cipher_suites), 7)
         self.assertEqual(second.supported_groups, [29, 23])
 
     def test_legacy_profile_pins_old_defaults(self):
@@ -198,6 +198,23 @@ class TestTlsConfigJA3(unittest.TestCase):
         config1 = TlsConfig()
         config2 = TlsConfig().create_firefox_config()
         self.assertNotEqual(config1.get_ja3_string(), config2.get_ja3_string())
+
+    def test_secure_profile_reports_wire_client_hello(self):
+        config = TlsConfig.secure()
+        self.assertEqual(
+            config.get_ja3_string(),
+            "771,4865-4866-4867-49195-49199-49196-49200,"
+            "23-43-51-45-10-13-16,29-23,",
+        )
+
+    def test_ja3_can_include_destination_sni_without_mutating_config(self):
+        config = TlsConfig.secure()
+        self.assertEqual(
+            config.get_ja3_string(server_name="example.com"),
+            "771,4865-4866-4867-49195-49199-49196-49200,"
+            "23-43-51-45-0-10-13-16,29-23,",
+        )
+        self.assertIsNone(config.server_name)
 
 
 if __name__ == "__main__":
