@@ -5,6 +5,7 @@ ja3requests.protocol.tls.config
 This module provides TLS configuration for customizing TLS handshake parameters.
 """
 
+import struct
 from typing import List, Optional
 
 from ja3requests.protocol.tls.cipher_suites.suites import (
@@ -92,6 +93,8 @@ class TlsConfig:
             0x1303,
             EcdheEcdsaWithAes128GcmSha256(),
             EcdheRsaWithAes128GcmSha256(),
+            EcdheEcdsaWithAes256GcmSha384(),
+            EcdheRsaWithAes256GcmSha384(),
         ]
         config._supported_groups = [29, 23]
         config._signature_algorithms = [0x0804, 0x0403, 0x0401]
@@ -333,65 +336,57 @@ class TlsConfig:
 
         return values
 
-    def get_ja3_string(self) -> str:
+    def get_ja3_string(self, server_name=None) -> str:
         """
-        Generate JA3 fingerprint string based on current configuration.
+        Generate JA3 fingerprint string from the prepared ClientHello.
         Format: TLSVersion,CipherSuites,Extensions,EllipticCurves,EllipticCurvePointFormats
+
+        Pass server_name to include destination-derived SNI without mutating this config.
         """
-        from ja3requests.protocol.tls.extensions import (  # pylint: disable=import-outside-toplevel
-            Extension,
-            SNIExtension,
-            SupportedGroupsExtension,
-            SignatureAlgorithmsExtension,
-            ALPNExtension,
+        from ja3requests.protocol.tls import (
+            TLS,
+        )  # pylint: disable=import-outside-toplevel
+
+        def is_grease(value):
+            return (value & 0x0F0F) == 0x0A0A and value >> 8 == value & 0xFF
+
+        tls = TLS(None, server_host=server_name or self._server_name)
+        tls.set_payload(self)
+        hello = tls.body
+        version = int.from_bytes(hello.version, "big")
+        cipher_bytes = hello._cipher_suites or b""
+        ciphers = [
+            value[0]
+            for value in struct.iter_unpack("!H", cipher_bytes)
+            if not is_grease(value[0])
+        ]
+
+        extensions = []
+        groups = []
+        point_formats = []
+        data = (hello._extensions or b"\x00\x00")[2:]
+        offset = 0
+        while offset < len(data):
+            kind, size = struct.unpack_from("!HH", data, offset)
+            offset += 4
+            payload = data[offset : offset + size]
+            offset += size
+            if is_grease(kind):
+                continue
+            extensions.append(kind)
+            if kind == 10:
+                groups = [
+                    value[0]
+                    for value in struct.iter_unpack("!H", payload[2:])
+                    if not is_grease(value[0])
+                ]
+            elif kind == 11:
+                point_formats = list(payload[1:])
+
+        return ",".join(
+            "-".join(map(str, values))
+            for values in ([version], ciphers, extensions, groups, point_formats)
         )
-
-        # TLS Version
-        tls_version = str(self._tls_version)
-
-        # Cipher Suites
-        cipher_suites = "-".join(
-            str(suite if isinstance(suite, int) else suite.value)
-            for suite in self._cipher_suites
-        )
-
-        # Extensions: collect type IDs from Extension objects + auto-generated ones
-        ext_types = []
-        custom_types = set()
-        for ext in self._extensions:
-            if isinstance(ext, Extension):
-                ext_types.append(ext.extension_type)
-                custom_types.add(ext.extension_type)
-
-        # Auto-generated extensions (same logic as ClientHello._build_extensions)
-        if self._server_name and SNIExtension.extension_type not in custom_types:
-            ext_types.append(SNIExtension.extension_type)
-        if (
-            self._supported_groups
-            and SupportedGroupsExtension.extension_type not in custom_types
-        ):
-            ext_types.append(SupportedGroupsExtension.extension_type)
-        if (
-            self._signature_algorithms
-            and SignatureAlgorithmsExtension.extension_type not in custom_types
-        ):
-            ext_types.append(SignatureAlgorithmsExtension.extension_type)
-        if self._alpn_protocols and ALPNExtension.extension_type not in custom_types:
-            ext_types.append(ALPNExtension.extension_type)
-
-        extensions = "-".join([str(t) for t in ext_types])
-
-        # Elliptic Curves (Supported Groups)
-        elliptic_curves = (
-            "-".join([str(group) for group in self._supported_groups])
-            if self._supported_groups
-            else ""
-        )
-
-        # Elliptic Curve Point Formats (commonly 0 for uncompressed)
-        ec_point_formats = "0"
-
-        return f"{tls_version},{cipher_suites},{extensions},{elliptic_curves},{ec_point_formats}"
 
     def create_firefox_config(self):
         """Create a TLS config that mimics Firefox"""
@@ -555,6 +550,10 @@ class TlsConfig:
         # TLS 1.3 requires supported_groups for key exchange
         if self._tls_version == 0x0304 and not self._supported_groups:
             issues.append("TLS 1.3 requires supported_groups to be set")
+        elif self._tls_version == 0x0304 and not set(
+            self._supported_groups
+        ).intersection({23, 29}):
+            issues.append("TLS 1.3 requires an implemented key share group")
 
         if strict and issues:
             raise ValueError(f"TLS config validation failed: {issues[0]}")

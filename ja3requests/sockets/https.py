@@ -24,6 +24,7 @@ from ja3requests.exceptions import (
 from ja3requests.protocol.tls import TLS
 from ja3requests.protocol.tls.crypto import AESCipher
 from ja3requests.protocol.tls.debug import debug
+from ja3requests.protocol.tls.extensions import Extension
 
 
 class HttpsSocket(BaseSocket):
@@ -37,14 +38,51 @@ class HttpsSocket(BaseSocket):
         self._pooled_conn = None  # Reference to pooled connection wrapper
         self._reused = False  # Whether connection was reused from pool
 
+    @staticmethod
+    def _tls_policy_key(config, host):
+        if config is None:
+            return None
+        return (
+            config.tls_version,
+            tuple(
+                suite.value if hasattr(suite, 'value') else suite
+                for suite in config.cipher_suites
+            ),
+            tuple(config.supported_groups or ()),
+            tuple(config.signature_algorithms or ()),
+            tuple(config.alpn_protocols or ()),
+            tuple(
+                ext.to_bytes()
+                for ext in config.extensions
+                if isinstance(ext, Extension)
+            ),
+            tuple(config.compression_methods or ()),
+            config.session_id,
+            config.client_random,
+            config.server_random,
+            config.server_name or host,
+            config.use_grease,
+            config.max_fragment_length,
+            config.verify_cert,
+            config.client_cert,
+            config.client_key,
+        )
+
     def new_conn(self):
         host = self.context.destination_address
         port = self.context.port
         tls_config = getattr(self.context, 'tls_config', None)
+        policy_key = self._tls_policy_key(tls_config, host)
 
         # Try to get connection from pool
         if self._pool:
             pooled_conn = self._pool.get_connection(host, port, "https")
+            if (
+                pooled_conn
+                and getattr(pooled_conn.tls, '_pool_policy_key', None) != policy_key
+            ):
+                self._pool.discard_connection(pooled_conn)
+                pooled_conn = None
             if pooled_conn and getattr(tls_config, 'verify_cert', False):
                 tls = pooled_conn.tls
                 if (
@@ -67,10 +105,6 @@ class HttpsSocket(BaseSocket):
         debug(f"Connecting to {host}:{port}")
         self.conn = self._new_conn(host, port)
 
-        # Get TLS config and set default server_name
-        if tls_config and not getattr(tls_config, 'server_name', None):
-            tls_config.server_name = host
-
         # TLS handshake
         handshake_timeout = getattr(self.context, 'connect_timeout', None)
         session_cache = (
@@ -83,6 +117,7 @@ class HttpsSocket(BaseSocket):
             server_host=host,
             server_port=port,
         )
+        tls._pool_policy_key = policy_key
 
         # Set JA3 parameters
         try:
@@ -106,6 +141,9 @@ class HttpsSocket(BaseSocket):
     def return_to_pool(self):
         """Return connection to pool for reuse"""
         if self._pool and self.conn and self.tls:
+            if getattr(self.tls, '_negotiated_protocol', None) == 'h2':
+                self.close()
+                return
             host = self.context.destination_address
             port = self.context.port
 

@@ -52,6 +52,27 @@ def test_tls12_alpn_h2_fingerprint(local_certificate):
     assert observed["stream"] == 1
 
 
+def test_tls12_h2_sequential_requests_use_separate_connections(local_certificate):
+    observed = []
+
+    def handler(conn):
+        exchange = {}
+        serve_h2(conn, exchange)
+        observed.append(exchange)
+
+    config = TlsConfig()
+    config.alpn_protocols = ["h2", "http/1.1"]
+    context = tls12_context(*local_certificate, alpn="h2")
+    with LocalServer(handler, context, connections=2) as server:
+        with Session(tls_config=config, pool=ConnectionPool()) as session:
+            for path in ("/first", "/second"):
+                response = session.get(
+                    f"https://127.0.0.1:{server.port}{path}", timeout=2
+                )
+                assert response.content == b"hello h2"
+    assert len(observed) == 2
+
+
 def test_tls12_no_shared_cipher_fails(local_certificate):
     context = tls12_context(*local_certificate, cipher="ECDHE-RSA-AES128-GCM-SHA256")
     # The client offers only RSA AES128-SHA, so OpenSSL must reject it.

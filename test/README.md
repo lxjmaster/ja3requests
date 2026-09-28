@@ -81,6 +81,9 @@ deploy the repository.
   of a bad certificate.
 - TLS 1.2 RSA/AES-CBC with extended master secret, and rejection of invalid
   ServerHello versions, unoffered cipher suites and downgrade markers.
+- TLS 1.2 ECDHE-RSA and ECDHE-ECDSA AES-256-GCM/SHA-384 with and without
+  extended master secret, seven-byte reads, and rejection of a tampered Finished
+  before HTTP or pool insertion.
 - The opt-in secure profile with certificate verification enabled by default:
   TLS 1.3 and TLS 1.2 ECDHE/AES-GCM against RSA and ECDSA certificate peers,
   including seven-byte reads and rejection of incorrect host identities.
@@ -100,6 +103,13 @@ deploy the repository.
   the Session's existing thread-safe cache, without copying its lock.
 - Requests without a verification override inherit the Session's TLS setting;
   redirects retain an explicit request-level override.
+- Pooled HTTPS connections require matching TLS configuration and certificate
+  policy; cross-host requests use the current destination for SNI without
+  modifying the Session's TLS configuration.
+- Sequential HTTP/2 requests open separate connections so each connection
+  receives only one preface. JA3 reporting follows the prepared ClientHello,
+  with optional destination SNI, and validation rejects TLS 1.3 configurations
+  without an implemented key share group.
 - TLS 1.2 server Finished authentication for the tested CBC and GCM suites:
   record MAC/AEAD checks, CBC padding, sequence numbers, the transcript through
   client Finished, and constant-time verify_data comparison. Invalid Finished
@@ -160,7 +170,7 @@ The integration work exceeded the issue's 85% coverage target in a recorded run.
 That Python 3.13.3/macOS run with cryptography 45.0.5 passed 955 tests (including
 114 new cases), with 87% total statement coverage. TLS orchestration was at 84%,
 HTTPS socket handling at 79%, and H2 connection handling at 95%. The current
-selected suite passes 1001 tests locally with 87.37% statement coverage. The suite
+selected suite passes 1019 tests locally with 87.50% statement coverage. The suite
 covers the issue's local TLS/H2/SOCKS
 server, handshake, failure, pool-reuse and ALPN scenarios. No remote issue or PR
 state is changed by these tests.

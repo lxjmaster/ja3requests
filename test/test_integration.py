@@ -153,7 +153,7 @@ class TestBrowserFingerprints(unittest.TestCase):
         config = TlsConfig().create_firefox_config()
         config.tls_version = 0x0304
         ja3 = config.get_ja3_string()
-        self.assertIn("772", ja3)  # 0x0304 = 772
+        self.assertTrue(ja3.startswith("771,"))  # TLS 1.3 ClientHello legacy_version
 
     def test_full_fingerprint_workflow(self):
         """Full workflow: create config, generate JA3, create session."""
