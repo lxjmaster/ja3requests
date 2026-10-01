@@ -45,17 +45,39 @@ with ja3requests.Session(tls_config=config) as session:
 
 安全配置验证证书，仅提供 TLS 1.3 套件和 TLS 1.2 ECDHE/AES-128/256-GCM 套件，
 并通过 ALPN 使用 HTTP/1.1；它不模拟浏览器指纹。TLS 1.3 ClientHello
-同时携带 X25519 和 P-256 密钥份额；服务端要求其他组时，尚不能处理
-HelloRetryRequest。单次请求也可传入
+默认同时携带 X25519 和 P-256 密钥份额。如需首次只提供 X25519、允许
+P-256 服务端通过 HelloRetryRequest 要求重试，可在创建 Session 前设置
+`config.key_share_groups = [29]`；其他组尚未实现。
+TLS 1.3 连接可处理服务端 KeyUpdate，并在服务端要求时更新客户端发送密钥。
+会话缓存可用内存中的票据和 PSK-DHE 恢复 TLS 1.3 连接；目前不支持 0-RTT。
+TLS 1.2 可在原会话使用扩展主密钥、且证书策略仍匹配时，通过内存中的
+Session ID 完成简化握手；配置 `SessionTicketExtension()` 后也可使用会话票据。
+该扩展可从 `ja3requests.protocol.tls.extensions` 导入。
+单次请求也可传入
 `verify=True` 启用验证。
 要获得包含目标主机 SNI 扩展的 JA3 字符串，使用
-`config.get_ja3_string(server_name="example.com")`。HTTP/2 请求目前每次新建
-连接，待连接级 HTTP/2 状态可复用后再启用连接复用。
+`config.get_ja3_string(server_name="example.com")`。同一个连接池中的
+HTTP/2 请求（包括带请求体的请求）可在一条 TLS 连接上并发处理；响应按流 ID
+对应，请求 DATA 遵守服务端的帧大小、连接窗口和流窗口。HTTP/1.1 连接仍顺序复用。
+服务端推送尚未实现，因此 HTTP/2 默认禁用推送，并拒绝显式设置
+`SETTINGS_ENABLE_PUSH=1`。
+旧式 HTTP/2 优先级信号可被接收，但不影响请求调度。
 
 请求显式传入的 `verify=True` 或 `verify=False` 会覆盖会话设置，重定向也沿用
 本次请求的设置。本版本 `TlsConfig()` 保持旧默认；`TlsConfig.legacy()`
 显式固定旧行为，且关闭证书验证。未来切换构造器默认值需要破坏性版本变更
-和更广的互通测试。已测试的路径及限制见[本地协议测试](test/README.md)。
+和更广的互通测试。[TLS 默认值迁移指南](docs/tls_defaults_migration.md)（英文）
+说明私有 CA 信任、目标主机名与服务名称指示（SNI）、请求覆盖、旧服务配置及
+未来切换默认值的验收条件。`verify` 接受布尔覆盖；自定义 CA 文件使用
+`SSL_CERT_FILE`，SNI 覆盖不会替代对 URL 目标主机的证书校验。
+已验证的组合与环境限制见[安全配置互通矩阵](test/secure_profile_matrix.md)，
+具体测试见[本地协议测试](test/README.md)。
+
+TLS 1.2 和 TLS 1.3 客户端证书认证均在服务端请求证书时使用 `client_cert`
+和 `client_key`。配置 TLS 1.3 客户端证书后，不使用 PSK 票据恢复。TLS 1.3
+握手后客户端认证需显式启用：创建会话前向 `config.extensions` 加入
+`PostHandshakeAuthExtension()`。未配置客户端证书时会发送空的 Certificate 消息。
+该扩展会改变 ClientHello 指纹。
 
 ## 如何使用
 ### 不同的请求方法
@@ -216,6 +238,15 @@ response = session.get("http://example.com/", cookies=cookies)
 print(response)
 ```
 
+
+### Cookie 文件持久化
+
+使用 `session.save_cookies(path)` 和 `session.load_cookies(path)` 显式保存、
+加载 JSON 文件，以便进程重启后恢复 Cookie。加载默认替换已有存储；
+`merge=True` 按域名、路径和名称合并。保存和加载会话 Cookie 均需传入
+`include_session=True`，过期项始终跳过。文件可能明文包含登录令牌；POSIX
+上以仅所有者可读写的 `0600` 权限保存。范围约束、格式、限制、失败处理及
+可运行示例见 [Cookie 文件持久化指南](docs/cookie_persistence.md)（英文）。
 
 ### 允许重定向
 
