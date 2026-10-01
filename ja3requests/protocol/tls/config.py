@@ -32,22 +32,28 @@ class TlsConfig:
 
     def __init__(self):
         # TLS Version
-        self._tls_version = 0x0303  # TLS 1.2 by default
+        self._tls_version = 0x0304  # TLS 1.3 with TLS 1.2 fallback
 
-        # Cipher Suites - use minimal, most compatible set by default
+        # Authenticated ephemeral key exchange and AEAD cipher suites.
         self._cipher_suites = [
-            RsaWithAes128CbcSha(),  # Most widely supported
+            0x1301,
+            0x1302,
+            0x1303,
+            EcdheEcdsaWithAes128GcmSha256(),
+            EcdheRsaWithAes128GcmSha256(),
+            EcdheEcdsaWithAes256GcmSha384(),
+            EcdheRsaWithAes256GcmSha384(),
         ]
 
         # Extensions
-        self._extensions = []
+        self._extensions = [ExtendedMasterSecretExtension()]
 
-        # Supported Groups (for Elliptic Curve) - minimal for compatibility
-        self._supported_groups = []  # Empty for maximum compatibility
+        # Implemented TLS 1.3 key exchange groups.
+        self._supported_groups = [29, 23]
         self._key_share_groups = None  # None offers all implemented groups
 
         # Signature Algorithms - minimal for compatibility
-        self._signature_algorithms = []  # Empty for maximum compatibility
+        self._signature_algorithms = [0x0804, 0x0403, 0x0401]
 
         # Compression Methods
         self._compression_methods = [0]  # null compression
@@ -60,7 +66,7 @@ class TlsConfig:
         self._session_id = b""
 
         # Application Layer Protocol Negotiation (ALPN)
-        self._alpn_protocols = []
+        self._alpn_protocols = ["http/1.1"]
 
         # SNI (Server Name Indication)
         self._server_name = None
@@ -70,7 +76,7 @@ class TlsConfig:
         self._max_fragment_length = None
 
         # Certificate verification
-        self._verify_cert = False  # Default to False for backward compatibility
+        self._verify_cert = True
 
         # Session cache for TLS session resumption
         self._session_cache = None
@@ -86,23 +92,7 @@ class TlsConfig:
     @classmethod
     def secure(cls):
         """Create a verified TLS 1.3 profile with authenticated TLS 1.2 fallback."""
-        config = cls()
-        config._tls_version = 0x0304
-        config._cipher_suites = [
-            0x1301,
-            0x1302,
-            0x1303,
-            EcdheEcdsaWithAes128GcmSha256(),
-            EcdheRsaWithAes128GcmSha256(),
-            EcdheEcdsaWithAes256GcmSha384(),
-            EcdheRsaWithAes256GcmSha384(),
-        ]
-        config._supported_groups = [29, 23]
-        config._signature_algorithms = [0x0804, 0x0403, 0x0401]
-        config._alpn_protocols = ["http/1.1"]
-        config._extensions = [ExtendedMasterSecretExtension()]
-        config._verify_cert = True
-        return config
+        return cls()
 
     @classmethod
     def legacy(cls):
@@ -600,7 +590,8 @@ class TlsConfig:
         )  # pylint: disable=import-outside-toplevel
 
         preset = get_preset(browser, version)
-        config = cls()
+        config = cls.legacy()
+        config._verify_cert = True
         config._tls_version = preset["tls_version"]
         config._cipher_suites = list(preset["cipher_suites"])
         config._supported_groups = list(preset["supported_groups"])

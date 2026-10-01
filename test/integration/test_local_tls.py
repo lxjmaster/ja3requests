@@ -25,7 +25,7 @@ def test_tls12_http_and_pool_reuse(local_certificate):
             requests.append(read_headers(conn))
             conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello")
 
-    config = TlsConfig()
+    config = TlsConfig.legacy()
     config.alpn_protocols = ["http/1.1"]
     with LocalServer(handler, tls12_context(*local_certificate)) as server:
         with Session(tls_config=config, pool=ConnectionPool()) as session:
@@ -42,7 +42,7 @@ def test_tls12_http_and_pool_reuse(local_certificate):
 
 def test_tls12_alpn_h2_fingerprint(local_certificate):
     observed = {}
-    config = TlsConfig()
+    config = TlsConfig.legacy()
     config.alpn_protocols = ["h2", "http/1.1"]
     config.h2_settings = {1: 12345, 4: 1048576}
     config.h2_window_update = 65536
@@ -61,7 +61,7 @@ def test_tls12_alpn_h2_fingerprint(local_certificate):
 def test_tls12_h2_sequential_requests_reuse_connection(local_certificate):
     observed = {}
 
-    config = TlsConfig()
+    config = TlsConfig.legacy()
     config.alpn_protocols = ["h2", "http/1.1"]
     context = tls12_context(*local_certificate, alpn="h2")
     with LocalServer(
@@ -85,6 +85,6 @@ def test_tls12_no_shared_cipher_fails(local_certificate):
     )
     with pytest.raises(ssl.SSLError, match="NO_SHARED_CIPHER"):
         with server:
-            with Session(pool=ConnectionPool()) as session:
+            with Session(tls_config=TlsConfig.legacy(), pool=ConnectionPool()) as session:
                 with pytest.raises(ConnectionError, match="TLS handshake failed"):
                     session.get(f"https://127.0.0.1:{server.port}/", timeout=1)

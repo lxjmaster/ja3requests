@@ -24,7 +24,7 @@
 ```
 
 Ja3Requests supports HTTP/1.1 over HTTP and HTTPS. HTTPS connections can also
-negotiate HTTP/2 with ALPN. TLS 1.2 is the default; TLS 1.3 can be configured.
+negotiate HTTP/2 with ALPN. Version 2.0 defaults to verified TLS 1.3 with TLS 1.2 ECDHE/GCM fallback.
 
 ## Installing Ja3Requests and Supported Versions
 
@@ -38,9 +38,9 @@ Ja3Requests officially supports Python 3.7+.
 
 ## HTTPS Certificate Verification
 
-Certificate verification is disabled by default for backward compatibility.
-For verified HTTPS with TLS 1.3 and a TLS 1.2 ECDHE/AES-GCM fallback, select the
-secure profile explicitly:
+Version 2.0 verifies server certificates by default. `TlsConfig()`, `Session()`
+and module-level requests use the secure TLS 1.3/TLS 1.2 ECDHE-GCM profile.
+The explicit secure profile remains available:
 
 ```python
 import ja3requests
@@ -76,13 +76,15 @@ explicit `SETTINGS_ENABLE_PUSH=1` configuration is rejected.
 Legacy HTTP/2 PRIORITY signals are accepted but do not affect request scheduling.
 
 An explicit `verify=True` or `verify=False` overrides the session setting for
-that request, including redirects. `TlsConfig()` retains the old defaults in
-this release; `TlsConfig.legacy()` pins them explicitly for compatibility and
-leaves certificate verification disabled. A future change to the constructor's
-defaults needs a breaking release and broader interoperability tests. See the
+that request, including redirects. `TlsConfig.legacy()` explicitly restores
+the 1.x TLS 1.2 RSA/AES-CBC offer and disables certificate verification.
+The new defaults change ClientHello/JA3 fingerprints and reject untrusted,
+expired or wrong-host certificates. See the
 [TLS defaults migration guide](docs/tls_defaults_migration.md) for private CA
 trust, hostname/SNI behavior, request overrides, legacy-server setup, and the
-proposed release acceptance criteria. The [secure-profile matrix](test/secure_profile_matrix.md)
+2.0 compatibility changes. Browser preset factories retain their explicit
+wire settings and now verify certificates; custom builders inherit the source
+configuration's verification and extensions. See [release notes](CHANGELOG.md). The [secure-profile matrix](test/secure_profile_matrix.md)
 records verified combinations and environment limits; [local protocol tests](test/README.md)
 describe the underlying cases.
 

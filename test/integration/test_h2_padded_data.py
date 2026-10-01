@@ -8,7 +8,7 @@ from test.mock_servers.local import LocalServer, h2_frame, read_exact, tls13_con
 
 
 def h2_config():
-    config = TlsConfig()
+    config = TlsConfig.legacy()
     config.tls_version = 0x0304
     config.cipher_suites = [0x1301]
     config.supported_groups = [29]

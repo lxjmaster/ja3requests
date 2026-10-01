@@ -24,7 +24,7 @@ def test_headers_on_stream_zero_discard_connection(local_certificate):
                 conn.sendall(h2_frame(1, 4, 0, b"\x88"))
                 return
 
-    config = TlsConfig()
+    config = TlsConfig.legacy()
     config.alpn_protocols = ["h2", "http/1.1"]
     with LocalServer(handler, tls12_context(*local_certificate, alpn="h2")) as server:
         with Session(tls_config=config, pool=ConnectionPool()) as session:
@@ -48,7 +48,7 @@ def test_oversized_header_declaration_discard_connection(local_certificate):
                 conn.sendall(h2_frame(1, 4, 1, b"x" * 16385)[:9])
                 return
 
-    config = TlsConfig()
+    config = TlsConfig.legacy()
     config.alpn_protocols = ["h2", "http/1.1"]
     with LocalServer(handler, tls12_context(*local_certificate, alpn="h2")) as server:
         with Session(tls_config=config, pool=ConnectionPool()) as session:
@@ -73,7 +73,7 @@ def test_data_before_response_headers_discards_connection(local_certificate):
                 conn.sendall(h2_frame(0, 1, stream_id, b"unexpected"))
                 return
 
-    config = TlsConfig()
+    config = TlsConfig.legacy()
     config.alpn_protocols = ["h2", "http/1.1"]
     with LocalServer(handler, tls12_context(*local_certificate, alpn="h2")) as server:
         with Session(tls_config=config, pool=ConnectionPool()) as session:
@@ -99,7 +99,7 @@ def test_missing_response_status_fails_over_tls(local_certificate, pooled):
                 conn.sendall(h2_frame(1, 5, stream_id))
                 return
 
-    config = TlsConfig()
+    config = TlsConfig.legacy()
     config.alpn_protocols = ["h2", "http/1.1"]
     pool = ConnectionPool() if pooled else None
     with LocalServer(handler, tls12_context(*local_certificate, alpn="h2")) as server:
@@ -130,7 +130,7 @@ def test_data_after_end_stream_fails_over_tls(local_certificate, pooled):
                 )
                 return
 
-    config = TlsConfig()
+    config = TlsConfig.legacy()
     config.alpn_protocols = ["h2", "http/1.1"]
     pool = ConnectionPool() if pooled else None
     with LocalServer(handler, tls12_context(*local_certificate, alpn="h2")) as server:
@@ -163,7 +163,7 @@ def test_response_before_initial_settings_fails_over_tls(local_certificate, pool
         except (EOFError, ConnectionResetError):
             return
 
-    config = TlsConfig()
+    config = TlsConfig.legacy()
     config.alpn_protocols = ["h2", "http/1.1"]
     pool = ConnectionPool() if pooled else None
     with LocalServer(handler, tls12_context(*local_certificate, alpn="h2")) as server:
@@ -200,7 +200,7 @@ def test_frame_on_idle_stream_fails_over_tls(
                 conn.sendall(h2_frame(frame_type, flags, stream_id + offset, payload))
                 return
 
-    config = TlsConfig()
+    config = TlsConfig.legacy()
     config.alpn_protocols = ["h2", "http/1.1"]
     pool = ConnectionPool() if pooled else None
     with LocalServer(handler, tls12_context(*local_certificate, alpn="h2")) as server:

@@ -9,7 +9,8 @@ verifiable tasks. The planning deliverable is complete. Selected execution
 batches and their evidence are recorded below; unchecked tasks remain queued.
 
 On 2026-10-01, the user requested sequential execution of this plan. T01-T04
-are complete; T05 is the next conditional batch and awaits a breaking-release decision.
+are complete. On 2026-10-02, the user requested T05; its 2.0.0 implementation
+and local acceptance are complete. Delivery CI is tracked on the migration PR.
 Subsequent batches follow the order below. Commit, push, merge, release, and the conditional
 constructor-defaults migration remain separate outcomes with their stated
 authorization and decision dependencies.
@@ -20,7 +21,7 @@ The binding was still unavailable at the start of T04. Retain this file as the
 roadmap and batch checklist. Once binding is available, register the selected
 execution outcome as a workline; the remaining future roadmap is reference context.
 
-## Verified baseline
+## Verified T01-T04 baseline (historical)
 
 - The existing checklist in `https_feature_development.md` is checked off.
 - The latest installed-wheel local run passed 1362 selected tests with 88.86%
@@ -92,8 +93,13 @@ No calendar dates are assigned before target environments and scope are selected
   matched. Black, error-level Pylint, syntax/links, diff and example checks passed.
   The new wheel and reports are retained in `dist/t04/`; task-created temporary
   Cookie files, generated certificate keys and build/test staging were removed.
-- [ ] T05 awaits the user's breaking-release decision. T06-T10 retain their
-  target/use-case selection dependencies.
+- [✅] T05 implementation and local acceptance completed on 2026-10-02 for the
+  2.0.0 candidate. See [the defaults delivery record](secure_defaults_delivery.md):
+  53 default-policy integration cases and 1415 installed-wheel tests passed,
+  with 89.03% coverage. Both READMEs, migration guide and release notes describe
+  the breaking behavior. Wheel/reports are retained in `dist/t05/`; task-owned
+  staging and generated keys were removed. Remote delivery results are tracked
+  on the migration PR. T06-T10 retain target/use-case selection dependencies.
 
 ### Delivery follow-up
 
@@ -155,12 +161,13 @@ T03 is compatibility preparation in the current API:
 Acceptance for T03: examples use existing supported APIs and explicitly describe
 behavior changes; constructor defaults are not changed by documentation work.
 
-T05 begins only after the user selects the breaking-release outcome:
+T05: the user requested the next task on 2026-10-02; implement the recommended
+2.0.0 candidate. Publishing, deployment and merging remain separate actions:
 
-- [ ] Change default construction consistently across entry points.
-- [ ] Verify certificate rejection, TLS fallback, explicit legacy opt-in,
+- [✅] Change default construction consistently across entry points.
+- [✅] Verify certificate rejection, TLS fallback, explicit legacy opt-in,
   verification overrides, and pool isolation after the default change.
-- [ ] Update version/release notes and both READMEs for the selected release.
+- [✅] Update version/release notes and both READMEs for the selected release.
 
 Acceptance for T05: T02/T03 evidence is complete for the selected release scope;
 the new defaults and compatibility entry point pass relevant checks. Publishing
@@ -280,7 +287,8 @@ debug scripts and IDE files. On a failed implementation attempt, retain the
 last usable artifact and return to the smallest reproducible case; after two
 attempts without progress, use a safe alternative or report the precise blocker.
 
-Recommended next outcome: **select the T05 breaking-release defaults migration**.
-T01-T04 are complete. T05 implementation still requires the user's release decision;
-T06-T10 require their stated target/use-case selections. Record each result
-here before starting a conditional expansion.
+T05 implementation and local acceptance are complete for the 2.0.0 candidate.
+Its dependent migration PR records remote delivery checks. Recommended next
+outcome: **select a concrete T06 TLS 1.3 group and independent peer**. T07-T10
+retain their stated target/use-case dependencies. No later implementation is
+included in T05 delivery.

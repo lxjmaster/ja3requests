@@ -16,11 +16,13 @@ class TestTlsConfigDefaults(unittest.TestCase):
         self.config = TlsConfig()
 
     def test_default_version(self):
-        self.assertEqual(self.config.tls_version, 0x0303)
+        self.assertEqual(self.config.tls_version, 0x0304)
 
     def test_default_cipher_suites(self):
-        self.assertEqual(len(self.config.cipher_suites), 1)
-        self.assertIsInstance(self.config.cipher_suites[0], RsaWithAes128CbcSha)
+        self.assertEqual(
+            self.config.get_cipher_suite_values(),
+            [0x1301, 0x1302, 0x1303, 0xC02B, 0xC02F, 0xC02C, 0xC030],
+        )
 
     def test_default_compression(self):
         self.assertEqual(self.config.compression_methods, [0])
@@ -28,14 +30,14 @@ class TestTlsConfigDefaults(unittest.TestCase):
     def test_default_no_grease(self):
         self.assertFalse(self.config.use_grease)
 
-    def test_default_no_alpn(self):
-        self.assertEqual(self.config.alpn_protocols, [])
+    def test_default_http1_alpn(self):
+        self.assertEqual(self.config.alpn_protocols, ["http/1.1"])
 
     def test_default_no_sni(self):
         self.assertIsNone(self.config.server_name)
 
-    def test_default_no_verify(self):
-        self.assertFalse(self.config.verify_cert)
+    def test_default_verifies_certificates(self):
+        self.assertTrue(self.config.verify_cert)
 
 
 class TestTlsConfigSetters(unittest.TestCase):
@@ -86,7 +88,7 @@ class TestTlsConfigCipherSuiteOps(unittest.TestCase):
     """Test cipher suite add/remove operations."""
 
     def setUp(self):
-        self.config = TlsConfig()
+        self.config = TlsConfig.legacy()
 
     def test_add_cipher_suite(self):
         suite = EcdheRsaWithAes128GcmSha256()
