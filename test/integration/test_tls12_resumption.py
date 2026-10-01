@@ -35,7 +35,9 @@ def test_verified_tls12_session_id_resumption(
     config = TlsConfig.secure()
     config.tls_version = 0x0303
     config.cipher_suites = [suite]
-    with LocalServer(handler, context, connections=2) as server:
+    with LocalServer(
+        handler, context, connections=2, retain_tls_sessions=True
+    ) as server:
         with Session(tls_config=config, use_pooling=False) as session:
             url = f"https://127.0.0.1:{server.port}/"
             assert session.get(url, timeout=3).content == b"ok"
@@ -60,7 +62,9 @@ def test_tls13_profile_can_resume_tls12_fallback(trusted_certificates, monkeypat
         assert read_headers(conn).startswith(b"GET / HTTP/1.1\r\n")
         conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
 
-    with LocalServer(handler, context, connections=2) as server:
+    with LocalServer(
+        handler, context, connections=2, retain_tls_sessions=True
+    ) as server:
         with Session(tls_config=TlsConfig.secure(), use_pooling=False) as session:
             url = f"https://127.0.0.1:{server.port}/"
             assert session.get(url, timeout=3).content == b"ok"
@@ -87,7 +91,9 @@ def test_unknown_session_id_falls_back_to_verified_full_handshake(
     config = TlsConfig.secure()
     config.tls_version = 0x0303
     config.cipher_suites = [0xC02F]
-    with LocalServer(handler, context, connections=2) as server:
+    with LocalServer(
+        handler, context, connections=2, retain_tls_sessions=True
+    ) as server:
         with Session(tls_config=config, use_pooling=False) as session:
             url = f"https://127.0.0.1:{server.port}/"
             assert session.get(url, timeout=3).content == b"ok"
@@ -122,7 +128,7 @@ def test_bad_resumed_server_finished_sends_no_http(trusted_certificates, monkeyp
     config = TlsConfig.secure()
     config.tls_version = 0x0303
     config.cipher_suites = [0xC02F]
-    server = LocalServer(handler, context, connections=2)
+    server = LocalServer(handler, context, connections=2, retain_tls_sessions=True)
     with pytest.raises(ssl.SSLError):
         with server:
             with Session(tls_config=config, use_pooling=False) as session:

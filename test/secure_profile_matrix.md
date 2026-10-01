@@ -111,6 +111,15 @@ remote CI or change the supported Python range.
 
 ## Unsupported or unverified cells
 
+- Some older CPython/OpenSSL peers implement `set_ecdh_curve()` using
+  `EC_KEY_new_by_curve_name`, which cannot restrict X25519. The explicit
+  X25519-only matrix cases skip only when that setup reports `unknown group`;
+  other setup errors still fail. Such skips are peer capability limits, not
+  passing X25519-only interoperability results. P-256 cases remain executable.
+- Session ID tests retain the loopback peer's native SSL objects until their
+  connections finish, preventing older CPython from removing cached sessions
+  when closing each socket. Sockets and retained objects are released at test
+  exit. CPython 3.12+ handles this cache lifetime in its SSL deallocator.
 - TLS 1.3 key shares outside X25519 and P-256 and 0-RTT are not implemented.
 - Other TLS 1.2 SHA-384 CBC/static-RSA suites have no established secure-profile
   end-to-end evidence and are not part of that profile.

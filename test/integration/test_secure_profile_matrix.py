@@ -111,11 +111,21 @@ def secure_config_and_peer(version, suite, cipher, certificate, group, alpn):
     config.alpn_protocols = [alpn]
     config.validate(strict=True)
     if version == 13:
-        context = tls13_context(*certificate, alpn=alpn, group=group)
+        context = tls13_context(*certificate, alpn=alpn)
     else:
         context = tls12_context(*certificate, alpn=alpn, cipher=cipher)
-        context.set_ecdh_curve(group)
+    set_peer_group(context, group)
     return config, context
+
+
+def set_peer_group(context, group):
+    """Report a peer API limitation without changing the selected group."""
+    try:
+        context.set_ecdh_curve(group)
+    except ssl.SSLError as error:
+        if group == "X25519" and "unknown group" in str(error).lower():
+            pytest.skip("Python/OpenSSL peer cannot restrict the X25519 group")
+        raise
 
 
 @pytest.mark.parametrize("version,suite,cipher,certificate_variant,group", HTTP1_CASES)

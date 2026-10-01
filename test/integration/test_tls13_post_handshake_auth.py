@@ -1,5 +1,6 @@
 """TLS 1.3 post-handshake client authentication against OpenSSL."""
 
+import socket
 import ssl
 
 import pytest
@@ -89,7 +90,7 @@ def test_post_handshake_auth_rejects_mismatched_key(trusted_certificates, monkey
         assert read_headers(conn).startswith(b"GET / HTTP/1.1\r\n")
         conn.verify_client_post_handshake()
         conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
-        with pytest.raises((ssl.SSLError, EOFError, TimeoutError)):
+        with pytest.raises((ssl.SSLError, EOFError, TimeoutError, socket.timeout)):
             read_headers(conn)
 
     with LocalServer(handler, context) as server:
