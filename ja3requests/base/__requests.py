@@ -16,8 +16,8 @@ from ja3requests.exceptions import InvalidParams, InvalidData
 from ja3requests.utils import (
     default_headers,
     dict_from_cookie_string,
-    dict_from_cookiejar,
 )
+from ja3requests.cookies import get_cookie_header
 
 
 class BaseRequest(ABC):
@@ -300,7 +300,10 @@ class BaseRequest(ABC):
             if isinstance(cookies, (bytes, str)):
                 cookies = dict_from_cookie_string(cookies)
             elif isinstance(cookies, CookieJar):
-                cookies = dict_from_cookiejar(cookies)
+                cookie_header = get_cookie_header(cookies, self)
+                cookies = (
+                    dict_from_cookie_string(cookie_header) if cookie_header else None
+                )
 
         self._cookies = cookies
 

@@ -16,16 +16,26 @@ from ja3requests.protocol.h2.frame import (
     FRAME_GOAWAY,
     FRAME_PING,
     FRAME_RST_STREAM,
+    FRAME_PUSH_PROMISE,
+    FRAME_CONTINUATION,
+    FRAME_PRIORITY,
     FLAG_END_STREAM,
     FLAG_END_HEADERS,
     FLAG_ACK,
+    FLAG_PADDED,
     build_settings_frame,
     build_window_update_frame,
     build_headers_frame,
     build_data_frame,
     build_ping_frame,
+    build_rst_stream_frame,
+    data_payload,
+    header_block_fragment,
     parse_settings_payload,
     DEFAULT_SETTINGS,
+    SETTINGS_HEADER_TABLE_SIZE,
+    SETTINGS_ENABLE_PUSH,
+    SETTINGS_MAX_FRAME_SIZE,
 )
 from ja3requests.protocol.h2.hpack import HPACKEncoder, HPACKDecoder
 from ja3requests.protocol.tls.debug import debug
@@ -51,13 +61,35 @@ class H2Connection:
         self._send = send_func
         self._recv = recv_func
         self._encoder = HPACKEncoder()
-        self._decoder = HPACKDecoder()
         self._next_stream_id = 1  # Client streams are odd-numbered
         self._local_settings = dict(DEFAULT_SETTINGS)
         if settings:
             self._local_settings.update(settings)
+        if self._local_settings[SETTINGS_ENABLE_PUSH] != 0:
+            raise ValueError("HTTP/2 server push is not supported")
+        self._decoder = HPACKDecoder(self._local_settings[SETTINGS_HEADER_TABLE_SIZE])
         self._peer_settings = dict(DEFAULT_SETTINGS)
+        self._preface_sent = False
+        self._server_preface_received = False
+        self._peer_settings_received = False
         self._recv_buffer = b""
+        self._continuation_stream = None
+        self._ignored_header_block = b""
+        self._pending_frames = []
+        self._goaway_received = False
+        self._goaway_last_stream_id = None
+        self._connection_receive_target = 65535
+        self._connection_receive_window = 65535
+        self._connection_send_window = 65535
+        self._active_send_stream = None
+        self._stream_send_window = 0
+        self._active_receive_stream = None
+        self._stream_receive_window = 0
+
+    def set_transport(self, send_func, recv_func):
+        """Bind the current owner, or clear callbacks while pooled and idle."""
+        self._send = send_func
+        self._recv = recv_func
 
     def initiate(self, window_update_increment=None):
         """
@@ -72,12 +104,15 @@ class H2Connection:
         # Send SETTINGS frame
         settings_frame = build_settings_frame(self._local_settings)
         self._send(settings_frame.serialize())
+        self._preface_sent = True
         debug(f"H2: Sent SETTINGS: {self._local_settings}")
 
         # Send WINDOW_UPDATE if specified (for H2 fingerprinting)
         if window_update_increment:
             wu_frame = build_window_update_frame(0, window_update_increment)
             self._send(wu_frame.serialize())
+            self._connection_receive_target += window_update_increment
+            self._connection_receive_window += window_update_increment
             debug(f"H2: Sent WINDOW_UPDATE increment={window_update_increment}")
 
     def send_request(
@@ -94,8 +129,16 @@ class H2Connection:
         :param scheme: URL scheme
         :return: Stream ID used for this request
         """
+        if body is not None and not isinstance(body, bytes):
+            raise TypeError("HTTP/2 request body must be bytes")
+        if self._goaway_received:
+            raise ConnectionError("HTTP/2 connection received GOAWAY")
+        if body and self._preface_sent and not self._peer_settings_received:
+            self._await_peer_settings()
         stream_id = self._next_stream_id
         self._next_stream_id += 2
+        self._active_receive_stream = stream_id
+        self._stream_receive_window = self._local_settings[4]
 
         # Build pseudo-headers + regular headers
         h2_headers = [
@@ -110,7 +153,12 @@ class H2Connection:
                 # Skip connection-specific headers
                 if lower_name in ("host", "connection", "transfer-encoding", "upgrade"):
                     continue
-                h2_headers.append((lower_name, value))
+                h2_headers.append(
+                    (
+                        lower_name,
+                        value if isinstance(value, (str, bytes)) else str(value),
+                    )
+                )
 
         # Encode headers with HPACK
         header_block = self._encoder.encode_headers(h2_headers)
@@ -125,11 +173,101 @@ class H2Connection:
 
         # Send DATA frame if body present
         if body:
-            data_frame = build_data_frame(stream_id, body, end_stream=True)
-            self._send(data_frame.serialize())
+            self._active_send_stream = stream_id
+            self._stream_send_window = self._peer_settings[4]
+            try:
+                self._send_body(stream_id, body)
+            finally:
+                self._active_send_stream = None
             debug(f"H2: Sent DATA on stream {stream_id}: {len(body)} bytes")
 
         return stream_id
+
+    def _await_peer_settings(self):
+        """Apply the server's initial stream window before sending request DATA."""
+        while not self._peer_settings_received:
+            for frame in self._read_frames():
+                if frame.stream_id != 0:
+                    raise ValueError("HTTP/2 stream frame before peer SETTINGS")
+                self._handle_connection_frame(frame)
+                if self._goaway_received:
+                    raise ConnectionError("HTTP/2 connection received GOAWAY")
+
+    def _send_body(self, stream_id, body):
+        """Send DATA within both peer flow-control windows."""
+        offset = 0
+        while offset < len(body):
+            size = min(
+                len(body) - offset,
+                self._peer_settings[5],
+                self._connection_send_window,
+                self._stream_send_window,
+            )
+            if size <= 0:
+                self._wait_for_send_window(stream_id)
+                continue
+            end = offset + size
+            frame = build_data_frame(
+                stream_id, body[offset:end], end_stream=end == len(body)
+            )
+            self._send(frame.serialize())
+            self._connection_send_window -= size
+            self._stream_send_window -= size
+            offset = end
+
+    @staticmethod
+    def _window_increment(frame):
+        if frame.length != 4:
+            raise ValueError("Invalid HTTP/2 WINDOW_UPDATE frame")
+        increment = int.from_bytes(frame.payload, "big") & 0x7FFFFFFF
+        if increment == 0:
+            raise ValueError("Invalid HTTP/2 WINDOW_UPDATE increment")
+        return increment
+
+    @staticmethod
+    def _response_status(headers):
+        statuses = [value for name, value in headers if name == ":status"]
+        if len(statuses) != 1:
+            raise ValueError("Invalid HTTP/2 response :status")
+        value = statuses[0]
+        if len(value) != 3 or any(char not in "0123456789" for char in value):
+            raise ValueError("Invalid HTTP/2 response :status")
+        status = int(value)
+        if status < 100 or status > 599 or status == 101:
+            raise ValueError("Invalid HTTP/2 response :status")
+        return status
+
+    def _wait_for_send_window(self, stream_id):
+        """Process control frames while retaining an early response."""
+        for frame in self._read_frames():
+            if frame.type == FRAME_PRIORITY:
+                if (
+                    not self._handle_priority_frame(frame)
+                    and frame.stream_id == stream_id
+                ):
+                    raise ConnectionError(
+                        f"Invalid HTTP/2 PRIORITY on stream {stream_id}"
+                    )
+                continue
+            if frame.stream_id == 0:
+                self._handle_connection_frame(frame)
+                if self._goaway_received and stream_id > self._goaway_last_stream_id:
+                    raise ConnectionError("HTTP/2 stream rejected by GOAWAY")
+            elif frame.stream_id == stream_id and frame.type == FRAME_WINDOW_UPDATE:
+                self._stream_send_window += self._window_increment(frame)
+                if self._stream_send_window > 0x7FFFFFFF:
+                    raise ValueError("HTTP/2 stream send window overflow")
+            elif frame.stream_id == stream_id and frame.type == FRAME_RST_STREAM:
+                raise ConnectionError(f"HTTP/2 stream {stream_id} reset by peer")
+            else:
+                flow_accounted = (
+                    frame.stream_id == stream_id and frame.type == FRAME_DATA
+                )
+                if flow_accounted:
+                    self._account_response_data(frame)
+                self._pending_frames.append((frame, flow_accounted))
+                if frame.stream_id == stream_id and frame.flags & FLAG_END_STREAM:
+                    raise ConnectionError("HTTP/2 response ended before request body")
 
     def receive_response(self, stream_id):
         """
@@ -138,41 +276,127 @@ class H2Connection:
         :param stream_id: Stream ID to receive response for
         :return: (headers_list, body_bytes)
         """
-        response_headers = []
+        response_headers = None
         response_body = b""
         header_block = b""
-        headers_complete = False
+        header_open = False
+        header_end_stream = False
         end_stream = False
+        if self._active_receive_stream != stream_id:
+            self._active_receive_stream = stream_id
+            self._stream_receive_window = self._local_settings[4]
 
         while not end_stream:
-            frames = self._read_frames()
-            for frame in frames:
+            if self._pending_frames:
+                frames, self._pending_frames = self._pending_frames, []
+            else:
+                frames = [(frame, False) for frame in self._read_frames()]
+            for frame, flow_accounted in frames:
+                if end_stream and frame.stream_id == stream_id:
+                    if frame.type in (FRAME_DATA, FRAME_HEADERS, FRAME_CONTINUATION):
+                        raise ValueError("HTTP/2 response frame after END_STREAM")
+                    if frame.type in (FRAME_WINDOW_UPDATE, FRAME_RST_STREAM):
+                        continue
+                if frame.type == FRAME_PRIORITY:
+                    if (
+                        not self._handle_priority_frame(frame)
+                        and frame.stream_id == stream_id
+                    ):
+                        raise ConnectionError(
+                            f"Invalid HTTP/2 PRIORITY on stream {stream_id}"
+                        )
+                    continue
                 if frame.stream_id == 0:
                     # Connection-level frame
                     self._handle_connection_frame(frame)
+                    if (
+                        self._goaway_received
+                        and stream_id > self._goaway_last_stream_id
+                    ):
+                        raise ConnectionError("HTTP/2 stream rejected by GOAWAY")
                     continue
 
                 if frame.stream_id != stream_id:
+                    if frame.type == FRAME_DATA:
+                        self._account_connection_data(frame.length)
+                    elif frame.type in (FRAME_HEADERS, FRAME_CONTINUATION):
+                        self._discard_header_fragment(frame)
                     continue
 
-                if frame.type == FRAME_HEADERS:
-                    header_block += frame.payload
+                if frame.type in (FRAME_HEADERS, FRAME_CONTINUATION):
+                    if frame.type == FRAME_HEADERS:
+                        header_block = header_block_fragment(frame)
+                        header_open = True
+                        header_end_stream = bool(frame.flags & FLAG_END_STREAM)
+                    elif not header_open:
+                        raise ValueError("HTTP/2 CONTINUATION without HEADERS")
+                    else:
+                        header_block += frame.payload
                     if frame.flags & FLAG_END_HEADERS:
-                        response_headers = self._decoder.decode_headers(header_block)
-                        headers_complete = True
-                    if frame.flags & FLAG_END_STREAM:
-                        end_stream = True
+                        decoded = self._decoder.decode_headers(header_block)
+                        if response_headers is None:
+                            status = self._response_status(decoded)
+                            if status < 200:
+                                if header_end_stream:
+                                    raise ValueError(
+                                        "HTTP/2 interim response ended stream"
+                                    )
+                            else:
+                                response_headers = decoded
+                        elif not header_end_stream or any(
+                            name.startswith(":") for name, _ in decoded
+                        ):
+                            raise ValueError("Invalid HTTP/2 response trailers")
+                        header_block = b""
+                        header_open = False
+                        if header_end_stream:
+                            end_stream = True
 
                 elif frame.type == FRAME_DATA:
-                    response_body += frame.payload
+                    if header_open:
+                        raise ValueError("HTTP/2 DATA before complete response headers")
+                    if response_headers is None:
+                        raise ValueError("HTTP/2 DATA before response headers")
+                    if not flow_accounted:
+                        self._account_response_data(frame)
+                    response_body += data_payload(frame)
                     if frame.flags & FLAG_END_STREAM:
                         end_stream = True
 
                 elif frame.type == FRAME_RST_STREAM:
-                    debug(f"H2: RST_STREAM on stream {stream_id}")
-                    end_stream = True
+                    raise ConnectionError(f"HTTP/2 stream {stream_id} reset by peer")
 
+        self._active_receive_stream = None
         return response_headers, response_body
+
+    def _account_response_data(self, frame):
+        """Release receive credit when DATA is read, even during an upload."""
+        self._account_connection_data(frame.length)
+        self._stream_receive_window -= frame.length
+        if self._stream_receive_window < 0:
+            raise ValueError("HTTP/2 stream receive window exceeded")
+        target = self._local_settings[4]
+        if (
+            not frame.flags & FLAG_END_STREAM
+            and self._stream_receive_window < target // 2
+        ):
+            increment = target - self._stream_receive_window
+            self._send(
+                build_window_update_frame(frame.stream_id, increment).serialize()
+            )
+            self._stream_receive_window += increment
+
+    def _account_connection_data(self, length):
+        """Replenish the connection window as response DATA is consumed."""
+        self._connection_receive_window -= length
+        if self._connection_receive_window < 0:
+            raise ValueError("HTTP/2 connection receive window exceeded")
+        if self._connection_receive_window < self._connection_receive_target // 2:
+            increment = (
+                self._connection_receive_target - self._connection_receive_window
+            )
+            self._send(build_window_update_frame(0, increment).serialize())
+            self._connection_receive_window += increment
 
     def _read_frames(self):
         """Read and parse frames from the connection."""
@@ -180,10 +404,88 @@ class H2Connection:
         if data:
             self._recv_buffer += data
 
-        frames, self._recv_buffer = H2Frame.parse_all(self._recv_buffer)
+        frames, self._recv_buffer = H2Frame.parse_all(
+            self._recv_buffer,
+            max_payload_size=self._local_settings[SETTINGS_MAX_FRAME_SIZE],
+        )
+        if self._preface_sent and not self._server_preface_received and frames:
+            first = frames[0]
+            if (
+                first.type != FRAME_SETTINGS
+                or first.flags & FLAG_ACK
+                or first.stream_id != 0
+            ):
+                raise ValueError(
+                    "Invalid HTTP/2 server preface: initial SETTINGS required"
+                )
+            self._server_preface_received = True
+        if any(frame.type == FRAME_PUSH_PROMISE for frame in frames):
+            raise ConnectionError("HTTP/2 PUSH_PROMISE received while push is disabled")
+        for frame in frames:
+            if frame.stream_id == 0 and frame.type in (
+                FRAME_DATA,
+                FRAME_HEADERS,
+                FRAME_PRIORITY,
+                FRAME_RST_STREAM,
+                FRAME_CONTINUATION,
+            ):
+                raise ValueError(f"HTTP/2 {frame.type_name} requires a stream")
+            if frame.stream_id != 0 and frame.type in (
+                FRAME_SETTINGS,
+                FRAME_PING,
+                FRAME_GOAWAY,
+            ):
+                raise ValueError(f"HTTP/2 {frame.type_name} requires stream 0")
+            if frame.type == FRAME_RST_STREAM and frame.length != 4:
+                raise ValueError("Invalid HTTP/2 RST_STREAM length")
+            if frame.type == FRAME_PING and frame.length != 8:
+                raise ValueError("Invalid HTTP/2 PING length")
+            if frame.type == FRAME_SETTINGS and frame.flags & FLAG_ACK and frame.length:
+                raise ValueError("Invalid HTTP/2 SETTINGS ACK")
+            if self._continuation_stream is not None:
+                if (
+                    frame.type != FRAME_CONTINUATION
+                    or frame.stream_id != self._continuation_stream
+                ):
+                    raise ValueError("HTTP/2 field block interrupted")
+            elif frame.type == FRAME_CONTINUATION:
+                raise ValueError("HTTP/2 CONTINUATION without HEADERS")
+            if frame.type == FRAME_HEADERS and not frame.flags & FLAG_END_HEADERS:
+                self._continuation_stream = frame.stream_id
+            elif frame.type == FRAME_CONTINUATION and frame.flags & FLAG_END_HEADERS:
+                self._continuation_stream = None
+            if frame.type == FRAME_DATA and frame.flags & FLAG_PADDED:
+                data_payload(frame)
+            if (
+                self._preface_sent
+                and frame.type
+                in (FRAME_DATA, FRAME_HEADERS, FRAME_RST_STREAM, FRAME_WINDOW_UPDATE)
+                and frame.stream_id != 0
+                and (
+                    frame.stream_id % 2 == 0 or frame.stream_id >= self._next_stream_id
+                )
+            ):
+                raise ValueError(f"HTTP/2 frame on idle stream {frame.stream_id}")
         if not data and not frames:
             raise ConnectionError("HTTP/2 connection closed before END_STREAM")
         return frames
+
+    def _handle_priority_frame(self, frame):
+        """Ignore valid legacy priorities; reset a stream on a size error."""
+        if frame.length == 5:
+            return True
+        self._send(build_rst_stream_frame(frame.stream_id, 6).serialize())
+        return False
+
+    def _discard_header_fragment(self, frame):
+        """Keep HPACK state in sync while discarding a closed stream's headers."""
+        if frame.type == FRAME_HEADERS:
+            self._ignored_header_block = header_block_fragment(frame)
+        else:
+            self._ignored_header_block += frame.payload
+        if frame.flags & FLAG_END_HEADERS:
+            self._decoder.decode_headers(self._ignored_header_block)
+            self._ignored_header_block = b""
 
     def _handle_connection_frame(self, frame):
         """Handle connection-level (stream 0) frames."""
@@ -192,7 +494,23 @@ class H2Connection:
                 debug("H2: Received SETTINGS ACK")
             else:
                 # Parse and store peer settings
-                self._peer_settings.update(parse_settings_payload(frame.payload))
+                if frame.length % 6:
+                    raise ValueError("Invalid HTTP/2 SETTINGS frame")
+                settings = parse_settings_payload(frame.payload)
+                if settings.get(SETTINGS_ENABLE_PUSH, 0) != 0:
+                    raise ValueError("Invalid server HTTP/2 ENABLE_PUSH setting")
+                if 4 in settings and settings[4] > 0x7FFFFFFF:
+                    raise ValueError("Invalid HTTP/2 initial stream window")
+                if 5 in settings and not 16384 <= settings[5] <= 16777215:
+                    raise ValueError("Invalid HTTP/2 maximum frame size")
+                if 4 in settings and self._active_send_stream is not None:
+                    self._stream_send_window += settings[4] - self._peer_settings[4]
+                    if self._stream_send_window > 0x7FFFFFFF:
+                        raise ValueError("HTTP/2 stream send window overflow")
+                self._peer_settings.update(settings)
+                self._peer_settings_received = True
+                if 1 in settings:
+                    self._encoder.set_table_size(settings[1])
                 debug(f"H2: Received peer SETTINGS: {self._peer_settings}")
                 # Send SETTINGS ACK
                 ack = build_settings_frame(ack=True)
@@ -205,9 +523,18 @@ class H2Connection:
                 self._send(pong.serialize())
 
         elif frame.type == FRAME_GOAWAY:
+            if len(frame.payload) < 8:
+                raise ValueError("Invalid HTTP/2 GOAWAY frame")
+            self._goaway_received = True
+            self._goaway_last_stream_id = (
+                int.from_bytes(frame.payload[:4], "big") & 0x7FFFFFFF
+            )
             debug(f"H2: Received GOAWAY: {frame.payload.hex()}")
 
         elif frame.type == FRAME_WINDOW_UPDATE:
+            self._connection_send_window += self._window_increment(frame)
+            if self._connection_send_window > 0x7FFFFFFF:
+                raise ValueError("HTTP/2 connection send window overflow")
             debug(f"H2: Received WINDOW_UPDATE: stream={frame.stream_id}")
 
     def close(self):

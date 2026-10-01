@@ -5,6 +5,7 @@ import os
 import socket
 import struct
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
 
 from ja3requests.cookies import (
@@ -53,8 +54,7 @@ class TestMockRequest(unittest.TestCase):
             url = "https://example.com/path"
             headers = {"Host": "custom.host.com"}
         mr = MockRequest(FakeReq())
-        full = mr.get_full_url()
-        self.assertIn("custom.host.com", full)
+        self.assertEqual(mr.get_full_url(), "https://example.com/path")
 
     def test_is_unverifiable(self):
         class FakeReq:
@@ -108,15 +108,17 @@ class TestMockRequest(unittest.TestCase):
 class TestMockResponse(unittest.TestCase):
     def test_info(self):
         class FakeResp:
-            headers = {"Content-Type": "text/html"}
+            response = SimpleNamespace(raw_headers=[{"Content-Type": "text/html"}])
         mr = MockResponse(FakeResp())
-        self.assertEqual(mr.info(), {"Content-Type": "text/html"})
+        self.assertEqual(mr.info().get("Content-Type"), "text/html")
 
     def test_getheaders(self):
         class FakeResp:
-            headers = {"Set-Cookie": "a=1"}
+            response = SimpleNamespace(
+                raw_headers=[{"Set-Cookie": "a=1"}, {"Set-Cookie": "b=2"}]
+            )
         mr = MockResponse(FakeResp())
-        mr.getheaders("Set-Cookie")  # Returns None (bug: missing return)
+        self.assertEqual(mr.getheaders("Set-Cookie"), ["a=1", "b=2"])
 
 
 # ============================================================================

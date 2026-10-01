@@ -66,6 +66,12 @@ class TestHuffmanDecode(unittest.TestCase):
         decoded = huffman_decode(huffman_encode(original))
         self.assertEqual(decoded, original)
 
+    def test_rejects_invalid_padding_and_eos(self):
+        for encoded in (b"\xff", b"\x18", b"\xff\xff\xff\xfc"):
+            with self.subTest(encoded=encoded):
+                with self.assertRaisesRegex(ValueError, "Invalid HPACK Huffman"):
+                    huffman_decode(encoded)
+
 
 # ============================================================================
 # HPACK with Huffman integration

@@ -8,6 +8,7 @@ ja3Requests.
 
 import copy
 import sys
+import threading
 import time
 from io import IOBase
 from http.cookiejar import CookieJar
@@ -23,6 +24,7 @@ from ja3requests.pool import ConnectionPool, get_default_pool
 from ja3requests.cookies import Ja3RequestsCookieJar, merge_cookies
 from ja3requests.protocol.tls.session_cache import TLSSessionCache
 from ja3requests.retry import HTTPRetry
+from ja3requests._cookie_file import load_cookie_file, save_cookie_file
 
 # Preferred clock, based on which one is more accurate on a given system.
 if sys.platform == "win32":
@@ -46,6 +48,8 @@ class Session(BaseSession):
         retry: HTTPRetry = None,
     ):
         super().__init__()
+        self._request_local = threading.local()
+        self._cookie_lock = threading.RLock()
         self._tls_config = tls_config or TlsConfig()
         # Enable session resumption by default
         if self._tls_config.session_cache is None:
@@ -63,6 +67,15 @@ class Session(BaseSession):
                 if event in self.hooks:
                     self.hooks[event].extend(callbacks)
         self._retry = retry
+
+    @property
+    def Request(self):
+        return getattr(self._request_local, 'value', self._request)
+
+    @Request.setter
+    def Request(self, request):
+        self._request_local.value = request
+        self._request = request
 
     @property
     def tls_config(self) -> TlsConfig:
@@ -89,6 +102,23 @@ class Session(BaseSession):
         if self._pool and self._pool is not get_default_pool():
             self._pool.close_all()
 
+    def save_cookies(self, path, *, include_session=False):
+        """Save the stored Session Cookies; return the count written.
+
+        This explicit operation does not include transient request Cookies.
+        """
+        with self._cookie_lock:
+            return save_cookie_file(
+                self._cookies, path, include_session=include_session
+            )
+
+    def load_cookies(self, path, *, merge=False, include_session=False):
+        """Load stored Cookies atomically, replacing them unless merge=True."""
+        with self._cookie_lock:
+            return load_cookie_file(
+                self._cookies, path, merge=merge, include_session=include_session
+            )
+
     def __enter__(self):
         return self
 
@@ -113,6 +143,7 @@ class Session(BaseSession):
         json: Union[Dict[AnyStr, AnyStr], AnyStr] = None,
         timeout: Optional[float] = None,
         verify: Optional[bool] = None,
+        tls_config: Optional[TlsConfig] = None,
         **kwargs,
     ):
         """
@@ -134,17 +165,18 @@ class Session(BaseSession):
         """
 
         # Apply verify to TLS config (deep copy to avoid mutating session config)
-        tls_config = self._tls_config
+        tls_config = tls_config or self._tls_config
         if verify is not None and verify != tls_config.verify_cert:
             # The thread-safe cache belongs to the session, not the request.
-            cache = self._tls_config.session_cache
-            tls_config = copy.deepcopy(self._tls_config, {id(cache): cache})
+            cache = tls_config.session_cache
+            tls_config = copy.deepcopy(tls_config, {id(cache): cache})
             tls_config.verify_cert = verify
 
         # Merge session-level cookies with per-request cookies
         merged_cookies = Ja3RequestsCookieJar()
-        if len(self._cookies) > 0:
-            merge_cookies(merged_cookies, self._cookies)
+        with self._cookie_lock:
+            if len(self._cookies) > 0:
+                merge_cookies(merged_cookies, self._cookies)
         if cookies is not None:
             merge_cookies(merged_cookies, cookies)
 
@@ -182,17 +214,14 @@ class Session(BaseSession):
         # Extract tls_config from kwargs if provided
         tls_config = kwargs.pop('tls_config', None)
         if tls_config:
-            # Use the provided tls_config for this request
-            original_config = self._tls_config
-            self._tls_config = tls_config
-            try:
-                result = self.request(
-                    "GET", url, params=params, headers=headers, **kwargs
-                )
-                return result
-            finally:
-                # Restore original config
-                self._tls_config = original_config
+            return self.request(
+                "GET",
+                url,
+                params=params,
+                headers=headers,
+                tls_config=tls_config,
+                **kwargs,
+            )
         else:
             return self.request("GET", url, params=params, headers=headers, **kwargs)
 
@@ -299,7 +328,7 @@ class Session(BaseSession):
 
         stream = kwargs.pop("stream", False)
         retry = self._retry
-        method = getattr(self.Request, 'method', 'GET') if self.Request else 'GET'
+        method = getattr(request, 'method', 'GET')
         max_attempts = 1 + (
             retry.total if retry and retry.is_retryable_method(method) else 0
         )
@@ -314,7 +343,8 @@ class Session(BaseSession):
 
                 # Persist response cookies into the session cookie jar
                 if response.cookies:
-                    merge_cookies(self._cookies, response.cookies)
+                    with self._cookie_lock:
+                        merge_cookies(self._cookies, response.cookies)
 
                 # Check if we should retry based on status code
                 if (
@@ -388,18 +418,41 @@ class Session(BaseSession):
         send_kwargs = kwargs
         # Get the original URL to resolve relative redirects
         original_url = self.Request.url
+        source = urlparse(original_url)
+        source_origin = (
+            source.scheme.lower(),
+            (source.hostname or '').lower(),
+            source.port or (443 if source.scheme == 'https' else 80),
+        )
 
         for _ in range(DEFAULT_REDIRECT_LIMIT):
             # Handle relative URLs by joining with the original URL
             if not urlparse(url).scheme:
                 url = urljoin(original_url, url)
 
+            target = urlparse(url)
+            target_origin = (
+                target.scheme.lower(),
+                (target.hostname or '').lower(),
+                target.port or (443 if target.scheme == 'https' else 80),
+            )
+            headers = dict(self.Request.headers or {})
+            auth = self.Request.auth
+            if target_origin != source_origin:
+                sensitive = {'authorization', 'proxy-authorization', 'cookie', 'host'}
+                headers = {
+                    k: v for k, v in headers.items() if k.lower() not in sensitive
+                }
+                auth = None
+
             req = Request(
                 method="GET",
                 url=url,
-                headers=self.Request.headers,
+                headers=headers,
                 cookies=self._cookies,
+                auth=auth,
                 proxies=self.Request.proxies,
+                timeout=self.Request.timeout,
                 tls_config=self.Request.tls_config,
             ).request()
 

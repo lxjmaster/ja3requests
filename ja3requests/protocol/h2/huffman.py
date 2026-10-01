@@ -326,17 +326,24 @@ def huffman_decode(data):
     """
     result = bytearray()
     node = _DECODE_TREE
+    padding = 0
+    padding_bits = 0
 
     for byte in data:
         for i in range(7, -1, -1):
             bit = (byte >> i) & 1
-            if bit in node:
-                node = node[bit]
-                if 'value' in node:
-                    result.append(node['value'])
-                    node = _DECODE_TREE
-            else:
-                # Invalid Huffman sequence, likely padding
+            node = node.get(bit)
+            if node is None:
+                raise ValueError("Invalid HPACK Huffman code")
+            padding = (padding << 1) | bit
+            padding_bits += 1
+            if 'value' in node:
+                result.append(node['value'])
                 node = _DECODE_TREE
+                padding = 0
+                padding_bits = 0
+
+    if padding_bits > 7 or padding != (1 << padding_bits) - 1:
+        raise ValueError("Invalid HPACK Huffman padding")
 
     return bytes(result)
