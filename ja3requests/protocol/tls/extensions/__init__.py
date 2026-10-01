@@ -42,6 +42,28 @@ class Extension(ABC):
         return f"<{self.__class__.__name__} type=0x{self.extension_type:04X}>"
 
 
+class PreSharedKeyExtension(Extension):
+    """One TLS 1.3 ticket identity and its resumption binder."""
+
+    extension_type = 0x0029
+
+    def __init__(self, ticket, age, hash_length):
+        self.ticket = ticket
+        self.age = age
+        self.binder = b"\x00" * hash_length
+
+    def encode(self):
+        identity = struct.pack("!H", len(self.ticket)) + self.ticket
+        identity += struct.pack("!I", self.age)
+        binder = bytes([len(self.binder)]) + self.binder
+        return (
+            struct.pack("!H", len(identity))
+            + identity
+            + struct.pack("!H", len(binder))
+            + binder
+        )
+
+
 class SNIExtension(Extension):
     """Server Name Indication (SNI) extension (type 0x0000).
 
@@ -169,6 +191,15 @@ class SessionTicketExtension(Extension):
         return self.ticket
 
 
+class PostHandshakeAuthExtension(Extension):
+    """Opt in to TLS 1.3 post-handshake client authentication (RFC 8446)."""
+
+    extension_type = 0x0031
+
+    def encode(self):
+        return b""
+
+
 class ExtendedMasterSecretExtension(Extension):
     """Extended Master Secret extension (type 0x0017).
 
@@ -260,6 +291,18 @@ class KeyShareExtension(Extension):
         for group_id, key_bytes in self.key_shares:
             entries += struct.pack("!HH", group_id, len(key_bytes)) + key_bytes
         return struct.pack("!H", len(entries)) + entries
+
+
+class CookieExtension(Extension):
+    """Echo a TLS 1.3 HelloRetryRequest cookie in the second ClientHello."""
+
+    extension_type = 0x002C
+
+    def __init__(self, cookie):
+        self.cookie = cookie
+
+    def encode(self):
+        return struct.pack("!H", len(self.cookie)) + self.cookie
 
 
 class PSKKeyExchangeModesExtension(Extension):

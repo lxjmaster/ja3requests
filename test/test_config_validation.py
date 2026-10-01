@@ -125,6 +125,16 @@ class TestValidateTLS13Requirements(unittest.TestCase):
         issues = c.validate()
         self.assertTrue(any("key share" in i for i in issues))
 
+    def test_initial_key_shares_must_be_supported_and_distinct(self):
+        config = TlsConfig.secure()
+        config.key_share_groups = [29]
+        self.assertEqual(config.validate(), [])
+        for groups in ([], [29, 29], [24], [23, 24], [23, 29]):
+            with self.subTest(groups=groups):
+                config.key_share_groups = groups
+                with self.assertRaises(ValueError):
+                    config.validate(strict=True)
+
 
 class TestBrowserPresetValidation(unittest.TestCase):
     def test_all_presets_pass_validation(self):

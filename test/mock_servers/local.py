@@ -147,6 +147,57 @@ def serve_h2(conn, observed):
             return
 
 
+def serve_h2_serial(
+    conn,
+    observed,
+    count=2,
+    goaway=False,
+    fragment_ack=False,
+    body=b"ok",
+    table_size=None,
+):
+    """Serve consecutive streams while observing preface and stream IDs."""
+    assert conn.selected_alpn_protocol() == "h2"
+    assert read_exact(conn, 24) == b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
+    settings = (
+        b"\x00\x01" + table_size.to_bytes(4, "big") if table_size is not None else b""
+    )
+    conn.sendall(h2_frame(4, 0, 0, settings))
+    observed["streams"] = []
+    observed["settings"] = 0
+    observed["header_blocks"] = []
+    observed["window_updates"] = []
+    deferred = b""
+    while len(observed["streams"]) < count:
+        header = read_exact(conn, 9)
+        length = int.from_bytes(header[:3], "big")
+        kind, flags, stream = struct.unpack("!BBI", header[3:])
+        payload = read_exact(conn, length)
+        if kind == 4 and not flags & 1:
+            observed["settings"] += 1
+        elif kind == 8:
+            observed["window_updates"].append((stream, int.from_bytes(payload, "big")))
+        elif kind == 1:
+            assert flags & 4  # END_HEADERS
+            observed["streams"].append(stream)
+            observed["header_blocks"].append(payload)
+            response = deferred + h2_frame(1, 4, stream, b"\x88")
+            for offset in range(0, len(body), 16384):
+                chunk = body[offset : offset + 16384]
+                end_stream = int(offset + len(chunk) == len(body))
+                response += h2_frame(0, end_stream, stream, chunk)
+            if not body:
+                response += h2_frame(0, 1, stream)
+            deferred = b""
+            if fragment_ack and len(observed["streams"]) == 1 and count > 1:
+                ack = h2_frame(4, 1, 0)
+                response += ack[:5]
+                deferred = ack[5:]
+            if goaway and len(observed["streams"]) == count:
+                response += h2_frame(7, 0, 0, stream.to_bytes(4, "big") + b"\x00" * 4)
+            conn.sendall(response)
+
+
 def read_cstring(conn):
     """Read a bounded SOCKS4 zero-terminated field."""
     data = b""

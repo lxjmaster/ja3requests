@@ -7,12 +7,15 @@ This module contains Request or Response Cookies.
 
 from http.cookiejar import CookieJar, Cookie
 from http import cookies
+from email.message import Message
 from typing import MutableMapping
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import urlparse
 import threading
 import calendar
 import copy
 import time
+
+from ja3requests._cookie_file import load_cookie_file, save_cookie_file
 
 
 def to_native_string(string, encoding="ascii"):
@@ -67,25 +70,8 @@ class MockRequest:
         return self.get_host()
 
     def get_full_url(self):
-        """Only return the response's URL if the user hadn't set the Host"""
-
-        # header
-        if not self._r.headers.get("Host"):
-            return self._r.url
-        # If they did set it, retrieve it and reconstruct the expected domain
-        host = to_native_string(self._r.headers["Host"], encoding="utf-8")
-        parsed = urlparse(self._r.url)
-        # Reconstruct the URL as we expect it
-        return urlunparse(
-            [
-                parsed.scheme,
-                host,
-                parsed.path,
-                parsed.params,
-                parsed.query,
-                parsed.fragment,
-            ]
-        )
+        """Use the destination URL as the cookie authority, not a Host override."""
+        return self._r.url
 
     @staticmethod
     def is_unverifiable():
@@ -177,7 +163,12 @@ class MockResponse:
         Info method of Response
         :return:
         """
-        return self.response.headers
+        headers = Message()
+        raw_response = getattr(self.response, "response", None)
+        for header in getattr(raw_response, "raw_headers", None) or []:
+            for name, value in header.items():
+                headers.add_header(name, value)
+        return headers
 
     def getheaders(self, name):
         """
@@ -185,7 +176,7 @@ class MockResponse:
         :param name:
         :return:
         """
-        self.response.headers.get(name)
+        return self.info().get_all(name, [])
 
 
 def extract_cookies_to_jar(jar, request, response):
@@ -208,8 +199,19 @@ def get_cookie_header(jar, request):
 
     :rtype: str
     """
+    host = (urlparse(request.url).hostname or "").lower()
+    filtered = CookieJar(policy=jar.get_policy())
+    for cookie in jar:
+        if (
+            cookie.domain
+            and not cookie.domain_specified
+            and cookie.domain.lower() != host
+        ):
+            continue
+        filtered.set_cookie(copy.copy(cookie))
+
     r = MockRequest(request)
-    jar.add_cookie_header(r)
+    filtered.add_cookie_header(r)
     return r.get_new_headers().get("Cookie")
 
 
@@ -510,6 +512,24 @@ class Ja3RequestsCookieJar(CookieJar, MutableMapping):
     def get_policy(self):
         """Return the CookiePolicy instance used."""
         return self._policy
+
+    def save(self, path, *, include_session=False):
+        """Atomically save non-expired Cookies to a private JSON file.
+
+        Session/discard Cookies require include_session=True. Return the saved
+        count. The parent directory must already exist.
+        """
+        return save_cookie_file(self, path, include_session=include_session)
+
+    def load(self, path, *, merge=False, include_session=False):
+        """Load validated JSON Cookies, replacing this jar unless merge=True.
+
+        Session/discard Cookies require include_session=True. Expired Cookies
+        are always skipped. Invalid files leave this jar unchanged.
+        """
+        return load_cookie_file(
+            self, path, merge=merge, include_session=include_session
+        )
 
 
 def _copy_cookie_jar(jar):
