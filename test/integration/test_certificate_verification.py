@@ -31,7 +31,7 @@ def certificate_message(path):
 def config_and_context(version, certificate):
     if version == 13:
         return tls13_config(), tls13_context(*certificate)
-    config = TlsConfig()
+    config = TlsConfig.legacy()
     if version == "12-ecdhe":
         config.cipher_suites = [0xC02F]
         config.supported_groups = [23]
@@ -264,7 +264,7 @@ def test_verify_upgrade_cannot_reuse_unverified_connection(
             conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
 
     context = (tls12_context if version == 12 else tls13_context)(*local_certificate)
-    config = TlsConfig() if version == 12 else tls13_config()
+    config = TlsConfig.legacy() if version == 12 else tls13_config()
     with pytest.raises(ssl.SSLError):
         with LocalServer(handler, context, connections=2) as server:
             with Session(tls_config=config, pool=ConnectionPool()) as session:

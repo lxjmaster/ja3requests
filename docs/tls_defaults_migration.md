@@ -1,20 +1,19 @@
 # TLS Defaults Migration Guide
 
-This guide describes the current worktree API and prepares T03 of the
-[development plan](../issues/next_development_plan.md). It does not announce a
-released defaults change. `TlsConfig()` and a `Session()` without an explicit
-configuration currently select the legacy profile with certificate verification
-disabled. Select the intended profile explicitly when preparing an application.
+This guide describes the 2.0.0 candidate's breaking defaults migration (T05 of
+[the development plan](../issues/next_development_plan.md)). `TlsConfig()` and
+implicit Session/module-level configurations now select the secure profile and
+verify server certificates. `TlsConfig.legacy()` pins the 1.x behavior. This
+candidate is not a claim that a package has been published.
 
-The [interoperability matrix](../test/secure_profile_matrix.md) records the
-verified combinations and environments. Local evidence covers Python 3.13.3,
-macOS and OpenSSL 3.0.16; the other configured CI environments remain unverified
-for this candidate. Profile availability here is not evidence that an older
-installed package exposes the same API.
+The [interoperability matrix](../test/secure_profile_matrix.md) records tested
+combinations and peer capability limits. The preceding delivery passed remote
+Python 3.7–3.13 CI; T05 requires verification of its own candidate. Installed
+older releases retain their own defaults and may not expose every API below.
 
 ## 1. Choose a profile
 
-| Setting | `TlsConfig()` today / `TlsConfig.legacy()` | `TlsConfig.secure()` |
+| Setting | 1.x defaults / `TlsConfig.legacy()` | 2.0 defaults / `TlsConfig.secure()` |
 | --- | --- | --- |
 | Certificate verification | Disabled | Enabled |
 | TLS negotiation | TLS 1.2 | TLS 1.3 with authenticated TLS 1.2 fallback |
@@ -59,7 +58,10 @@ response = ja3requests.get(
 
 Module-level `request`, `get`, `post` and the other convenience methods internally
 create a Session. An explicit request `tls_config` selects that request's profile.
-Today, omitting it selects the legacy configuration in all these entry points.
+In 2.0, omitting it selects the secure configuration in all these entry points.
+Direct `TLS.set_payload()` or `TLS.handshake()` without configuration also uses
+secure defaults, even if the ClientHello body was inspected beforehand.
+`ClientHello` itself remains a wire encoder, not a certificate policy API.
 Plain `http://` traffic has no TLS certificate or ALPN negotiation.
 
 ## 2. Prepare certificates and private trust
@@ -246,19 +248,24 @@ config = TlsConfig.from_browser("chrome", version=120)
 config.verify_cert = True
 ```
 
-This selects the existing preset; it does not claim exact browser behavior for
-all handshakes or broaden its interoperability evidence.
+The `from_browser()` factory keeps the preset's explicit wire settings and now
+verifies certificates. The mutating `create_chrome_config()`,
+`create_firefox_config()` and `create_custom_config()` methods keep the source
+configuration's verification and extensions. Starting them from `TlsConfig()`
+therefore inherits secure verification and the extended-master-secret extension;
+start from `TlsConfig.legacy()` and set `verify_cert` explicitly if the old
+extension offer is required. No builder claims exact browser behavior for all
+handshakes or broadens the interoperability evidence.
 
-## 7. Proposed breaking-release policy and acceptance
+## 7. Version 2.0 breaking-release policy and acceptance
 
-Proposal for T05: change implicit configuration to the secure profile in a
-user-selected breaking release. No version or release date is selected here.
-Keep `legacy()` as the explicit compatibility entry point, keep `secure()`
-explicit, and preserve explicit request verification overrides. Do not silently
-downgrade authentication after rejection. Release and publication remain separate
-authorized actions.
+The 2.0.0 candidate switches implicit configuration to the secure profile.
+`legacy()` remains the compatibility entry point, `secure()` stays explicit,
+and request verification overrides keep their scope. Authentication rejection
+never silently retries with verification disabled. Publication remains a separate
+authorized action. See [the release notes](../CHANGELOG.md).
 
-Before that switch, the selected release must meet these criteria:
+The migration's acceptance criteria are:
 
 - `TlsConfig()`, `Session()`, `ja3requests.session()` and all module-level request
   methods have consistent implicit verification, cipher, group and ALPN settings.
@@ -281,10 +288,9 @@ Before that switch, the selected release must meet these criteria:
   both READMEs and the migration guide together. Describe the certificate
   rejection, cipher compatibility, ALPN and fingerprint changes to callers.
 
-Applications can prepare now by selecting `secure()` or pinning `legacy()`,
+Applications can migrate by selecting `secure()` or pinning `legacy()`,
 supplying the intended trust bundle, and checking their own service and
-fingerprint requirements against the recorded matrix. T03 completes the guide;
-T05 still requires the user's breaking-release decision.
+fingerprint requirements against the recorded matrix. T03 provided the preparation guide; T05 implements the selected 2.0 defaults.
 
 ## Evidence and validation
 

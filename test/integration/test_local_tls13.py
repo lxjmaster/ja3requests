@@ -26,7 +26,7 @@ from test.mock_servers.local import tls12_context
 
 
 def tls13_config(cipher=0x1301):
-    config = TlsConfig()
+    config = TlsConfig.legacy()
     config.tls_version = 0x0304
     config.cipher_suites = [cipher]
     config.supported_groups = [29]
@@ -213,7 +213,7 @@ def test_h2_concurrent_streams_share_connection(local_certificate, version):
     allow_responses = threading.Event()
     streams = []
     paths = []
-    config = tls13_config() if version == "TLSv1.3" else TlsConfig()
+    config = tls13_config() if version == "TLSv1.3" else TlsConfig.legacy()
     config.alpn_protocols = ["h2", "http/1.1"]
 
     def handler(conn):

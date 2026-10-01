@@ -111,7 +111,7 @@ class TestValidateTLS13Requirements(unittest.TestCase):
         self.assertTrue(any("TLS 1.3 requires" in i for i in issues))
 
     def test_tls13_needs_supported_cipher(self):
-        c = TlsConfig()
+        c = TlsConfig.legacy()
         c.tls_version = 0x0304
         c.supported_groups = [29]
         issues = c.validate()

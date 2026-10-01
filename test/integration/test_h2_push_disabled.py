@@ -53,7 +53,7 @@ def test_push_promise_fails_concurrent_streams_and_reconnects(local_certificate)
         while recv_with_ragged_eof(conn, 4096):
             pass
 
-    config = TlsConfig()
+    config = TlsConfig.legacy()
     config.tls_version = 0x0304
     config.cipher_suites = [0x1301]
     config.supported_groups = [29]
