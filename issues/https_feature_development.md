@@ -81,9 +81,20 @@ All HTTPS features tested and working:
 ## Next Steps
 - [x] TLS 1.3 request and response path with local handshake tests
 - [x] HTTP/2 over HTTPS when ALPN negotiates `h2`
-- [x] In-memory cookies, connection reuse, and TLS 1.2 session cache
-- [ ] TLS 1.3 PSK resumption, HelloRetryRequest, and KeyUpdate
-- [ ] TLS 1.2 SHA-384 PRF suite support
+- [x] In-memory cookies, connection reuse, and TLS 1.2 client CertificateVerify
+- [x] TLS 1.3 HelloRetryRequest for X25519 and P-256
+- [x] TLS 1.3 KeyUpdate in both directions
+- [x] TLS 1.3 PSK resumption
+- [x] TLS 1.2 SHA-384 PRF for ECDHE-RSA/ECDHE-ECDSA AES-256-GCM
+- [x] TLS 1.2 abbreviated handshake/session resumption
+- [x] TLS 1.2 session-ticket resumption with authenticated cache entries
+- [x] TLS 1.3 client-certificate authentication in the main handshake
+- [x] TLS 1.3 post-handshake client authentication with explicit opt-in
+- [x] Sequential bodyless HTTP/2 connection reuse across TLS 1.2 and TLS 1.3
+- [x] Concurrent HTTP/2 requests with bodies on pooled TLS connections
+- [x] Opt-in Cookie JSON file persistence across process restarts
 
 See [the local integration test notes](../test/README.md) for the tested paths
-and their limits. Persistent sessions across process restarts are not provided.
+and their limits. Cookie files can be saved and loaded explicitly; see
+[Cookie file persistence](../docs/cookie_persistence.md). TLS session caches,
+connection pools and Session objects are not persisted across process restarts.

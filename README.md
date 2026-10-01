@@ -52,20 +52,47 @@ with ja3requests.Session(tls_config=config) as session:
 
 The secure profile verifies certificates, offers only TLS 1.3 suites and TLS 1.2
 ECDHE/AES-128/256-GCM suites, and uses HTTP/1.1 ALPN. It does not impersonate a browser.
-Its TLS 1.3 ClientHello includes X25519 and P-256 key shares; servers requesting
-a different group through HelloRetryRequest are not yet supported.
+Its TLS 1.3 ClientHello includes X25519 and P-256 key shares by default. To send
+only X25519 initially while allowing a P-256 HelloRetryRequest, set
+`config.key_share_groups = [29]` before creating the Session. Other groups are
+not implemented.
+TLS 1.3 connections also process server KeyUpdate messages, including requests
+to update the client sending key.
+Session caches can resume TLS 1.3 connections with in-memory tickets and
+PSK-DHE; 0-RTT is not supported.
+TLS 1.2 connections can resume an in-memory Session ID, or a session ticket
+when `SessionTicketExtension()` is configured. The original session must use
+extended master secret and match the current certificate policy. Import the
+extension from `ja3requests.protocol.tls.extensions`.
 You can also enable verification for one request with `verify=True`.
 For a destination-specific JA3 string, call
 `config.get_ja3_string(server_name="example.com")` so the SNI extension is included.
-HTTP/2 requests use a fresh connection until connection-level HTTP/2 state can be
-retained across requests.
+A pooled session can run concurrent HTTP/2 requests, including requests with
+bodies, on one TLS connection. Responses are matched by stream ID, and request
+DATA respects the peer's frame size and connection and stream flow-control
+windows. HTTP/1.1 connections remain serial.
+Server push is disabled because pushed responses are not supported; an
+explicit `SETTINGS_ENABLE_PUSH=1` configuration is rejected.
+Legacy HTTP/2 PRIORITY signals are accepted but do not affect request scheduling.
 
 An explicit `verify=True` or `verify=False` overrides the session setting for
 that request, including redirects. `TlsConfig()` retains the old defaults in
 this release; `TlsConfig.legacy()` pins them explicitly for compatibility and
 leaves certificate verification disabled. A future change to the constructor's
-defaults needs a breaking release and broader interoperability tests. See
-[local protocol tests](test/README.md) for the tested paths and limits.
+defaults needs a breaking release and broader interoperability tests. See the
+[TLS defaults migration guide](docs/tls_defaults_migration.md) for private CA
+trust, hostname/SNI behavior, request overrides, legacy-server setup, and the
+proposed release acceptance criteria. The [secure-profile matrix](test/secure_profile_matrix.md)
+records verified combinations and environment limits; [local protocol tests](test/README.md)
+describe the underlying cases.
+
+TLS 1.2 and TLS 1.3 client-certificate authentication use `client_cert` and
+`client_key` when the server requests a certificate. Configured TLS 1.3 client
+certificates do not use PSK ticket resumption. TLS 1.3 post-handshake client
+authentication is opt-in: append `PostHandshakeAuthExtension()` to
+`config.extensions` before creating a session. It uses the same certificate and
+key settings; with no client certificate, it sends an empty Certificate message.
+This extension changes the ClientHello fingerprint.
 
 ## How To Use
 ### Unreasonable Request Method
@@ -226,6 +253,16 @@ response = session.get("http://example.com/", cookies=cookies)
 print(response)
 ```
 
+
+### Persist Cookies to a file
+
+Use `session.save_cookies(path)` and `session.load_cookies(path)` for explicit
+JSON persistence across process restarts. Loading replaces stored Cookies by
+default; `merge=True` merges by domain/path/name. Session/discard Cookies require
+`include_session=True` on both operations, and expired Cookies are always skipped.
+Files can contain login tokens in plaintext and use `0600` permissions on POSIX.
+See [Cookie file persistence](docs/cookie_persistence.md) for scope, format, limits,
+failure behavior and the runnable example.
 
 ### Allow Redirects
 
