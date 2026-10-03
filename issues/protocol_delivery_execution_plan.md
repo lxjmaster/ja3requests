@@ -20,7 +20,7 @@ Lifecycle: UNREGISTERED. The supported status command cannot obtain an official
 session binding. The file plan remains authoritative for execution tracking;
 do not infer an ID or treat this tooling limitation as a local-work blocker.
 
-## Baseline and evidence
+## Historical baseline and evidence
 
 - #52 head: 21f72ae397fd7656ac1c58fcdbfa207bdc7bb94a, base master.
 - #53 head: 7711f86446c5512c16311a2db39cdc3888566f70, base #52.
@@ -94,7 +94,7 @@ evidence as deliverables. Preserve dist/t05 and existing debug/IDE resources.
 Remove only task-owned installed/build/test staging and generated keys after
 readback. No remote authority is needed to finish the selected local outcome.
 
-E1-E2 are complete. The follow-up request starts E3 preparation; do not repeat
+E1-E2 are complete. The follow-up request extended delivery through E3; do not repeat
 unchanged local tests. Revalidated all 138/139 candidate manifest entries and
 19/11 retained artifact hashes before committing the repairs.
 
@@ -112,11 +112,24 @@ unchanged local tests. Revalidated all 138/139 candidate manifest entries and
 - [✅] Resume E3 under the user's correction; mark #52 ready and merge it
   server-side as `f0a00507c449e746b287fe58836b4c4c4111341f`.
 - [✅] Retarget #53 to master.
-- [ ] Verify the final #53 integration candidate and merge it server-side.
-- [ ] Read back final master, merge records and retained evidence.
+- [✅] Verify final #53 candidate `e83d3c4` (ten successful checks) and merge it
+  server-side as `f0cac58b3339a8ef68850cd9075efac159a3bea3`.
+- [✅] Read back both MERGED records, verify #52 ancestry and confirm final
+  master has exactly the same tree as the verified #53 candidate.
+- [✅] Record final-master CI: all ten checks passed at `f0cac58`, including
+  Python 3.7-3.13, wheel, lint and 89.04% coverage. Evidence is retained in
+  `dist/delivery_review/remote_merged.json`.
 
 The earlier missing-authority classification is superseded by the user's
 correction and resumed goal. Continue the original E3 outcome without another
 approval round. Preserve merge ancestry and retained worktrees.
 
 Publication and T06-T10 remain separate outcomes.
+
+E1-E3 implementation, validation and protocol merges are complete. Documentation
+closeout additionally requires these three final records (this plan, the review
+and the roadmap) to be committed and merged into master through a documentation
+PR. Verify that PR's merged state and remote file equality before reporting full
+delivery completion. Local-only retention does not satisfy this final gate.
+For this documentation-only change, check links, factual consistency and diff
+scope; reuse the successful protocol checks above.

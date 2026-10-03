@@ -289,11 +289,10 @@ last usable artifact and return to the smallest reproducible case; after two
 attempts without progress, use a safe alternative or report the precise blocker.
 
 T05 implementation and local acceptance are complete for the 2.0.0 candidate.
-On 2026-10-03, PRs #52 and #53 were confirmed OPEN and draft, each with 10
-successful checks. Neither has been merged. Recommended next outcome:
-**review #52 and #53 and complete delivery preparation**, following the
-[execution plan](protocol_delivery_execution_plan.md). Merge in dependency order
-only after authorization; publication remains separate. T06 is the next optional
+At the initial 2026-10-03 inspection, PRs #52 and #53 were OPEN and draft, each
+with 10 successful checks. The subsequent review and dependency-ordered merges
+are complete, as recorded in the [execution plan](protocol_delivery_execution_plan.md).
+Publication remains separate. T06 is the next optional
 development candidate and requires a selected group/peer. T07-T10 retain their
 target/use-case dependencies. No later implementation is included in T05 delivery.
 
@@ -303,7 +302,8 @@ candidates passed 1374 tests/88.89% (#52) and 1427 tests/89.04% (#53). See the
 [consolidated review](protocol_delivery_review.md) for evidence and worktree
 locations. Under the follow-up execution request, repairs have been committed
 on both branches and #53 incorporates the updated #52 ancestry. Fresh remote
-checks now pass on #52 `ad62e9a` and #53 `8e8c092` (ten each; coverage 88.89%
+checks passed on #52 `ad62e9a` and #53 `8e8c092` (ten each; coverage 88.89%
 and 89.04%). Following the user's correction and resumed execution, #52 merged
-as `f0a0050` and #53 now targets master for final integration checks and merge.
-Publication remains out of scope.
+as `f0a0050`; #53 subsequently passed final integration checks and merged into
+master as `f0cac58`. E1-E3 delivery is implemented, with final master matching
+the tested candidate tree. Publication and T06-T10 remain outside this outcome.
