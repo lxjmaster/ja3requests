@@ -55,7 +55,7 @@ class TestTLS13ClientShares(unittest.TestCase):
 
     def test_unsupported_group_closes_connection(self):
         config = TlsConfig.secure()
-        config.supported_groups = [24]
+        config.supported_groups = [25]
         context = SimpleNamespace(
             destination_address="example.invalid",
             port=443,

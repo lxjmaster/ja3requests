@@ -63,6 +63,7 @@ def test_rejects_truncated_server_hello_extension():
 def test_tls12_rejects_cipher_suite_not_offered_by_client():
     tls = TLS(None)
     config = TlsConfig()
+    config.tls_version = 0x0303
     config.cipher_suites = [0xC02F]
     tls.set_payload(config)
     with pytest.raises(TLSHandshakeError, match="unoffered cipher"):

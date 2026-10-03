@@ -108,6 +108,7 @@ class TLS:
         self._resumed_session = None
         self._server_offered_session_ticket = False
         self._new_session_ticket = (0, b'')
+        self._sent_client_hellos = []
 
         # Sequence numbers for record layer encryption/decryption
         # These are reset to 0 after ChangeCipherSpec
@@ -148,6 +149,10 @@ class TLS:
 
             tls_config = TlsConfig()
         if tls_config:
+            try:
+                tls_config.validate(strict=True)
+            except ValueError as error:
+                raise TLSHandshakeError(str(error)) from error
             self._payload_configured = True
             # Set TLS version
             if hasattr(tls_config, 'tls_version') and tls_config.tls_version:
@@ -170,6 +175,18 @@ class TLS:
             self._server_name = (
                 getattr(tls_config, 'server_name', None) or self._server_host
             )
+            from ja3requests.protocol.tls.extensions import (
+                SNIExtension,
+            )  # pylint: disable=import-outside-toplevel
+
+            for extension in tls_config.extensions or []:
+                if extension.extension_type == 0 and (
+                    not self._server_name
+                    or extension.encode() != SNIExtension(self._server_name).encode()
+                ):
+                    raise TLSHandshakeError(
+                        "Custom SNI must match configured server_name or destination"
+                    )
 
             # Set supported groups (allow empty list)
             if hasattr(tls_config, 'supported_groups'):
@@ -225,7 +242,12 @@ class TLS:
                 alpn_protocols=getattr(tls_config, 'alpn_protocols', None),
                 use_grease=getattr(tls_config, 'use_grease', True),
                 _extensions=extensions,
+                extension_order=tls_config.extension_order,
+                record_version=tls_config.client_hello_record_version,
             )
+            self._body.session_id = tls_config.session_id
+            self._session_id_configured = tls_config._session_id_configured
+            self._body.compression_methods = bytes(tls_config.compression_methods)
 
             self._is_tls13 = is_tls13
             self._select_tls12_session()
@@ -233,6 +255,9 @@ class TLS:
     def _select_tls12_session(self):
         """Offer a policy-compatible EMS ticket or Session ID."""
         self._offered_session = None
+        if self._session_id_configured:
+            # An explicit wire identity must not be replaced by cache policy.
+            return
         if self._session_cache is None or self._server_host is None:
             return
         ticket_extension = next(
@@ -313,7 +338,7 @@ class TLS:
             if self._tls13_psk is not None:
                 self._bind_tls13_client_hello()
             debug("Sending Client Hello...")
-            self.conn.sendall(client_hello.message)
+            self._send_client_hello(client_hello)
 
             # Add Client Hello to handshake messages (without TLS record header)
             self._handshake_messages += client_hello.handshake_message
@@ -394,7 +419,12 @@ class TLS:
                 selected_version != b'\x03\x04'
                 or self._selected_cipher_suite != retry_suite
                 or (self._server_session_id or b"")
-                != (self.body.session_id if self.body.session_id != b"\x00" else b"")
+                != (
+                    self.body.session_id
+                    if self.body.session_id != b"\x00"
+                    or getattr(self.body, '_session_id_explicit', False)
+                    else b""
+                )
             ):
                 raise TLSHandshakeError(
                     "ServerHello changed HelloRetryRequest selection"
@@ -572,7 +602,9 @@ class TLS:
         session_id_length = data[offset]
         offset += 1
         expected_id = self.body.session_id
-        if expected_id == b"\x00":
+        if expected_id == b"\x00" and not getattr(
+            self.body, '_session_id_explicit', False
+        ):
             expected_id = b""
         if (
             session_id_length > 32
@@ -620,7 +652,7 @@ class TLS:
             group not in self._supported_groups
             or not self._tls13_private_keys
             or group in self._tls13_private_keys
-            or group not in (23, 29)
+            or group not in (23, 24, 29)
         ):
             raise TLSHandshakeError("HelloRetryRequest selected an invalid group")
         cookie_extension = extensions.get(0x002C)
@@ -652,6 +684,10 @@ class TLS:
         if group is not None:
             if group == 29:
                 private_key, public_bytes = TLS13KeyExchange.generate_x25519_keypair()
+            elif group == 24:
+                private_key, public_bytes = (
+                    TLS13KeyExchange.generate_secp384r1_keypair()
+                )
             else:
                 private_key, public_bytes = (
                     TLS13KeyExchange.generate_secp256r1_keypair()
@@ -670,6 +706,14 @@ class TLS:
         if cookie is not None:
             extensions.append(CookieExtension(cookie))
         retried = copy.copy(self.body)
+        if (
+            cookie is not None
+            and retried._extension_order is not None
+            and 44 not in retried._extension_order
+        ):
+            order = list(retried._extension_order)
+            order.insert(order.index(41) if 41 in order else len(order), 44)
+            retried._extension_order = order
         retried._custom_extensions = extensions
         retried._build_extensions()
         hash_algo = TLS13_CIPHER_PARAMS[suite][1]
@@ -682,7 +726,20 @@ class TLS:
         if self._tls13_psk is not None:
             self._bind_tls13_client_hello(transcript_prefix)
         self._handshake_messages = transcript_prefix + retried.handshake_message
-        self.conn.sendall(retried.message)
+        self._send_client_hello(retried)
+
+    @property
+    def sent_client_hellos(self):
+        """Immutable records successfully sent on this connection, including HRR.
+
+        May contain hostnames and resumption identities; never logged by default.
+        """
+        return tuple(self._sent_client_hellos)
+
+    def _send_client_hello(self, hello):
+        record = hello.message
+        self.conn.sendall(record)
+        self._sent_client_hellos.append(record)
 
     def _handshake_tls12(self, initial_data=b""):
         """TLS 1.2 handshake flow after ClientHello is sent."""
@@ -789,7 +846,7 @@ class TLS:
         # key_share: include one share for each supported implemented group.
         if KeyShareExtension.extension_type not in existing_types:
             if not self._supported_groups:
-                self._supported_groups = [0x001D]
+                raise TLSHandshakeError("TLS 1.3 requires supported groups")
             initial_groups = getattr(tls_config, "key_share_groups", None)
             if initial_groups is None:
                 initial_groups = self._supported_groups
@@ -797,7 +854,7 @@ class TLS:
                 not initial_groups
                 or len(initial_groups) != len(set(initial_groups))
                 or not set(initial_groups).issubset(
-                    set(self._supported_groups) & {0x0017, 0x001D}
+                    set(self._supported_groups) & {0x0017, 0x0018, 0x001D}
                 )
                 or initial_groups
                 != [
@@ -816,6 +873,10 @@ class TLS:
                 elif group == 0x0017:
                     private_key, public_bytes = (
                         TLS13KeyExchange.generate_secp256r1_keypair()
+                    )
+                elif group == 0x0018:
+                    private_key, public_bytes = (
+                        TLS13KeyExchange.generate_secp384r1_keypair()
                     )
                 else:
                     continue

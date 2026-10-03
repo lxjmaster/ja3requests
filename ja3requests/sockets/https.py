@@ -67,6 +67,13 @@ class HttpsSocket(BaseSocket):
             ),
             tuple(config.compression_methods or ()),
             config.session_id,
+            config._session_id_configured,
+            (
+                tuple(config.extension_order)
+                if config.extension_order is not None
+                else None
+            ),
+            config.client_hello_record_version,
             config.client_random,
             config.server_random,
             config.server_name or host,

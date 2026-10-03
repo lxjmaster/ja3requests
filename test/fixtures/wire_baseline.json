@@ -1,0 +1,5 @@
+{
+  "secure": {"record_version":"0301","version":771,"session_id_length":0,"compression":[0],"ciphers":[4865,4866,4867,49195,49199,49196,49200],"extension_types":[23,43,51,45,0,10,13,16],"groups":[29,23],"point_formats":[],"key_shares":[[29,32],[23,65]],"ja3":"771,4865-4866-4867-49195-49199-49196-49200,23-43-51-45-0-10-13-16,29-23,"},
+  "legacy": {"record_version":"0301","version":771,"session_id_length":0,"compression":[0],"ciphers":[47],"extension_types":[0],"groups":[],"point_formats":[],"key_shares":[],"ja3":"771,47,0,,"},
+  "chrome120": {"record_version":"0301","version":771,"session_id_length":0,"compression":[0],"ciphers":["GREASE",4865,4866,4867,49195,49196,49199,49200,49191,47,53],"extension_types":[65281,23,35,5,11,43,51,45,0,10,13,16],"groups":[29,23,24],"point_formats":[0],"key_shares":[[29,32],[23,65]],"ja3":"771,4865-4866-4867-49195-49196-49199-49200-49191-47-53,65281-23-35-5-11-43-51-45-0-10-13-16,29-23-24,0"}
+}
