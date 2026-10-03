@@ -9,7 +9,8 @@ verifiable tasks. The planning deliverable is complete. Selected execution
 batches and their evidence are recorded below; unchecked tasks remain queued.
 
 On 2026-10-01, the user requested sequential execution of this plan. T01-T04
-are complete; T05 is the next conditional batch and awaits a breaking-release decision.
+are complete. On 2026-10-02, the user requested T05; its 2.0.0 implementation
+and local acceptance are complete. Delivery CI is tracked on the migration PR.
 Subsequent batches follow the order below. Commit, push, merge, release, and the conditional
 constructor-defaults migration remain separate outcomes with their stated
 authorization and decision dependencies.
@@ -20,7 +21,7 @@ The binding was still unavailable at the start of T04. Retain this file as the
 roadmap and batch checklist. Once binding is available, register the selected
 execution outcome as a workline; the remaining future roadmap is reference context.
 
-## Verified baseline
+## Verified T01-T04 baseline (historical)
 
 - The existing checklist in `https_feature_development.md` is checked off.
 - The latest installed-wheel local run passed 1362 selected tests with 88.86%
@@ -92,8 +93,13 @@ No calendar dates are assigned before target environments and scope are selected
   matched. Black, error-level Pylint, syntax/links, diff and example checks passed.
   The new wheel and reports are retained in `dist/t04/`; task-created temporary
   Cookie files, generated certificate keys and build/test staging were removed.
-- [ ] T05 awaits the user's breaking-release decision. T06-T10 retain their
-  target/use-case selection dependencies.
+- [✅] T05 implementation and local acceptance completed on 2026-10-02 for the
+  2.0.0 candidate. See [the defaults delivery record](secure_defaults_delivery.md):
+  53 default-policy integration cases and 1415 installed-wheel tests passed,
+  with 89.03% coverage. Both READMEs, migration guide and release notes describe
+  the breaking behavior. Wheel/reports are retained in `dist/t05/`; task-owned
+  staging and generated keys were removed. Remote delivery results are tracked
+  on the migration PR. T06-T10 retain target/use-case selection dependencies.
 
 ### Delivery follow-up
 
@@ -103,7 +109,8 @@ verify remote CI. The delivery branch is `feature/protocol-delivery`; manual
 debug scripts and IDE metadata remain outside the commits. The source and test
 hashes still match the passing T04 installed-wheel snapshot. Remote verification
 is tracked on the delivery pull request; the earlier records remain snapshots
-of their respective local batches. T05 still requires a breaking-release decision.
+of their respective local batches. T05's 2.0.0 candidate decision and implementation
+are complete; merge and publication remain separate authorized outcomes.
 
 ## T01: Prepare the existing implementation for delivery
 
@@ -155,12 +162,13 @@ T03 is compatibility preparation in the current API:
 Acceptance for T03: examples use existing supported APIs and explicitly describe
 behavior changes; constructor defaults are not changed by documentation work.
 
-T05 begins only after the user selects the breaking-release outcome:
+T05: the user requested the next task on 2026-10-02; implement the recommended
+2.0.0 candidate. Publishing, deployment and merging remain separate actions:
 
-- [ ] Change default construction consistently across entry points.
-- [ ] Verify certificate rejection, TLS fallback, explicit legacy opt-in,
+- [✅] Change default construction consistently across entry points.
+- [✅] Verify certificate rejection, TLS fallback, explicit legacy opt-in,
   verification overrides, and pool isolation after the default change.
-- [ ] Update version/release notes and both READMEs for the selected release.
+- [✅] Update version/release notes and both READMEs for the selected release.
 
 Acceptance for T05: T02/T03 evidence is complete for the selected release scope;
 the new defaults and compatibility entry point pass relevant checks. Publishing
@@ -280,7 +288,22 @@ debug scripts and IDE files. On a failed implementation attempt, retain the
 last usable artifact and return to the smallest reproducible case; after two
 attempts without progress, use a safe alternative or report the precise blocker.
 
-Recommended next outcome: **select the T05 breaking-release defaults migration**.
-T01-T04 are complete. T05 implementation still requires the user's release decision;
-T06-T10 require their stated target/use-case selections. Record each result
-here before starting a conditional expansion.
+T05 implementation and local acceptance are complete for the 2.0.0 candidate.
+On 2026-10-03, PRs #52 and #53 were confirmed OPEN and draft, each with 10
+successful checks. Neither has been merged. Recommended next outcome:
+**review #52 and #53 and complete delivery preparation**, following the
+[execution plan](protocol_delivery_execution_plan.md). Merge in dependency order
+only after authorization; publication remains separate. T06 is the next optional
+development candidate and requires a selected group/peer. T07-T10 retain their
+target/use-case dependencies. No later implementation is included in T05 delivery.
+
+On 2026-10-03, delivery review found and locally repaired three #52 runtime
+defects and one flaky test, then propagated the repairs to #53. The installed
+candidates passed 1374 tests/88.89% (#52) and 1427 tests/89.04% (#53). See the
+[consolidated review](protocol_delivery_review.md) for evidence and worktree
+locations. Under the follow-up execution request, repairs have been committed
+on both branches and #53 incorporates the updated #52 ancestry. Fresh remote
+checks now pass on #52 `ad62e9a` and #53 `8e8c092` (ten each; coverage 88.89%
+and 89.04%). Following the user's correction and resumed execution, #52 merged
+as `f0a0050` and #53 now targets master for final integration checks and merge.
+Publication remains out of scope.

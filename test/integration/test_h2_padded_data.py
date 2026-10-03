@@ -1,5 +1,7 @@
 """HTTP/2 padding is flow-controlled but excluded from response bodies."""
 
+import threading
+
 import pytest
 
 from ja3requests import Session, TlsConfig
@@ -8,7 +10,7 @@ from test.mock_servers.local import LocalServer, h2_frame, read_exact, tls13_con
 
 
 def h2_config():
-    config = TlsConfig()
+    config = TlsConfig.legacy()
     config.tls_version = 0x0304
     config.cipher_suites = [0x1301]
     config.supported_groups = [29]
@@ -31,6 +33,8 @@ def read_request_stream(conn):
 
 @pytest.mark.parametrize("pooled", [False, True])
 def test_padded_response_body_over_tls(local_certificate, pooled):
+    response_read = threading.Event()
+
     def handler(conn):
         stream = read_request_stream(conn)
         conn.sendall(
@@ -38,6 +42,9 @@ def test_padded_response_body_over_tls(local_certificate, pooled):
             + h2_frame(0, 8, stream, b"\x02first\x00\x00")
             + h2_frame(0, 9, stream, b"\x00second")
         )
+        # Closing with the client's SETTINGS ACK unread can reset TCP before
+        # the response is consumed. Synchronize teardown with the consumer.
+        assert response_read.wait(4), "Client did not finish reading the response"
 
     with LocalServer(handler, tls13_context(*local_certificate, alpn="h2")) as server:
         with Session(
@@ -45,8 +52,11 @@ def test_padded_response_body_over_tls(local_certificate, pooled):
             use_pooling=pooled,
             pool=ConnectionPool() if pooled else None,
         ) as session:
-            response = session.get(f"https://127.0.0.1:{server.port}/", timeout=3)
-            assert response.content == b"firstsecond"
+            try:
+                response = session.get(f"https://127.0.0.1:{server.port}/", timeout=3)
+                assert response.content == b"firstsecond"
+            finally:
+                response_read.set()
 
 
 def test_invalid_data_padding_discards_connection(local_certificate):

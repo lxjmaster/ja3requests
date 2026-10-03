@@ -261,3 +261,13 @@ plus ECDHE-RSA/ECDHE-ECDSA AES-256-GCM with the SHA-384 PRF. Other SHA-384
 TLS 1.2 suites are not established by these tests. TLS 1.3 post-handshake
 client authentication is covered by local OpenSSL cases. This is not a complete
 protocol audit.
+
+## Version 2.0 default-policy regressions
+
+`integration/test_default_tls.py` exercises implicit Session/factory/module-level
+requests against verified TLS 1.3 and TLS 1.2 fallback peers. It checks wrong-host,
+expired, bad-signature and untrusted certificates before HTTP, including explicit
+HTTP/2 offers; `verify=False` isolation and pooled verification upgrades; explicit
+legacy RSA opt-in; and direct protocol defaults after ClientHello inspection.
+Legacy protocol fixtures now select `TlsConfig.legacy()` explicitly instead of
+relying on the old constructor. See [release notes](../CHANGELOG.md).

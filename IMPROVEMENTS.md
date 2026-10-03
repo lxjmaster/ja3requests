@@ -4,7 +4,7 @@
 
 - HTTPS 的 TLS 1.2 和可配置的 TLS 1.3 请求路径；通过 ALPN 协商 HTTP/2。
 - TLS 1.2 RSA 密钥交换使用服务器公钥加密预主密钥；测试覆盖了选定密码套件的 Finished 验证和失败路径。
-- TLS 1.2 与 TLS 1.3 均可进行证书链及目标主机名验证；默认关闭，需要使用 `verify=True` 或 `TlsConfig.verify_cert=True` 启用。
+- TLS 1.2 与 TLS 1.3 均可进行证书链及目标主机名验证；2.0 默认启用；`verify=False` 可按请求覆盖，`TlsConfig.legacy()` 显式保留旧验证策略。
 - TLS 1.3 浏览器预设现提供 TLS 1.3 密码套件；Chrome 120 预设在本地 OpenSSL 服务上完成了已验证的 TLS 1.3 握手，以及带扩展主密钥的 TLS 1.2 回退握手。
 - `TlsConfig.secure()` 显式启用证书验证及 TLS 1.3/TLS 1.2 ECDHE-GCM 配置；本地 RSA/ECDSA 证书的两个协议版本均通过互通测试。`TlsConfig.legacy()` 固定旧兼容参数。
 - TLS 1.2 ECDHE-RSA/ECDHE-ECDSA AES-256-GCM/SHA-384 已通过本地 OpenSSL 互通，覆盖有无扩展主密钥、碎片读取和 Finished 篡改拒绝。
@@ -22,8 +22,8 @@
 
 ## 已知限制与后续事项
 
-1. **默认 TLS 设置**：`TlsConfig()` 仍默认为 TLS 1.2 的 RSA/AES-CBC 套件，并关闭证书验证；新调用方应显式采用 `TlsConfig.secure()`。旧服务需要的参数可通过 `TlsConfig.legacy()` 固定。
-2. **默认值迁移**：先在当前版本提供显式安全配置和旧行为入口；只有经过更广的互通验证并给出自签名证书、旧服务和 JA3 指纹的迁移说明后，才应在破坏性版本中改变 `TlsConfig()` 默认值。
+1. **默认 TLS 设置**：2.0 的 `TlsConfig()` 默认等同于 `TlsConfig.secure()`：验证证书，优先 TLS 1.3 并允许 TLS 1.2 ECDHE/GCM 回退。旧 RSA/AES-CBC 服务需要显式使用 `TlsConfig.legacy()`。
+2. **默认值迁移**：2.0 是默认值迁移的破坏性候选版本；证书信任、旧服务和 JA3 指纹的兼容性影响见迁移指南和版本说明。包发布是独立操作。
 3. **TLS 1.2 密码套件**：SHA-384 PRF 的端到端验证限于 ECDHE-RSA/ECDHE-ECDSA AES-256-GCM；其他 SHA-384 CBC 或静态 RSA 套件尚未确认可用，安全配置不提供这些套件。
 4. **TLS 1.3 扩展流程**：X25519 和 P-256 可通过 HelloRetryRequest 协商；其他组和 0-RTT 尚未实现。PSK 会话状态只保存在当前进程内。
 5. **TLS 会话持久化**：TLS 会话状态仍只保存在内存中，尚无跨进程重启的持久化接口。Cookie 已提供显式文件保存/加载接口，不会持久化 TLS 密钥、连接池或 Session 对象。
@@ -32,4 +32,4 @@
 
 后续协议能力应按实际使用需求排序，并针对协商、认证和失败边界补充本地集成验证。
 
-分阶段任务、依赖和验收条件见[后续开发计划](issues/next_development_plan.md)。T01–T04 的交付基线、安全配置互通证据、迁移指南和 Cookie 文件持久化已完成。下一步验证提交成果的远程 CI，再选择 T05 的破坏性版本默认值迁移范围。
+分阶段任务、依赖和验收条件见[后续开发计划](issues/next_development_plan.md)。T01–T04 的交付基线、安全配置互通证据、迁移指南和 Cookie 文件持久化已完成。T05 的 2.0.0 安全默认值迁移及本地验收已完成，远程交付检查记录在迁移 PR 中；下一步需选择 T06 的具体协议组和对端。

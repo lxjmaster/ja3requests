@@ -48,7 +48,7 @@ def test_cancelled_stream_headers_preserve_hpack_table(local_certificate):
             + h2_frame(0, 1, observed["streams"][1], b"ok")
         )
 
-    config = TlsConfig()
+    config = TlsConfig.legacy()
     config.tls_version = 0x0304
     config.cipher_suites = [0x1301]
     config.supported_groups = [29]

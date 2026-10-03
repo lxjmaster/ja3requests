@@ -18,7 +18,7 @@
 ```
 
 Ja3Requests 支持 HTTP 和 HTTPS 上的 HTTP/1.1；HTTPS 连接也可以通过 ALPN
-协商 HTTP/2。默认使用 TLS 1.2，TLS 1.3 可通过配置启用。
+协商 HTTP/2。2.0 默认验证证书，优先使用 TLS 1.3，并允许 TLS 1.2 ECDHE/GCM 回退。
 
 ## 安装 Ja3Requests/ 支持的版本
 
@@ -32,8 +32,8 @@ Ja3Requests正式支持Python 3.7+
 
 ## HTTPS 证书验证
 
-为保持兼容，默认不验证服务器证书。需要验证证书、优先使用 TLS 1.3 并允许
-TLS 1.2 ECDHE/AES-GCM 回退时，显式选择安全配置：
+2.0 默认验证服务器证书。`TlsConfig()`、`Session()` 和模块级请求使用
+TLS 1.3/TLS 1.2 ECDHE-GCM 安全配置，也可以继续显式选择：
 
 ```python
 import ja3requests
@@ -64,11 +64,12 @@ HTTP/2 请求（包括带请求体的请求）可在一条 TLS 连接上并发�
 旧式 HTTP/2 优先级信号可被接收，但不影响请求调度。
 
 请求显式传入的 `verify=True` 或 `verify=False` 会覆盖会话设置，重定向也沿用
-本次请求的设置。本版本 `TlsConfig()` 保持旧默认；`TlsConfig.legacy()`
-显式固定旧行为，且关闭证书验证。未来切换构造器默认值需要破坏性版本变更
-和更广的互通测试。[TLS 默认值迁移指南](docs/tls_defaults_migration.md)（英文）
+本次请求的设置。`TlsConfig.legacy()` 显式恢复 1.x 的 TLS 1.2 RSA/AES-CBC
+配置并关闭证书验证。新默认会改变 ClientHello/JA3 指纹，并拒绝不受信任、
+过期或目标主机名不匹配的证书。[TLS 默认值迁移指南](docs/tls_defaults_migration.md)（英文）
 说明私有 CA 信任、目标主机名与服务名称指示（SNI）、请求覆盖、旧服务配置及
-未来切换默认值的验收条件。`verify` 接受布尔覆盖；自定义 CA 文件使用
+2.0 兼容性变化。浏览器预设工厂保留显式协议参数并默认验证证书；自定义
+构建方法继承原配置的验证策略和扩展。详见[版本说明](CHANGELOG.md)。`verify` 接受布尔覆盖；自定义 CA 文件使用
 `SSL_CERT_FILE`，SNI 覆盖不会替代对 URL 目标主机的证书校验。
 已验证的组合与环境限制见[安全配置互通矩阵](test/secure_profile_matrix.md)，
 具体测试见[本地协议测试](test/README.md)。

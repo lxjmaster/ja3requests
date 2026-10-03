@@ -77,6 +77,7 @@ class TLS:
     ):
         self._tls_version = None
         self._body = None
+        self._payload_configured = False
         self.conn = conn
         self._master_secret = None
         self._client_random = None
@@ -142,7 +143,12 @@ class TLS:
         Set TLS payload configuration for handshake
         :param tls_config: TlsConfig object containing handshake parameters
         """
+        if tls_config is None:
+            from .config import TlsConfig  # pylint: disable=import-outside-toplevel
+
+            tls_config = TlsConfig()
         if tls_config:
+            self._payload_configured = True
             # Set TLS version
             if hasattr(tls_config, 'tls_version') and tls_config.tls_version:
                 if isinstance(tls_config.tls_version, int):
@@ -177,7 +183,7 @@ class TLS:
             if hasattr(tls_config, 'verify_cert'):
                 self._verify_cert = tls_config.verify_cert
             else:
-                self._verify_cert = False  # Default to False for backward compatibility
+                self._verify_cert = True
 
             # Load client certificate if configured
             if getattr(tls_config, 'client_cert', None):
@@ -295,6 +301,8 @@ class TLS:
         Automatically selects TLS 1.2 or 1.3 based on configuration.
         """
         try:
+            if not self._payload_configured:
+                self.set_payload()
             # Initialize handshake message tracking
             self._handshake_messages = b''
             self._pending_server_handshake = b''
