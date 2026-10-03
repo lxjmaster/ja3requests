@@ -167,17 +167,13 @@ def dict_from_cookie_string(cookie_string: AnyStr):
     :return: dict
     """
 
-    cookie_dict = {}
+    from http.cookies import SimpleCookie  # pylint: disable=import-outside-toplevel
+
     if isinstance(cookie_string, bytes):
         cookie_string = cookie_string.decode()
-
-    cookie_list = cookie_string.split(";")
-    for cookie in cookie_list:
-        cookie = cookie.strip()
-        name, value = cookie.split("=")
-        cookie_dict.setdefault(name, value)
-
-    return cookie_dict
+    parsed = SimpleCookie()
+    parsed.load(cookie_string)
+    return {name: morsel.value for name, morsel in parsed.items()}
 
 
 def dict_from_cookiejar(cj):

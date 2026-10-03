@@ -145,11 +145,13 @@ class TestSessionAutoCache(unittest.TestCase):
 
     def test_session_has_cache(self):
         from ja3requests.sessions import Session
+
         s = Session(use_pooling=False)
         self.assertIsInstance(s._tls_config.session_cache, TLSSessionCache)
 
     def test_custom_config_gets_cache(self):
         from ja3requests.sessions import Session
+
         config = TlsConfig()
         self.assertIsNone(config.session_cache)
         s = Session(tls_config=config, use_pooling=False)
@@ -158,6 +160,7 @@ class TestSessionAutoCache(unittest.TestCase):
 
     def test_existing_cache_preserved(self):
         from ja3requests.sessions import Session
+
         config = TlsConfig()
         custom_cache = TLSSessionCache(max_size=5)
         config.session_cache = custom_cache
@@ -168,6 +171,15 @@ class TestSessionAutoCache(unittest.TestCase):
 class TestTLSSessionIDInHandshake(unittest.TestCase):
     """Test TLS object integrates with session cache."""
 
+    def test_cached_session_id_without_ems_is_not_offered(self):
+        from ja3requests.protocol.tls import TLS
+
+        cache = TLSSessionCache()
+        cache.put("example.com", 443, b"\xaa\xbb", b"m" * 48, 0x002F)
+        tls = TLS(None, session_cache=cache, server_host="example.com", server_port=443)
+        tls.set_payload(TlsConfig())
+        self.assertNotEqual(tls.body.session_id, b"\xaa\xbb")
+
     def test_tls_accepts_session_cache(self):
         import socket
         from ja3requests.protocol.tls import TLS
@@ -175,7 +187,9 @@ class TestTLSSessionIDInHandshake(unittest.TestCase):
         s1, s2 = socket.socketpair()
         try:
             cache = TLSSessionCache()
-            tls = TLS(s1, session_cache=cache, server_host="example.com", server_port=443)
+            tls = TLS(
+                s1, session_cache=cache, server_host="example.com", server_port=443
+            )
             self.assertIs(tls._session_cache, cache)
             self.assertEqual(tls._server_host, "example.com")
         finally:

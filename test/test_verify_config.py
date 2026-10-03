@@ -129,3 +129,65 @@ def test_secure_profile_discards_verified_legacy_pooled_connection():
     with pytest.raises(NewConnectionExpected):
         sock.new_conn()
     assert pool.discarded
+
+
+@pytest.mark.parametrize(
+    "destination", ["https://second.example/next", "http://first.example/next"]
+)
+def test_cross_origin_redirect_strips_credentials_and_keeps_timeout(
+    monkeypatch, destination
+):
+    headers = {
+        "X-Test": "1",
+        "Host": "first.example",
+        "Cookie": "private=1",
+        "Proxy-Authorization": "Basic proxy-secret",
+    }
+    captured = []
+    with Session(use_pooling=False) as session:
+        monkeypatch.setattr(
+            session,
+            "send",
+            lambda request, **kwargs: (
+                captured.append(request),
+                SimpleNamespace(status_code=200),
+            )[1],
+        )
+        session.get(
+            "https://first.example/start",
+            headers=headers,
+            auth=("alice", "secret"),
+            timeout=1.5,
+        )
+        session.resolve_redirects(destination)
+
+    assert "Authorization" not in headers
+    assert captured[0].headers["Authorization"].startswith("Basic ")
+    assert captured[1].timeout == 1.5
+    assert {name.lower() for name in captured[1].headers}.isdisjoint(
+        {"authorization", "proxy-authorization", "cookie", "host"}
+    )
+    assert captured[1].headers["X-Test"] == "1"
+
+
+def test_same_origin_redirect_preserves_auth_and_timeout(monkeypatch):
+    captured = []
+    with Session(use_pooling=False) as session:
+        monkeypatch.setattr(
+            session,
+            "send",
+            lambda request, **kwargs: (
+                captured.append(request),
+                SimpleNamespace(status_code=200),
+            )[1],
+        )
+        session.get(
+            "https://first.example/start",
+            headers={"X-Test": "1"},
+            auth=("alice", "secret"),
+            timeout=1.5,
+        )
+        session.resolve_redirects("/next")
+
+    assert captured[1].headers["Authorization"] == captured[0].headers["Authorization"]
+    assert captured[1].timeout == 1.5

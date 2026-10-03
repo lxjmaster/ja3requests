@@ -95,6 +95,7 @@ class PooledH2Connection(PooledConnection):
         super().__init__(conn, scheme, host, port, **kwargs)
         self.negotiated_protocol = "h2"
         self.h2_connection = None  # H2Connection instance
+        self.transport_owner = None
         self._active_streams = 0
         self._max_concurrent_streams = 100  # Conservative default
         self._goaway_received = False
@@ -151,6 +152,15 @@ class PooledH2Connection(PooledConnection):
             f"goaway={self._goaway_received}>"
         )
 
+    def close(self):
+        """Wake the reader thread before closing a multiplexed socket."""
+        if self.conn is not None:
+            try:
+                self.conn.shutdown(socket.SHUT_RDWR)
+            except (OSError, AttributeError):
+                pass
+        super().close()
+
 
 class ConnectionPool:
     """
@@ -186,6 +196,8 @@ class ConnectionPool:
         self._max_pool_size = max_pool_size
         self._total_connections = 0
         self._generation = object()
+        self._h2_connecting = set()
+        self._h2_condition = threading.Condition(self._lock)
 
     def __repr__(self) -> str:
         return f"<ConnectionPool connections={self._total_connections} pools={len(self._pools)}>"
@@ -195,7 +207,13 @@ class ConnectionPool:
         return (host.lower(), port, scheme.lower())
 
     def get_h2_connection(
-        self, host: str, port: int, scheme: str = "https"
+        self,
+        host: str,
+        port: int,
+        scheme: str = "https",
+        *,
+        policy_key=None,
+        verified_host=None,
     ) -> Optional[PooledH2Connection]:
         """
         Get an HTTP/2 connection with available stream capacity.
@@ -207,12 +225,18 @@ class ConnectionPool:
         """
         key = self._get_pool_key(host, port, scheme)
 
-        with self._lock:
+        with self._h2_condition:
             conns = self._h2_pools.get(key, [])
             # Prune dead/expired connections
             valid = []
             for c in conns:
-                if c.is_expired(self._idle_timeout) or not c.is_alive():
+                dead = (
+                    c.conn is None
+                    or getattr(c.h2_connection, "failed", False)
+                    or (c.h2_connection is None and not c.is_alive())
+                    or (c.active_streams == 0 and c.is_expired(self._idle_timeout))
+                )
+                if dead:
                     c.close()
                     self._total_connections -= 1
                     continue
@@ -221,9 +245,47 @@ class ConnectionPool:
 
             # Find connection with stream capacity
             for c in valid:
+                if (
+                    policy_key is not None
+                    and getattr(c.tls, '_pool_policy_key', None) != policy_key
+                ):
+                    continue
+                if verified_host is not None and (
+                    getattr(c.tls, '_cert_verified', False) is not True
+                    or getattr(c.tls, '_verified_hostname', None) != verified_host
+                ):
+                    continue
                 if c.acquire_stream():
                     return c
             return None
+
+    def get_h2_or_reserve(
+        self, host, port, policy_key, verified_host=None, *, timeout=None
+    ):
+        """Check out a stream or reserve the first connection handshake."""
+        key = (self._get_pool_key(host, port, "https"), policy_key)
+        deadline = time.monotonic() + (5.0 if timeout is None else timeout)
+        with self._h2_condition:
+            while True:
+                pooled = self.get_h2_connection(
+                    host, port, policy_key=policy_key, verified_host=verified_host
+                )
+                if pooled is not None:
+                    return pooled, None
+                if key not in self._h2_connecting:
+                    self._h2_connecting.add(key)
+                    return None, key
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("Timed out waiting for HTTP/2 connection")
+                self._h2_condition.wait(remaining)
+
+    def release_h2_reservation(self, key):
+        if key is None:
+            return
+        with self._h2_condition:
+            self._h2_connecting.discard(key)
+            self._h2_condition.notify_all()
 
     def put_h2_connection(
         self,
@@ -234,6 +296,8 @@ class ConnectionPool:
         *,
         tls: Any = None,
         h2_connection: Any = None,
+        transport_owner: Any = None,
+        acquire_initial: bool = False,
     ) -> Optional[PooledH2Connection]:
         """
         Register a new HTTP/2 connection in the pool.
@@ -243,7 +307,7 @@ class ConnectionPool:
         """
         key = self._get_pool_key(host, port, scheme)
 
-        with self._lock:
+        with self._h2_condition:
             if self._total_connections >= self._max_pool_size:
                 debug(f"Pool full ({self._total_connections}/{self._max_pool_size})")
                 return None
@@ -254,13 +318,40 @@ class ConnectionPool:
             pooled = PooledH2Connection(conn, scheme, host, port)
             pooled.tls = tls
             pooled.h2_connection = h2_connection
+            pooled.transport_owner = transport_owner
+            pooled._pool_generation = self._generation
+            if acquire_initial:
+                pooled.acquire_stream()
             self._h2_pools[key].append(pooled)
             self._total_connections += 1
+            self._h2_condition.notify_all()
             return pooled
 
     def release_h2_stream(self, pooled_conn: PooledH2Connection):
         """Release a stream on an H2 connection. Connection stays in pool."""
-        pooled_conn.release_stream()
+        with self._h2_condition:
+            pooled_conn.release_stream()
+            if pooled_conn.is_idle() and (
+                pooled_conn._goaway_received
+                or getattr(pooled_conn.h2_connection, "failed", False)
+            ):
+                self.discard_h2_connection(pooled_conn)
+            self._h2_condition.notify_all()
+
+    def discard_h2_connection(self, pooled_conn):
+        """Remove one multiplexed connection without affecting its peers."""
+        with self._h2_condition:
+            key = self._get_pool_key(
+                pooled_conn.host, pooled_conn.port, pooled_conn.scheme
+            )
+            conns = self._h2_pools.get(key, [])
+            if pooled_conn in conns:
+                conns.remove(pooled_conn)
+                self._total_connections -= 1
+                if not conns:
+                    self._h2_pools.pop(key, None)
+            pooled_conn.close()
+            self._h2_condition.notify_all()
 
     def get_connection(
         self, host: str, port: int, scheme: str = "https"
@@ -409,7 +500,7 @@ class ConnectionPool:
 
     def close_all(self):
         """Close all pooled connections"""
-        with self._lock:
+        with self._h2_condition:
             for pool in self._pools.values():
                 for pooled_conn in pool:
                     pooled_conn.close()
@@ -421,6 +512,8 @@ class ConnectionPool:
             self._h2_pools.clear()
             self._total_connections = 0
             self._generation = object()
+            self._h2_connecting.clear()
+            self._h2_condition.notify_all()
 
     def get_stats(self) -> Dict:
         """Get pool statistics"""

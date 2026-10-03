@@ -162,6 +162,8 @@ class ClientHello(HandShake):
             extension_list.append(ALPNExtension(self._alpn_protocols))
 
         if extension_list:
+            # RFC 8446 requires pre_shared_key to be the final ClientHello extension.
+            extension_list.sort(key=lambda ext: ext.extension_type == 0x0029)
             extensions_data = b"".join(ext.to_bytes() for ext in extension_list)
             self._extensions = struct.pack("!H", len(extensions_data)) + extensions_data
 

@@ -92,6 +92,16 @@ class TestClientCertParsing(unittest.TestCase):
 class TestClientCertBuilding(unittest.TestCase):
     """Test building client certificate message."""
 
+    def test_client_certificate_without_private_key_is_rejected(self):
+        from ja3requests.exceptions import TLSHandshakeError
+        from ja3requests.protocol.tls import TLS
+
+        tls = TLS(None)
+        tls._client_cert_requested = True
+        tls._client_cert_pem = b"client certificate"
+        with self.assertRaises(TLSHandshakeError):
+            tls._send_client_finishing_messages()
+
     def test_build_empty_certificate(self):
         from ja3requests.protocol.tls import TLS
 

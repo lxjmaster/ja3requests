@@ -6,8 +6,10 @@ import socket
 import threading
 import time
 import unittest
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from ja3requests import TlsConfig
 from ja3requests.pool import (
     ConnectionPool,
     PooledConnection,
@@ -15,6 +17,7 @@ from ja3requests.pool import (
     set_default_pool,
     _pool_lock,
 )
+from ja3requests.sockets.https import HttpsSocket
 
 
 def _make_mock_conn(alive=True):
@@ -250,6 +253,25 @@ class TestConnectionPool(unittest.TestCase):
         self.pool.put_connection("a.com", 80, "http", _make_mock_conn())
         result = self.pool.get_connection("a.com", 80, "https")
         self.assertIsNone(result)
+
+    def test_get_h2_connection_prunes_dead_unmanaged_socket(self):
+        self.pool.put_h2_connection(
+            "example.com", 443, "https", _make_mock_conn(alive=False)
+        )
+        self.assertIsNone(self.pool.get_h2_connection("example.com", 443))
+        self.assertEqual(self.pool.get_stats()["total_connections"], 0)
+
+    def test_h2_connect_failure_releases_reservation(self):
+        config = TlsConfig()
+        config.alpn_protocols = ["h2"]
+        context = SimpleNamespace(
+            destination_address="example.com", port=443, tls_config=config
+        )
+        sock = HttpsSocket(context, pool=self.pool)
+        with patch.object(sock, "_new_conn", side_effect=OSError("offline")):
+            with self.assertRaisesRegex(OSError, "offline"):
+                sock.new_conn()
+        self.assertFalse(self.pool._h2_connecting)
 
     # --- close_idle_connections ---
 

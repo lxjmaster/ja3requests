@@ -187,6 +187,9 @@ class Request:
         """
 
         headers = self.headers
+        if headers is None:
+            return None
+        headers = dict(headers)
         if not headers:
             return headers
 

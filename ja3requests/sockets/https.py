@@ -10,6 +10,7 @@ import hmac
 import os
 import socket
 import struct
+import threading
 import time
 
 from cryptography.hazmat.backends import default_backend
@@ -37,6 +38,9 @@ class HttpsSocket(BaseSocket):
         self._pool = pool
         self._pooled_conn = None  # Reference to pooled connection wrapper
         self._reused = False  # Whether connection was reused from pool
+        self._h2_pooled_conn = None
+        self._h2_reservation = None
+        self._h2_io_lock = threading.RLock()
 
     @staticmethod
     def _tls_policy_key(config, host):
@@ -49,6 +53,11 @@ class HttpsSocket(BaseSocket):
                 for suite in config.cipher_suites
             ),
             tuple(config.supported_groups or ()),
+            (
+                tuple(config.key_share_groups)
+                if getattr(config, 'key_share_groups', None) is not None
+                else None
+            ),
             tuple(config.signature_algorithms or ()),
             tuple(config.alpn_protocols or ()),
             tuple(
@@ -66,6 +75,8 @@ class HttpsSocket(BaseSocket):
             config.verify_cert,
             config.client_cert,
             config.client_key,
+            tuple((config.h2_settings or {}).items()),
+            config.h2_window_update,
         )
 
     def new_conn(self):
@@ -101,26 +112,38 @@ class HttpsSocket(BaseSocket):
                 self._reused = True
                 return self
 
+            if tls_config and 'h2' in (tls_config.alpn_protocols or ()):
+                h2_pooled, reservation = self._pool.get_h2_or_reserve(
+                    host,
+                    port,
+                    policy_key,
+                    verified_host=host if tls_config.verify_cert else None,
+                    timeout=getattr(self.context, 'connect_timeout', None),
+                )
+                if h2_pooled is not None:
+                    self.conn = h2_pooled.conn
+                    self.tls = h2_pooled.tls
+                    self._h2_pooled_conn = h2_pooled
+                    self._reused = True
+                    return self
+                self._h2_reservation = reservation
+
         # Create new connection
         debug(f"Connecting to {host}:{port}")
-        self.conn = self._new_conn(host, port)
-
-        # TLS handshake
-        handshake_timeout = getattr(self.context, 'connect_timeout', None)
-        session_cache = (
-            getattr(tls_config, 'session_cache', None) if tls_config else None
-        )
-        tls = TLS(
-            self.conn,
-            handshake_timeout=handshake_timeout,
-            session_cache=session_cache,
-            server_host=host,
-            server_port=port,
-        )
-        tls._pool_policy_key = policy_key
-
-        # Set JA3 parameters
         try:
+            self.conn = self._new_conn(host, port)
+            handshake_timeout = getattr(self.context, 'connect_timeout', None)
+            session_cache = (
+                getattr(tls_config, 'session_cache', None) if tls_config else None
+            )
+            tls = TLS(
+                self.conn,
+                handshake_timeout=handshake_timeout,
+                session_cache=session_cache,
+                server_host=host,
+                server_port=port,
+            )
+            tls._pool_policy_key = policy_key
             tls.set_payload(tls_config=tls_config)
             handshake_success = tls.handshake()
         except Exception:  # pylint: disable=broad-exception-caught
@@ -128,22 +151,39 @@ class HttpsSocket(BaseSocket):
             raise
 
         if not handshake_success:
-            self.conn.close()
+            self.close()
             raise ConnectionError(
                 "TLS handshake failed - server rejected the connection"
             )
 
         self.tls = tls
         self._reused = False
+        if getattr(tls, '_negotiated_protocol', None) != 'h2':
+            self._release_h2_reservation()
         debug("TLS handshake completed, ready for encrypted HTTP communication")
         return self
 
+    def _release_h2_reservation(self):
+        if self._pool and self._h2_reservation is not None:
+            self._pool.release_h2_reservation(self._h2_reservation)
+            self._h2_reservation = None
+
     def return_to_pool(self):
         """Return connection to pool for reuse"""
+        if self._h2_pooled_conn is not None:
+            pooled = self._h2_pooled_conn
+            self._pool.release_h2_stream(pooled)
+            if pooled.transport_owner is not self:
+                self.conn = None
+                self.tls = None
+                self._h2_pooled_conn = None
+            return
         if self._pool and self.conn and self.tls:
             if getattr(self.tls, '_negotiated_protocol', None) == 'h2':
-                self.close()
-                return
+                h2 = getattr(self.tls, '_h2_connection', None)
+                if h2 is None or h2._goaway_received:
+                    self.close()
+                    return
             host = self.context.destination_address
             port = self.context.port
 
@@ -164,6 +204,9 @@ class HttpsSocket(BaseSocket):
 
             if success:
                 debug(f"Returned connection to pool: {host}:{port}")
+                h2 = getattr(self.tls, '_h2_connection', None)
+                if h2 is not None:
+                    h2.set_transport(None, None)
                 self.conn = None
                 self.tls = None
                 self._pooled_conn = None
@@ -174,12 +217,20 @@ class HttpsSocket(BaseSocket):
     def close(self):
         """Close the connection"""
         try:
-            if self.conn:
+            if self._h2_pooled_conn is not None:
+                self._pool.discard_h2_connection(self._h2_pooled_conn)
+            elif self._pool and self._reused and self._pooled_conn:
+                self._pool.discard_connection(self._pooled_conn)
+            elif self.conn:
                 self.conn.close()
         except Exception:  # pylint: disable=broad-exception-caught
             pass
         self.conn = None
         self.tls = None
+        self._pooled_conn = None
+        self._h2_pooled_conn = None
+        self._reused = False
+        self._release_h2_reservation()
 
     def send(self):
         """
@@ -231,16 +282,32 @@ class HttpsSocket(BaseSocket):
         from ja3requests.protocol.h2.connection import (
             H2Connection,
         )  # pylint: disable=import-outside-toplevel
+        from ja3requests.protocol.h2.multiplex import (
+            H2MultiplexConnection,
+        )  # pylint: disable=import-outside-toplevel
 
+        h2 = None
+        stream_id = None
+        multiplexed = self._pool is not None
         try:
             read_timeout = getattr(self.context, 'read_timeout', None)
-            self.conn.settimeout(read_timeout if read_timeout is not None else 15.0)
+            self.conn.settimeout(
+                None
+                if multiplexed
+                else (read_timeout if read_timeout is not None else 15.0)
+            )
 
             tls = self.tls
 
             def h2_send(data):
-                encrypted = self._encrypt_application_data(data)
-                self.conn.sendall(encrypted)
+                with self._h2_io_lock:
+                    # HTTP/2 frames include a nine-byte header and may exceed
+                    # one TLS plaintext record even at the default frame size.
+                    for offset in range(0, len(data), 16384):
+                        encrypted = self._encrypt_application_data(
+                            data[offset : offset + 16384]
+                        )
+                        self.conn.sendall(encrypted)
 
             def h2_recv(n):
                 return self._decrypt_single_record() or b""
@@ -254,13 +321,42 @@ class HttpsSocket(BaseSocket):
                 getattr(tls_config, 'h2_window_update', None) if tls_config else None
             )
 
-            h2 = H2Connection(h2_send, h2_recv, settings=h2_settings)
-            h2.initiate(window_update_increment=int(h2_window) if h2_window else None)
+            h2 = getattr(tls, '_h2_connection', None)
+            if h2 is None:
+                connection_type = H2MultiplexConnection if multiplexed else H2Connection
+                h2 = connection_type(h2_send, h2_recv, settings=h2_settings)
+                h2.initiate(
+                    window_update_increment=int(h2_window) if h2_window else None
+                )
+                tls._h2_connection = h2
+                if multiplexed:
+                    pooled = self._pool.put_h2_connection(
+                        self.context.destination_address,
+                        self.context.port,
+                        "https",
+                        self.conn,
+                        tls=tls,
+                        h2_connection=h2,
+                        transport_owner=self,
+                        acquire_initial=True,
+                    )
+                    if pooled is not None:
+                        self._h2_pooled_conn = pooled
+                        h2.set_pooled_connection(pooled)
+                    self._release_h2_reservation()
+            elif not multiplexed:
+                h2.set_transport(h2_send, h2_recv)
 
             # Parse HTTP request to extract method, path, headers
             method = getattr(self.context, 'method', 'GET')
             host = getattr(self.context, 'destination_address', '')
             path = getattr(self.context, 'path', '/')
+
+            # Build the body through the same context encoder used by HTTP/1.1.
+            _ = self.context.message
+            body = getattr(self.context, 'body', None)
+            if isinstance(body, str):
+                body = body.encode('utf-8')
 
             # Build headers from context
             req_headers = []
@@ -269,22 +365,26 @@ class HttpsSocket(BaseSocket):
                 for k, v in ctx_headers.items():
                     req_headers.append((k, v))
 
-            # Extract body
-            body = getattr(self.context, '_data', None)
-            if isinstance(body, str):
-                body = body.encode('utf-8')
-
-            stream_id = h2.send_request(
-                method, host, path, headers=req_headers, body=body
-            )
-            resp_headers, resp_body = h2.receive_response(stream_id)
+            if multiplexed:
+                stream_id = h2.send_request(
+                    method,
+                    host,
+                    path,
+                    headers=req_headers,
+                    body=body,
+                    timeout=read_timeout,
+                )
+                resp_headers, resp_body = h2.receive_response(
+                    stream_id, timeout=read_timeout
+                )
+            else:
+                stream_id = h2.send_request(
+                    method, host, path, headers=req_headers, body=body
+                )
+                resp_headers, resp_body = h2.receive_response(stream_id)
 
             # Convert H2 response to HTTP/1.1-like format for Response class compatibility
-            status = "200"
-            for name, value in resp_headers:
-                if name == ":status":
-                    status = value
-                    break
+            status = next(value for name, value in resp_headers if name == ":status")
 
             http_response = f"HTTP/1.1 {status} OK\r\n"
             for name, value in resp_headers:
@@ -299,9 +399,16 @@ class HttpsSocket(BaseSocket):
 
         except Exception as e:  # pylint: disable=broad-exception-caught
             debug(f"H2 communication failed: {e}")
+            if multiplexed and self._h2_pooled_conn is not None and not h2.failed:
+                if stream_id is not None:
+                    h2.cancel_stream(stream_id)
+                self.return_to_pool()
+            else:
+                self.close()
             raise ConnectionError(f"HTTP/2 communication failed: {e}") from e
         finally:
-            self.conn.settimeout(None)
+            if self.conn is not None and not multiplexed:
+                self.conn.settimeout(None)
 
     def _decrypt_single_record(self):
         """Read and decrypt a single TLS record, return plaintext."""
@@ -318,9 +425,11 @@ class HttpsSocket(BaseSocket):
                 raise TLSDecryptionError("Truncated TLS record")
             if getattr(self.tls, '_is_tls13', False):
                 record_type, payload = self._decrypt_tls13_record(header, payload)
-                if record_type == 0x16:  # NewSessionTicket, not HTTP/2 EOF
+                if record_type == 0x16:
+                    self._handle_tls13_post_handshake(payload)
                     continue
                 if record_type == 0x17:
+                    self._check_tls13_handshake_complete()
                     if not payload:
                         continue
                     return payload
@@ -337,6 +446,34 @@ class HttpsSocket(BaseSocket):
             return self.tls._tls13_server_rp.decrypt(payload, header)
         except Exception as error:  # pylint: disable=broad-exception-caught
             raise TLSDecryptionError("TLS 1.3 record authentication failed") from error
+
+    def _check_tls13_handshake_complete(self):
+        handshake = getattr(self.tls, '_tls13_handshake', None)
+        if handshake and handshake._pending_post_handshake:
+            raise TLSDecryptionError("Incomplete TLS 1.3 post-handshake message")
+
+    def _handle_tls13_post_handshake(self, plaintext):
+        handshake = getattr(self.tls, '_tls13_handshake', None)
+        if handshake is None:
+            raise TLSDecryptionError("TLS 1.3 post-handshake state is unavailable")
+        with self._h2_io_lock:
+            try:
+                replies = handshake.process_post_handshake(plaintext)
+            except ValueError as error:
+                raise TLSDecryptionError(
+                    "Invalid TLS 1.3 post-handshake message"
+                ) from error
+            for record in replies:
+                self.conn.sendall(record)
+
+    def send_key_update(self, request_update=False):
+        """Send a TLS 1.3 KeyUpdate on the current connection."""
+        tls = getattr(self, 'tls', None)
+        handshake = getattr(tls, '_tls13_handshake', None)
+        if not getattr(tls, '_is_tls13', False) or handshake is None:
+            raise ValueError("TLS 1.3 application keys are not available")
+        with self._h2_io_lock:
+            self.conn.sendall(handshake.build_key_update(request_update))
 
     def _handle_encrypted_response(
         self,
@@ -371,6 +508,8 @@ class HttpsSocket(BaseSocket):
                 )
 
             if record_type == 0x17:  # Application data
+                if is_tls13:
+                    self._check_tls13_handshake_complete()
                 decrypted_data = (
                     record_data
                     if is_tls13
@@ -417,8 +556,9 @@ class HttpsSocket(BaseSocket):
                 if len(record_data) >= 2 and record_data[1] == 0:
                     break
 
-            elif record_type == 0x16:  # Handshake (e.g. NewSessionTicket)
-                debug("Received post-handshake message, skipping")
+            elif record_type == 0x16:  # Post-handshake message
+                if is_tls13:
+                    self._handle_tls13_post_handshake(record_data)
                 continue
             else:
                 debug(f"Unexpected TLS record type: 0x{record_type:02X}")
@@ -432,6 +572,16 @@ class HttpsSocket(BaseSocket):
     def _recv_exact(self, length):
         """Receive exactly 'length' bytes from the connection"""
         data = b""
+        tls = getattr(self, 'tls', None)
+        pending_attr = (
+            '_tls13_pending_record_data'
+            if getattr(tls, '_is_tls13', False)
+            else '_tls12_pending_record_data'
+        )
+        pending = getattr(tls, pending_attr, b'')
+        if pending:
+            data = pending[:length]
+            setattr(tls, pending_attr, pending[length:])
         while len(data) < length:
             try:
                 chunk = self.conn.recv(length - len(data))

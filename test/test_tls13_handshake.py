@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 from ja3requests import TlsConfig
 from ja3requests.exceptions import TLSHandshakeError
-from ja3requests.protocol.tls import TLS
+from ja3requests.protocol.tls import TLS, HELLO_RETRY_REQUEST_RANDOM
 from ja3requests.protocol.tls.tls13 import (
     TLS13Handshake,
     TLS13KeySchedule,
@@ -25,6 +25,7 @@ from ja3requests.sockets.https import HttpsSocket
 # ============================================================================
 # TLS 1.3 Handshake Tests
 # ============================================================================
+
 
 class TestTLS13HandshakeInit(unittest.TestCase):
     def test_create_handshake(self):
@@ -76,10 +77,118 @@ class TestTLS13ClientShares(unittest.TestCase):
         self.assertTrue(connection.closed)
 
 
+class TestTLS13HelloRetryRequest(unittest.TestCase):
+    @staticmethod
+    def retry(group=GROUP_SECP256R1, suite=0x1301, cookie=None, version=b"\x03\x04"):
+        extensions = struct.pack("!HH", 0x002B, 2) + version
+        if group is not None:
+            extensions += struct.pack("!HHH", 0x0033, 2, group)
+        if cookie is not None:
+            value = struct.pack("!H", len(cookie)) + cookie
+            extensions += struct.pack("!HH", 0x002C, len(value)) + value
+        return (
+            b"\x03\x03"
+            + HELLO_RETRY_REQUEST_RANDOM
+            + b"\x00"
+            + struct.pack("!H", suite)
+            + b"\x00"
+            + struct.pack("!H", len(extensions))
+            + extensions
+        )
+
+    @staticmethod
+    def client(connection=None):
+        config = TlsConfig.secure()
+        config.key_share_groups = [GROUP_X25519]
+        tls = TLS(connection)
+        tls.set_payload(config)
+        tls._handshake_messages = tls.body.handshake_message
+        return tls
+
+    def test_retry_preserves_client_hello_and_hashes_first_hello(self):
+        sent = []
+        tls = self.client(SimpleNamespace(sendall=sent.append))
+        original = tls.body
+        first = tls._handshake_messages
+        retry = self.retry(cookie=b"opaque-cookie")
+
+        suite, group, cookie = tls._parse_hello_retry_request(retry)
+        tls._send_retried_client_hello(retry, suite, group, cookie)
+
+        self.assertEqual(tls.body.random, original.random)
+        self.assertEqual(tls.body.cipher_suites, original.cipher_suites)
+        self.assertEqual(tls.body.session_id, original.session_id)
+        extensions = {ext.extension_type: ext for ext in tls.body._custom_extensions}
+        self.assertEqual(extensions[0x0033].key_shares[0][0], GROUP_SECP256R1)
+        self.assertEqual(extensions[0x002C].encode(), b"\x00\x0dopaque-cookie")
+        digest = hashlib.sha256(first).digest()
+        expected = b"\xfe\x00\x00\x20" + digest
+        expected += b"\x02" + len(retry).to_bytes(3, "big") + retry
+        expected += tls.body.handshake_message
+        self.assertEqual(tls._handshake_messages, expected)
+        self.assertEqual(sent, [tls.body.message])
+
+    def test_rejects_invalid_retry_parameters(self):
+        tls = self.client()
+        for label, retry in (
+            ("offered group", self.retry(group=GROUP_X25519)),
+            ("unsupported group", self.retry(group=24)),
+            ("unoffered suite", self.retry(suite=0x1304)),
+            ("wrong version", self.retry(version=b"\x03\x03")),
+            ("no change", self.retry(group=None)),
+        ):
+            with self.subTest(label=label):
+                with self.assertRaises(TLSHandshakeError):
+                    tls._parse_hello_retry_request(retry)
+
+    def test_cookie_only_retry_keeps_initial_share(self):
+        sent = []
+        tls = self.client(SimpleNamespace(sendall=sent.append))
+        first_key = tls._tls13_private_keys[GROUP_X25519]
+        retry = self.retry(group=None, cookie=b"cookie")
+
+        suite, group, cookie = tls._parse_hello_retry_request(retry)
+        self.assertIsNone(group)
+        tls._send_retried_client_hello(retry, suite, group, cookie)
+
+        self.assertIs(tls._tls13_private_keys[GROUP_X25519], first_key)
+        extensions = {ext.extension_type: ext for ext in tls.body._custom_extensions}
+        self.assertEqual(extensions[0x0033].key_shares[0][0], GROUP_X25519)
+        self.assertEqual(extensions[0x002C].encode(), b"\x00\x06cookie")
+        self.assertEqual(sent, [tls.body.message])
+
+    def test_second_retry_is_rejected(self):
+        retry = self.retry()
+        message = b"\x02" + len(retry).to_bytes(3, "big") + retry
+        record = b"\x16\x03\x03" + len(message).to_bytes(2, "big") + message
+
+        class Connection:
+            def __init__(self):
+                self.buffer = record + record
+                self.sent = []
+
+            def sendall(self, data):
+                self.sent.append(data)
+
+            def recv(self, size):
+                data, self.buffer = self.buffer[:size], self.buffer[size:]
+                return data
+
+            def settimeout(self, timeout):
+                pass
+
+        connection = Connection()
+        tls = self.client(connection)
+        self.assertFalse(tls.handshake())
+        self.assertEqual(len(connection.sent), 2)
+
+
 class TestTLS13ServerHelloParsing(unittest.TestCase):
     """Test process_server_hello with synthetic ServerHello data."""
 
-    def _build_server_hello(self, cipher_suite=0x1301, group=GROUP_X25519, pub_key=None):
+    def _build_server_hello(
+        self, cipher_suite=0x1301, group=GROUP_X25519, pub_key=None
+    ):
         """Build a synthetic ServerHello with key_share extension."""
         if pub_key is None:
             _, pub_key = TLS13KeyExchange.generate_x25519_keypair()
@@ -192,7 +301,7 @@ class TestTLS13EncryptedHandshake(unittest.TestCase):
 
         # Build and process ServerHello
         version = b"\x03\x03"
-        sh = (version + os.urandom(32) + b"\x00" + b"\x13\x01" + b"\x00")
+        sh = version + os.urandom(32) + b"\x00" + b"\x13\x01" + b"\x00"
         key_share_data = struct.pack("!HH", GROUP_X25519, len(server_pub)) + server_pub
         key_share_ext = struct.pack("!HH", 0x0033, len(key_share_data)) + key_share_data
         ext_block = struct.pack("!H", len(key_share_ext)) + key_share_ext
@@ -244,7 +353,7 @@ class TestTLS13DecryptHandshakeRecord(unittest.TestCase):
         server_priv, server_pub = TLS13KeyExchange.generate_x25519_keypair()
 
         hs = TLS13Handshake(None, client_priv, GROUP_X25519, b"ch")
-        sh = (b"\x03\x03" + os.urandom(32) + b"\x00" + b"\x13\x01" + b"\x00")
+        sh = b"\x03\x03" + os.urandom(32) + b"\x00" + b"\x13\x01" + b"\x00"
         ks = struct.pack("!HH", GROUP_X25519, 32) + server_pub
         ext = struct.pack("!HH", 0x0033, len(ks)) + ks
         hs.process_server_hello(sh + struct.pack("!H", len(ext)) + ext)
@@ -274,6 +383,7 @@ class TestTLS13DecryptHandshakeRecord(unittest.TestCase):
 # NewSessionTicket Tests
 # ============================================================================
 
+
 class TestNewSessionTicket(unittest.TestCase):
     def test_parse_new_session_ticket(self):
         import socket
@@ -283,18 +393,20 @@ class TestNewSessionTicket(unittest.TestCase):
         s1, s2 = socket.socketpair()
         try:
             cache = TLSSessionCache()
-            tls = TLS(s1, session_cache=cache, server_host="ticket.example.com", server_port=443)
+            tls = TLS(
+                s1,
+                session_cache=cache,
+                server_host="ticket.example.com",
+                server_port=443,
+            )
             tls._master_secret = os.urandom(48)
             tls._selected_cipher_suite = 0x002F
 
             # Build NewSessionTicket: lifetime(4) + ticket_len(2) + ticket
             ticket_data = os.urandom(128)
             nst = struct.pack("!IH", 3600, len(ticket_data)) + ticket_data
-            tls._parse_new_session_ticket(nst)
-
-            entry = cache.get("ticket.example.com", 443)
-            self.assertIsNotNone(entry)
-            self.assertEqual(entry.session_id, ticket_data)
+            self.assertEqual(tls._parse_new_session_ticket(nst), (3600, ticket_data))
+            self.assertIsNone(cache.get_tls12_ticket("ticket.example.com", 443))
         finally:
             s1.close()
             s2.close()
@@ -309,8 +421,9 @@ class TestNewSessionTicket(unittest.TestCase):
             cache = TLSSessionCache()
             tls = TLS(s1, session_cache=cache, server_host="t.com", server_port=443)
             tls._master_secret = os.urandom(48)
-            tls._parse_new_session_ticket(b"\x00")  # Too short
-            self.assertIsNone(cache.get("t.com", 443))
+            with self.assertRaises(TLSHandshakeError):
+                tls._parse_new_session_ticket(b"\x00")
+            self.assertIsNone(cache.get_tls12_ticket("t.com", 443))
         finally:
             s1.close()
             s2.close()
@@ -319,6 +432,7 @@ class TestNewSessionTicket(unittest.TestCase):
 # ============================================================================
 # IDN Punycode Tests
 # ============================================================================
+
 
 class TestSNIPunycode(unittest.TestCase):
     def test_ascii_domain_unchanged(self):

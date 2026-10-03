@@ -10,8 +10,7 @@ import gzip
 import zlib
 import brotli
 from ja3requests.base import BaseResponse
-from ja3requests.cookies import Ja3RequestsCookieJar
-from ja3requests.utils import add_dict_to_cookiejar
+from ja3requests.cookies import Ja3RequestsCookieJar, extract_cookies_to_jar
 from ja3requests.const import MAX_LINE, MAX_HEADERS
 from ja3requests.exceptions import InvalidStatusLine, InvalidResponseHeaders, HTTPError
 from ja3requests.protocol.tls.debug import debug
@@ -247,20 +246,8 @@ class Response(BaseResponse):
         """
 
         cookies = Ja3RequestsCookieJar()
-        if self.response.raw_headers:
-            for header in self.response.raw_headers:
-                set_cookie = header.get("Set-Cookie", None)
-                if set_cookie is None:
-                    set_cookie = header.get("set-cookie", None)
-
-                if set_cookie:
-                    cookie_item = set_cookie.split(";")
-                    if len(cookie_item) > 0:
-                        cookie = cookie_item[0].split("=")
-                        if len(cookie) == 2:
-                            cookies = add_dict_to_cookiejar(
-                                cookies, {cookie[0].strip(): cookie[1].strip()}
-                            )
+        if self.request is not None and self.response is not None:
+            extract_cookies_to_jar(cookies, self.request, self)
 
         return cookies
 

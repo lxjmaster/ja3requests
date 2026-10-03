@@ -11,8 +11,15 @@ import os
 import struct
 
 from cryptography import x509
-from cryptography.hazmat.primitives.asymmetric import x25519, ec
-from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import (
+    x25519,
+    ec,
+    rsa,
+    ed25519,
+    ed448,
+    padding,
+)
+from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM, ChaCha20Poly1305
 from cryptography.hazmat.backends import default_backend
 
@@ -283,14 +290,20 @@ class TLS13RecordProtection:
     """TLS 1.3 record layer encryption/decryption using AES-GCM."""
 
     def __init__(self, key, iv, cipher="aes-gcm"):
+        self._cipher_name = cipher
+        self.update_keys(key, iv)
+
+    def update_keys(self, key, iv):
+        """Start a new traffic-key generation with a fresh record sequence."""
+        aead = (
+            ChaCha20Poly1305(key)
+            if self._cipher_name == "chacha20-poly1305"
+            else AESGCM(key)
+        )
         self.key = key
         self.iv = iv
         self.seq_num = 0
-        self._cipher_name = cipher
-        if cipher == "chacha20-poly1305":
-            self._aead = ChaCha20Poly1305(key)
-        else:
-            self._aead = AESGCM(key)
+        self._aead = aead
 
     def _compute_nonce(self):
         """Compute per-record nonce: IV XOR sequence number."""
@@ -369,7 +382,16 @@ class TLS13Handshake:
     """
 
     def __init__(
-        self, conn, private_key, key_share_group, client_hello_bytes, private_keys=None
+        self,
+        conn,
+        private_key,
+        key_share_group,
+        client_hello_bytes,
+        private_keys=None,
+        offered_psk=None,
+        post_handshake_auth=False,
+        client_cert_pem=None,
+        client_key_pem=None,
     ):
         """
         :param conn: Raw TCP socket
@@ -401,6 +423,18 @@ class TLS13Handshake:
         self._certificate_verifier = None
         self._server_public_key = None
         self._certificate_verify_received = False
+        self._encrypted_extensions_received = False
+        self._client_certificate_requested = False
+        self._client_signature_algorithms = ()
+        self._pending_post_handshake = b""
+        self._offered_psk = offered_psk
+        self._resumed = False
+        self._resumption_master_secret = None
+        self._ticket_callback = None
+        self._post_handshake_auth = post_handshake_auth
+        self._client_cert_pem = client_cert_pem
+        self._client_key_pem = client_key_pem
+        self._post_auth_contexts = set()
 
     def process_server_hello(self, server_hello_data):
         """
@@ -448,10 +482,13 @@ class TLS13Handshake:
         # Parse extensions to find key_share
         server_public_key = None
         server_group = None
+        selected_identity = None
         if offset + 2 <= len(server_hello_data):
             ext_length = struct.unpack("!H", server_hello_data[offset : offset + 2])[0]
             offset += 2
             ext_end = offset + ext_length
+            if ext_end != len(server_hello_data):
+                return False
 
             while offset + 4 <= ext_end:
                 ext_type = struct.unpack("!H", server_hello_data[offset : offset + 2])[
@@ -463,12 +500,34 @@ class TLS13Handshake:
                 offset += 4
                 ext_data = server_hello_data[offset : offset + ext_len]
                 offset += ext_len
+                if offset > ext_end:
+                    return False
 
                 if ext_type == 0x0033:  # key_share
                     if len(ext_data) >= 4:
                         server_group = struct.unpack("!H", ext_data[:2])[0]
                         key_len = struct.unpack("!H", ext_data[2:4])[0]
+                        if len(ext_data) != 4 + key_len:
+                            return False
                         server_public_key = ext_data[4 : 4 + key_len]
+                elif ext_type == 0x0029:
+                    if len(ext_data) != 2 or selected_identity is not None:
+                        return False
+                    selected_identity = int.from_bytes(ext_data, "big")
+            if offset != ext_end:
+                return False
+
+        if selected_identity is not None:
+            if (
+                selected_identity != 0
+                or self._offered_psk is None
+                or TLS13_CIPHER_PARAMS.get(
+                    self._offered_psk.cipher_suite, (None, None)
+                )[1]
+                != self._hash_algo
+            ):
+                return False
+            self._resumed = True
 
         if server_public_key is None:
             debug("TLS 1.3: No key_share in ServerHello")
@@ -497,7 +556,9 @@ class TLS13Handshake:
 
         # Derive handshake traffic keys
         self._key_schedule = TLS13KeySchedule(self._hash_algo)
-        self._key_schedule.compute_early_secret()
+        self._key_schedule.compute_early_secret(
+            self._offered_psk.psk if self._resumed else None
+        )
         self._key_schedule.compute_handshake_secret(shared_secret, self._transcript)
 
         # Create record protection for handshake phase
@@ -538,12 +599,19 @@ class TLS13Handshake:
                 break
             message = self._pending_handshake[: 4 + msg_len]
             msg_data = message[4:]
-            if msg_type == 11:
+            if msg_type == 24:
+                raise ValueError("TLS 1.3 KeyUpdate before Finished")
+            if self._resumed and msg_type in (11, 15):
+                raise ValueError("TLS 1.3 certificate in resumed handshake")
+            if msg_type == 13:
+                self._parse_certificate_request(msg_data)
+            elif msg_type == 11:
                 self._parse_certificate(msg_data)
             elif msg_type == 15:
                 self._verify_certificate_signature(msg_data)
             elif (
                 msg_type == 20
+                and not self._resumed
                 and self._certificate_verifier is not None
                 and not self._certificate_verify_received
             ):
@@ -552,6 +620,7 @@ class TLS13Handshake:
                 raise ValueError("TLS 1.3: invalid server Finished")
             if msg_type == 8:
                 self._parse_encrypted_extensions(msg_data)
+                self._encrypted_extensions_received = True
             self._transcript += message
             self._pending_handshake = self._pending_handshake[4 + msg_len :]
             if msg_type == 20:
@@ -559,6 +628,156 @@ class TLS13Handshake:
             messages.append((msg_type, msg_data))
             debug(f"TLS 1.3: Parsed handshake message type={msg_type} len={msg_len}")
         return messages
+
+    def _parse_certificate_request(self, data):
+        """Validate a main-handshake client authentication request."""
+        if (
+            self._resumed
+            or not self._encrypted_extensions_received
+            or self._client_certificate_requested
+            or self._server_public_key is not None
+            or self._server_finished_transcript is not None
+        ):
+            raise ValueError("TLS 1.3: invalid CertificateRequest")
+        context, algorithms = self._decode_certificate_request(data)
+        if context:
+            raise ValueError("TLS 1.3: invalid CertificateRequest context")
+        self._client_signature_algorithms = algorithms
+        self._client_certificate_requested = True
+
+    @staticmethod
+    def _decode_certificate_request(data):
+        """Decode the request context and accepted signature schemes."""
+        if not data:
+            raise ValueError("TLS 1.3: invalid CertificateRequest")
+        context_end = 1 + data[0]
+        if context_end + 2 > len(data):
+            raise ValueError("TLS 1.3: invalid CertificateRequest context")
+        context = data[1:context_end]
+        extension_length = int.from_bytes(data[context_end : context_end + 2], "big")
+        if extension_length != len(data) - context_end - 2:
+            raise ValueError("TLS 1.3: invalid CertificateRequest extensions")
+        offset = context_end + 2
+        extensions = {}
+        while offset < len(data):
+            if offset + 4 > len(data):
+                raise ValueError("TLS 1.3: truncated CertificateRequest extension")
+            kind, size = struct.unpack("!HH", data[offset : offset + 4])
+            offset += 4
+            if kind in extensions or offset + size > len(data):
+                raise ValueError("TLS 1.3: invalid CertificateRequest extension")
+            extensions[kind] = data[offset : offset + size]
+            offset += size
+        algorithms = extensions.get(0x000D)
+        if (
+            algorithms is None
+            or len(algorithms) < 4
+            or int.from_bytes(algorithms[:2], "big") != len(algorithms) - 2
+            or (len(algorithms) - 2) % 2
+        ):
+            raise ValueError("TLS 1.3: missing client signature algorithms")
+        schemes = tuple(
+            scheme[0] for scheme in struct.iter_unpack("!H", algorithms[2:])
+        )
+        return context, schemes
+
+    def build_client_authentication(self, cert_pem=None, key_pem=None):
+        """Encrypt client Certificate and CertificateVerify before Finished."""
+        if not self._client_certificate_requested:
+            return b""
+        records, self._transcript = self._build_client_certificate_records(
+            cert_pem,
+            key_pem,
+            b"",
+            self._client_signature_algorithms,
+            self._transcript,
+            self._client_handshake_rp,
+        )
+        return records
+
+    def _build_client_certificate_records(
+        self, cert_pem, key_pem, context, schemes, transcript, protection
+    ):
+        """Build certificate proof under the requested traffic keys."""
+        certificates = []
+        key = None
+        if cert_pem:
+            if not key_pem:
+                raise ValueError("TLS 1.3 client certificate requires a private key")
+            certificates = x509.load_pem_x509_certificates(cert_pem)
+            if not certificates:
+                raise ValueError("TLS 1.3 client certificate is empty")
+            key = serialization.load_pem_private_key(key_pem, password=None)
+            if key.public_key().public_bytes(
+                serialization.Encoding.DER,
+                serialization.PublicFormat.SubjectPublicKeyInfo,
+            ) != certificates[0].public_key().public_bytes(
+                serialization.Encoding.DER,
+                serialization.PublicFormat.SubjectPublicKeyInfo,
+            ):
+                raise ValueError("TLS 1.3 client certificate key mismatch")
+
+        entries = b"".join(
+            len(der).to_bytes(3, "big") + der + b"\x00\x00"
+            for der in (
+                cert.public_bytes(serialization.Encoding.DER) for cert in certificates
+            )
+        )
+        body = (
+            bytes([len(context)]) + context + len(entries).to_bytes(3, "big") + entries
+        )
+        certificate = b"\x0b" + len(body).to_bytes(3, "big") + body
+        records = self._encrypt_client_handshake(certificate, protection)
+        transcript += certificate
+
+        if key is not None:
+            signed = (
+                b" " * 64
+                + b"TLS 1.3, client CertificateVerify\x00"
+                + self._hash_algo(transcript).digest()
+            )
+            scheme, signature = self._sign_client_certificate(key, schemes, signed)
+            verify_body = struct.pack("!HH", scheme, len(signature)) + signature
+            verify = b"\x0f" + len(verify_body).to_bytes(3, "big") + verify_body
+            records += self._encrypt_client_handshake(verify, protection)
+            transcript += verify
+        return records, transcript
+
+    @staticmethod
+    def _encrypt_client_handshake(message, protection):
+        return b"".join(
+            protection.encrypt(0x16, message[offset : offset + 16384])
+            for offset in range(0, len(message), 16384)
+        )
+
+    @staticmethod
+    def _sign_client_certificate(key, algorithms, data):
+        digests = {0x0804: hashes.SHA256, 0x0805: hashes.SHA384, 0x0806: hashes.SHA512}
+        curves = {0x0403: "secp256r1", 0x0503: "secp384r1", 0x0603: "secp521r1"}
+        for scheme in algorithms:
+            if isinstance(key, rsa.RSAPrivateKey) and scheme in digests:
+                digest = digests[scheme]()
+                return scheme, key.sign(
+                    data,
+                    padding.PSS(
+                        mgf=padding.MGF1(digest), salt_length=digest.digest_size
+                    ),
+                    digest,
+                )
+            if isinstance(key, ec.EllipticCurvePrivateKey) and (
+                key.curve.name == curves.get(scheme)
+            ):
+                digest = {
+                    0x0403: hashes.SHA256,
+                    0x0503: hashes.SHA384,
+                    0x0603: hashes.SHA512,
+                }[scheme]()
+                return scheme, key.sign(data, ec.ECDSA(digest))
+            if scheme == 0x0807 and isinstance(key, ed25519.Ed25519PrivateKey):
+                return scheme, key.sign(data)
+            if scheme == 0x0808 and isinstance(key, ed448.Ed448PrivateKey):
+                return scheme, key.sign(data)
+        raise ValueError("TLS 1.3: no supported client certificate signature")
 
     def _parse_certificate(self, data):
         """Convert TLS 1.3 Certificate entries for the existing verifier."""
@@ -678,6 +897,12 @@ class TLS13Handshake:
         # even when build_client_finished() has already extended the transcript.
         transcript = self._server_finished_transcript or self._transcript
         self._key_schedule.compute_master_secret(transcript)
+        self._resumption_master_secret = HKDF.derive_secret(
+            self._key_schedule.master_secret,
+            "res master",
+            self._transcript,
+            self._hash_algo,
+        )
 
         s_key, s_iv = self._key_schedule.derive_traffic_keys(
             self._key_schedule.server_application_traffic_secret, self._key_length
@@ -691,3 +916,117 @@ class TLS13Handshake:
 
         debug("TLS 1.3: Application traffic keys derived")
         return self._client_app_rp, self._server_app_rp
+
+    def _update_application_keys(self, sender):
+        """Advance one direction's application traffic secret and record keys."""
+        if self._key_schedule is None:
+            raise ValueError("TLS 1.3 application keys are not available")
+        attribute = f"{sender}_application_traffic_secret"
+        secret = getattr(self._key_schedule, attribute)
+        protection = getattr(self, f"_{sender}_app_rp")
+        if secret is None or protection is None:
+            raise ValueError("TLS 1.3 application keys are not available")
+        next_secret = HKDF.expand_label(
+            secret, "traffic upd", b"", self._key_schedule.hash_len, self._hash_algo
+        )
+        key, iv = self._key_schedule.derive_traffic_keys(next_secret, self._key_length)
+        protection.update_keys(key, iv)
+        setattr(self._key_schedule, attribute, next_secret)
+
+    def build_key_update(self, request_update=False):
+        """Encrypt KeyUpdate with the old client key, then rotate that key."""
+        if self._client_app_rp is None:
+            raise ValueError("TLS 1.3 application keys are not available")
+        message = b"\x18\x00\x00\x01" + bytes([int(bool(request_update))])
+        record = self._client_app_rp.encrypt(0x16, message)
+        self._update_application_keys("client")
+        return record
+
+    def _build_post_handshake_auth(self, data):
+        """Respond using the current application secret and request transcript."""
+        if (
+            not self._post_handshake_auth
+            or self._client_app_rp is None
+            or self._key_schedule is None
+        ):
+            raise ValueError("Unexpected TLS 1.3 post-handshake CertificateRequest")
+        context, schemes = self._decode_certificate_request(data)
+        if not context or context in self._post_auth_contexts:
+            raise ValueError("Invalid TLS 1.3 post-handshake certificate context")
+        request = b"\x0d" + len(data).to_bytes(3, "big") + data
+        records, transcript = self._build_client_certificate_records(
+            self._client_cert_pem,
+            self._client_key_pem,
+            context,
+            schemes,
+            self._transcript + request,
+            self._client_app_rp,
+        )
+        finished_key = self._key_schedule.compute_finished_key(
+            self._key_schedule.client_application_traffic_secret
+        )
+        verify_data = self._key_schedule.compute_finished_verify_data(
+            finished_key, transcript
+        )
+        finished = b"\x14" + len(verify_data).to_bytes(3, "big") + verify_data
+        records += self._encrypt_client_handshake(finished, self._client_app_rp)
+        self._post_auth_contexts.add(context)
+        return records
+
+    def process_post_handshake(self, plaintext):
+        """Consume tickets, KeyUpdate, and requested client authentication."""
+        self._pending_post_handshake += plaintext
+        replies = []
+        while len(self._pending_post_handshake) >= 4:
+            msg_type = self._pending_post_handshake[0]
+            length = int.from_bytes(self._pending_post_handshake[1:4], "big")
+            if length > 1 << 18:
+                raise ValueError("TLS 1.3 post-handshake message is too large")
+            if len(self._pending_post_handshake) < 4 + length:
+                break
+            data = self._pending_post_handshake[4 : 4 + length]
+            remaining = self._pending_post_handshake[4 + length :]
+            if msg_type == 4:
+                if self._ticket_callback is not None:
+                    self._process_new_session_ticket(data)
+            elif msg_type == 13:
+                replies.append(self._build_post_handshake_auth(data))
+            elif msg_type == 24:
+                if len(data) != 1 or data[0] not in (0, 1) or remaining:
+                    raise ValueError("Invalid TLS 1.3 KeyUpdate")
+                self._update_application_keys("server")
+                if data[0] == 1:
+                    replies.append(self.build_key_update())
+            else:
+                raise ValueError("Unexpected TLS 1.3 post-handshake message")
+            self._pending_post_handshake = remaining
+        return replies
+
+    def _process_new_session_ticket(self, data):
+        """Validate a ticket and pass its derived PSK to the connection cache."""
+        if len(data) < 13 or self._resumption_master_secret is None:
+            raise ValueError("Invalid TLS 1.3 NewSessionTicket")
+        lifetime, age_add = struct.unpack("!II", data[:8])
+        nonce_length = data[8]
+        offset = 9 + nonce_length
+        if offset + 4 > len(data):
+            raise ValueError("Invalid TLS 1.3 NewSessionTicket")
+        nonce = data[9:offset]
+        ticket_length = int.from_bytes(data[offset : offset + 2], "big")
+        offset += 2
+        if not ticket_length or offset + ticket_length + 2 > len(data):
+            raise ValueError("Invalid TLS 1.3 NewSessionTicket")
+        ticket = data[offset : offset + ticket_length]
+        offset += ticket_length
+        extensions_length = int.from_bytes(data[offset : offset + 2], "big")
+        if offset + 2 + extensions_length != len(data):
+            raise ValueError("Invalid TLS 1.3 NewSessionTicket")
+        if lifetime and lifetime <= 604800 and self._ticket_callback is not None:
+            psk = HKDF.expand_label(
+                self._resumption_master_secret,
+                "resumption",
+                nonce,
+                self._key_schedule.hash_len,
+                self._hash_algo,
+            )
+            self._ticket_callback(ticket, psk, self._cipher_suite, lifetime, age_add)
