@@ -132,6 +132,10 @@ class TestDictFromCookieString(unittest.TestCase):
         result = dict_from_cookie_string(b"token=abc123")
         self.assertEqual(result, {"token": "abc123"})
 
+    def test_equals_in_value(self):
+        result = dict_from_cookie_string('sid=ab==; note="a=b"')
+        self.assertEqual(result, {"sid": "ab==", "note": "a=b"})
+
 
 class TestDictFromCookiejar(unittest.TestCase):
     def test_extract(self):

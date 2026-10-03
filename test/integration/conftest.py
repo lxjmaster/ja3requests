@@ -74,10 +74,18 @@ def trusted_certificates(tmp_path_factory):
     ca_path = directory / "ca.pem"
     ca_path.write_bytes(ca.public_bytes(serialization.Encoding.PEM))
     leaves = {}
-    for variant in ("valid", "valid-ecdsa", "wrong-host", "expired", "bad-signature"):
+    for variant in (
+        "valid",
+        "valid-ecdsa",
+        "wrong-host",
+        "expired",
+        "bad-signature",
+        "client-rsa",
+        "client-ecdsa",
+    ):
         key = (
             ec.generate_private_key(ec.SECP256R1())
-            if variant == "valid-ecdsa"
+            if variant in ("valid-ecdsa", "client-ecdsa")
             else rsa.generate_private_key(public_exponent=65537, key_size=2048)
         )
         names = [
@@ -108,7 +116,7 @@ def trusted_certificates(tmp_path_factory):
                 x509.KeyUsage(
                     True,
                     False,
-                    variant != "valid-ecdsa",
+                    variant not in ("valid-ecdsa", "client-ecdsa"),
                     False,
                     False,
                     False,
@@ -119,7 +127,14 @@ def trusted_certificates(tmp_path_factory):
                 critical=True,
             )
             .add_extension(
-                x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False
+                x509.ExtendedKeyUsage(
+                    [
+                        ExtendedKeyUsageOID.CLIENT_AUTH
+                        if variant.startswith("client-")
+                        else ExtendedKeyUsageOID.SERVER_AUTH
+                    ]
+                ),
+                critical=False,
             )
             .add_extension(x509.SubjectAlternativeName(names), critical=False)
             .add_extension(

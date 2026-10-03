@@ -42,10 +42,14 @@ def read_headers(conn):
 class LocalServer:
     """Serve one bounded connection, propagating thread errors to the test."""
 
-    def __init__(self, handler, tls_context=None, connections=1):
+    def __init__(
+        self, handler, tls_context=None, connections=1, *, retain_tls_sessions=False
+    ):
         self.handler = handler
         self.tls_context = tls_context
         self.connections = connections
+        self.retain_tls_sessions = retain_tls_sessions
+        self._ssl_objects = []
         self.errors = []
         self.conn = None
         self.listener = socket.socket()
@@ -64,6 +68,12 @@ class LocalServer:
                     self.conn = self.tls_context.wrap_socket(
                         self.conn, server_side=True
                     )
+                    if self.retain_tls_sessions:
+                        # Older CPython frees the SSL object on socket close,
+                        # removing its Session ID from OpenSSL's server cache.
+                        # Keep the independent peer's cache alive for this test;
+                        # sockets still close normally after each response.
+                        self._ssl_objects.append(self.conn._sslobj)
                 with self.conn:
                     self.handler(self.conn)
         except Exception as error:
@@ -79,6 +89,7 @@ class LocalServer:
             self.conn.close()
         self.listener.close()
         self.thread.join(1)
+        self._ssl_objects.clear()
         if exc_type is None:
             assert not self.thread.is_alive(), "Server thread did not terminate"
             if self.errors:
@@ -145,6 +156,57 @@ def serve_h2(conn, observed):
             while recv_with_ragged_eof(conn, 4096):
                 pass
             return
+
+
+def serve_h2_serial(
+    conn,
+    observed,
+    count=2,
+    goaway=False,
+    fragment_ack=False,
+    body=b"ok",
+    table_size=None,
+):
+    """Serve consecutive streams while observing preface and stream IDs."""
+    assert conn.selected_alpn_protocol() == "h2"
+    assert read_exact(conn, 24) == b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
+    settings = (
+        b"\x00\x01" + table_size.to_bytes(4, "big") if table_size is not None else b""
+    )
+    conn.sendall(h2_frame(4, 0, 0, settings))
+    observed["streams"] = []
+    observed["settings"] = 0
+    observed["header_blocks"] = []
+    observed["window_updates"] = []
+    deferred = b""
+    while len(observed["streams"]) < count:
+        header = read_exact(conn, 9)
+        length = int.from_bytes(header[:3], "big")
+        kind, flags, stream = struct.unpack("!BBI", header[3:])
+        payload = read_exact(conn, length)
+        if kind == 4 and not flags & 1:
+            observed["settings"] += 1
+        elif kind == 8:
+            observed["window_updates"].append((stream, int.from_bytes(payload, "big")))
+        elif kind == 1:
+            assert flags & 4  # END_HEADERS
+            observed["streams"].append(stream)
+            observed["header_blocks"].append(payload)
+            response = deferred + h2_frame(1, 4, stream, b"\x88")
+            for offset in range(0, len(body), 16384):
+                chunk = body[offset : offset + 16384]
+                end_stream = int(offset + len(chunk) == len(body))
+                response += h2_frame(0, end_stream, stream, chunk)
+            if not body:
+                response += h2_frame(0, 1, stream)
+            deferred = b""
+            if fragment_ack and len(observed["streams"]) == 1 and count > 1:
+                ack = h2_frame(4, 1, 0)
+                response += ack[:5]
+                deferred = ack[5:]
+            if goaway and len(observed["streams"]) == count:
+                response += h2_frame(7, 0, 0, stream.to_bytes(4, "big") + b"\x00" * 4)
+            conn.sendall(response)
 
 
 def read_cstring(conn):

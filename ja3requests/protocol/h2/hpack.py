@@ -117,6 +117,8 @@ def decode_integer(data, offset, prefix_bits):
 
     :return: (value, new_offset)
     """
+    if offset >= len(data):
+        raise ValueError("Truncated HPACK integer")
     max_prefix = (1 << prefix_bits) - 1
     value = data[offset] & max_prefix
     offset += 1
@@ -126,14 +128,18 @@ def decode_integer(data, offset, prefix_bits):
 
     m = 0
     while offset < len(data):
+        if m >= 35:
+            raise ValueError("HPACK integer exceeds 32-bit limit")
         b = data[offset]
         offset += 1
         value += (b & 0x7F) << m
+        if value > 0xFFFFFFFF:
+            raise ValueError("HPACK integer exceeds 32-bit limit")
         m += 7
         if b & 0x80 == 0:
-            break
+            return value, offset
 
-    return value, offset
+    raise ValueError("Truncated HPACK integer")
 
 
 def encode_string(s):
@@ -155,8 +161,12 @@ def decode_string(data, offset):
 
     :return: (string_bytes, new_offset)
     """
+    if offset >= len(data):
+        raise ValueError("Truncated HPACK string")
     huffman = data[offset] & 0x80
     length, offset = decode_integer(data, offset, 7)
+    if length > len(data) - offset:
+        raise ValueError("Truncated HPACK string")
     string_bytes = data[offset : offset + length]
     offset += length
 
@@ -181,6 +191,25 @@ class HPACKEncoder:
     def __init__(self):
         self.dynamic_table = []  # List of (name, value) tuples, newest first
         self._dynamic_table_size = 0
+        self._max_dynamic_table_size = self.MAX_DYNAMIC_TABLE_SIZE
+        self._pending_table_size_min = None
+        self._pending_table_size_final = None
+
+    def set_table_size(self, size):
+        """Apply a peer limit and announce it at the next header block."""
+        size = min(size, self.MAX_DYNAMIC_TABLE_SIZE)
+        if size == self._max_dynamic_table_size:
+            return
+        self._max_dynamic_table_size = size
+        self._pending_table_size_final = size
+        self._pending_table_size_min = (
+            size
+            if self._pending_table_size_min is None
+            else min(self._pending_table_size_min, size)
+        )
+        while self._dynamic_table_size > size and self.dynamic_table:
+            name, value = self.dynamic_table.pop()
+            self._dynamic_table_size -= len(name) + len(value) + 32
 
     def encode_headers(self, headers):
         """
@@ -190,6 +219,12 @@ class HPACKEncoder:
         :return: Encoded header block bytes
         """
         result = b""
+        if self._pending_table_size_final is not None:
+            result += encode_integer(self._pending_table_size_min, 5, 0x20)
+            if self._pending_table_size_final != self._pending_table_size_min:
+                result += encode_integer(self._pending_table_size_final, 5, 0x20)
+            self._pending_table_size_min = None
+            self._pending_table_size_final = None
         for name, value in headers:
             result += self._encode_header(name, value)
         return result
@@ -212,13 +247,13 @@ class HPACKEncoder:
         entry_size = len(name) + len(value) + 32  # per RFC 7541 Section 4.1
         # Evict entries if table would exceed max size
         while (
-            self._dynamic_table_size + entry_size > self.MAX_DYNAMIC_TABLE_SIZE
+            self._dynamic_table_size + entry_size > self._max_dynamic_table_size
             and self.dynamic_table
         ):
             evicted = self.dynamic_table.pop()
             self._dynamic_table_size -= len(evicted[0]) + len(evicted[1]) + 32
 
-        if entry_size <= self.MAX_DYNAMIC_TABLE_SIZE:
+        if entry_size <= self._max_dynamic_table_size:
             self.dynamic_table.insert(0, (name, value))
             self._dynamic_table_size += entry_size
 
@@ -272,12 +307,39 @@ class HPACKEncoder:
 
 class HPACKDecoder:
     """
-    Simplified HPACK decoder.
-    Handles indexed headers and literal headers from static table.
+    HPACK decoder with a bounded dynamic table.
     """
 
-    def __init__(self):
+    def __init__(self, max_table_size=4096):
         self.dynamic_table = []
+        self._dynamic_table_size = 0
+        self._max_table_size = max_table_size
+        self._table_size = min(max_table_size, 4096)
+
+    def _lookup(self, index):
+        if 1 <= index < len(STATIC_TABLE):
+            return STATIC_TABLE[index]
+        dynamic_index = index - len(STATIC_TABLE)
+        if 0 <= dynamic_index < len(self.dynamic_table):
+            return self.dynamic_table[dynamic_index]
+        raise ValueError(f"Invalid HPACK header index {index}")
+
+    def _evict_to_fit(self, incoming_size=0):
+        while (
+            self.dynamic_table
+            and self._dynamic_table_size + incoming_size > self._table_size
+        ):
+            name, value = self.dynamic_table.pop()
+            self._dynamic_table_size -= (
+                len(name.encode("utf-8")) + len(value.encode("utf-8")) + 32
+            )
+
+    def _add_to_dynamic_table(self, name, value):
+        entry_size = len(name.encode("utf-8")) + len(value.encode("utf-8")) + 32
+        self._evict_to_fit(entry_size)
+        if entry_size <= self._table_size:
+            self.dynamic_table.insert(0, (name, value))
+            self._dynamic_table_size += entry_size
 
     def decode_headers(self, data):
         """
@@ -288,6 +350,7 @@ class HPACKDecoder:
         """
         headers = []
         offset = 0
+        saw_header = False
 
         while offset < len(data):
             byte = data[offset]
@@ -295,42 +358,45 @@ class HPACKDecoder:
             if byte & 0x80:
                 # Indexed header field (Section 6.1)
                 index, offset = decode_integer(data, offset, 7)
-                if 1 <= index < len(STATIC_TABLE):
-                    name, value = STATIC_TABLE[index]
-                    headers.append((name, value))
-                elif index - len(STATIC_TABLE) < len(self.dynamic_table):
-                    headers.append(self.dynamic_table[index - len(STATIC_TABLE)])
-                else:
-                    offset += 1  # skip invalid
+                headers.append(self._lookup(index))
+                saw_header = True
 
             elif byte & 0x40:
                 # Literal with incremental indexing (Section 6.2.1)
                 index, offset = decode_integer(data, offset, 6)
-                if index > 0 and index < len(STATIC_TABLE):
-                    name = STATIC_TABLE[index][0]
-                else:
+                if index == 0:
                     name, offset = decode_string(data, offset)
                     name = name.decode("utf-8") if isinstance(name, bytes) else name
+                else:
+                    name = self._lookup(index)[0]
                 value, offset = decode_string(data, offset)
                 value = value.decode("utf-8") if isinstance(value, bytes) else value
                 headers.append((name, value))
-                self.dynamic_table.insert(0, (name, value))
+                self._add_to_dynamic_table(name, value)
+                saw_header = True
 
             elif byte & 0x20:
                 # Dynamic table size update (Section 6.3)
-                _, offset = decode_integer(data, offset, 5)
+                if saw_header:
+                    raise ValueError("HPACK table size update after header field")
+                size, offset = decode_integer(data, offset, 5)
+                if size > self._max_table_size:
+                    raise ValueError("HPACK table size update exceeds advertised limit")
+                self._table_size = size
+                self._evict_to_fit()
 
             else:
                 # Literal without indexing (Section 6.2.2) or never indexed (6.2.3)
                 prefix = 4 if (byte & 0xF0) == 0x00 else 4
                 index, offset = decode_integer(data, offset, prefix)
-                if index > 0 and index < len(STATIC_TABLE):
-                    name = STATIC_TABLE[index][0]
-                else:
+                if index == 0:
                     name, offset = decode_string(data, offset)
                     name = name.decode("utf-8") if isinstance(name, bytes) else name
+                else:
+                    name = self._lookup(index)[0]
                 value, offset = decode_string(data, offset)
                 value = value.decode("utf-8") if isinstance(value, bytes) else value
                 headers.append((name, value))
+                saw_header = True
 
         return headers

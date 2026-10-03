@@ -9,6 +9,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from ja3requests.protocol.tls import TLS
+from ja3requests.protocol.tls.session_cache import TLSSessionCache
 
 
 CCS = b"\x14\x03\x03\x00\x01\x01"
@@ -116,6 +117,30 @@ def test_fragmented_finished_and_ticket_transcript(gcm):
         chunk=3,
     )
     tls = client(wire, gcm)
+    tls._server_offered_session_ticket = True
     assert tls._wait_for_server_handshake_completion() is True
     assert tls._server_seq_num == 2
     assert tls._handshake_messages == TRANSCRIPT + ticket + message
+    assert tls._new_session_ticket == (60, b"t")
+
+
+def test_ticket_is_not_cached_before_valid_finished():
+    ticket = b"\x04\x00\x00\x07\x00\x00\x00\x3c\x00\x01t"
+    ticket_record = b"\x16\x03\x03" + len(ticket).to_bytes(2, "big") + ticket
+    message = finished(TRANSCRIPT + ticket)
+    corrupted = message[:-1] + bytes([message[-1] ^ 1])
+    cache = TLSSessionCache()
+    tls = client(Wire(ticket_record + CCS + encrypted_record(corrupted, True)), True)
+    tls._server_offered_session_ticket = True
+    tls._session_cache = cache
+    tls._server_host = "example.com"
+    assert tls._wait_for_server_handshake_completion() is False
+    assert tls._new_session_ticket == (0, b"")
+    assert cache.get_tls12_ticket("example.com", 443) is None
+
+
+def test_unsolicited_ticket_is_rejected():
+    ticket = b"\x04\x00\x00\x07\x00\x00\x00\x3c\x00\x01t"
+    ticket_record = b"\x16\x03\x03" + len(ticket).to_bytes(2, "big") + ticket
+    tls = client(Wire(ticket_record + CCS + encrypted_record(finished(), True)), True)
+    assert tls._wait_for_server_handshake_completion() is False

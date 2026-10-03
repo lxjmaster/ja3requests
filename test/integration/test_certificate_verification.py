@@ -11,7 +11,7 @@ from ja3requests.pool import ConnectionPool
 from ja3requests.protocol.tls.certificate_verify import CertificateVerifier
 from ja3requests.protocol.tls import TLS
 from ja3requests.protocol.tls.tls13 import TLS13Handshake
-from test.integration.test_local_tls13 import tls13_config
+from test.integration.test_local_tls13 import fragmented_reads, tls13_config
 from test.mock_servers.local import (
     LocalServer,
     read_headers,
@@ -76,6 +76,135 @@ def test_ecdsa_leaf_is_trusted(trusted_certificates):
         "127.0.0.1", certificate_message(trusted_certificates.leaves["valid-ecdsa"][0])
     )
     assert valid, error
+
+
+@pytest.mark.parametrize("client_variant", ["client-rsa", "client-ecdsa"])
+def test_tls12_client_certificate_authentication(
+    trusted_certificates, monkeypatch, client_variant
+):
+    monkeypatch.setenv("SSL_CERT_FILE", str(trusted_certificates.ca_path))
+    context = tls12_context(
+        *trusted_certificates.leaves["valid"],
+        cipher="ECDHE-RSA-AES128-GCM-SHA256",
+    )
+    context.load_verify_locations(cafile=str(trusted_certificates.ca_path))
+    context.verify_mode = ssl.CERT_REQUIRED
+    client_cert, client_key = trusted_certificates.leaves[client_variant]
+    config = TlsConfig.secure()
+    config.tls_version = 0x0303
+    config.cipher_suites = [0xC02F]
+    config.client_cert = str(client_cert)
+    config.client_key = str(client_key)
+
+    def handler(conn):
+        assert conn.getpeercert(binary_form=True)
+        assert read_headers(conn).startswith(b"GET / HTTP/1.1\r\n")
+        conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+
+    with LocalServer(handler, context) as server:
+        with Session(tls_config=config, pool=ConnectionPool()) as session:
+            assert (
+                session.get(f"https://127.0.0.1:{server.port}/", timeout=2).content
+                == b"ok"
+            )
+
+
+def test_tls12_rejects_mismatched_client_private_key(trusted_certificates, monkeypatch):
+    monkeypatch.setenv("SSL_CERT_FILE", str(trusted_certificates.ca_path))
+    context = tls12_context(
+        *trusted_certificates.leaves["valid"],
+        cipher="ECDHE-RSA-AES128-GCM-SHA256",
+    )
+    context.load_verify_locations(cafile=str(trusted_certificates.ca_path))
+    context.verify_mode = ssl.CERT_REQUIRED
+    config = TlsConfig.secure()
+    config.tls_version = 0x0303
+    config.cipher_suites = [0xC02F]
+    config.client_cert = str(trusted_certificates.leaves["client-rsa"][0])
+    config.client_key = str(trusted_certificates.leaves["client-ecdsa"][1])
+    requests = []
+
+    def handler(conn):
+        requests.append(read_headers(conn))
+
+    with pytest.raises(ssl.SSLError):
+        with LocalServer(handler, context) as server:
+            with Session(tls_config=config, pool=ConnectionPool()) as session:
+                with pytest.raises(ConnectionError, match="TLS handshake failed"):
+                    session.get(f"https://127.0.0.1:{server.port}/", timeout=2)
+    assert requests == []
+
+
+@pytest.mark.parametrize("client_variant", ["client-rsa", "client-ecdsa"])
+@pytest.mark.parametrize("cipher", [0x1301, 0x1302])
+def test_tls13_client_certificate_authentication(
+    trusted_certificates, monkeypatch, fragmented_reads, client_variant, cipher
+):
+    monkeypatch.setenv("SSL_CERT_FILE", str(trusted_certificates.ca_path))
+    context = tls13_context(*trusted_certificates.leaves["valid"])
+    context.load_verify_locations(cafile=str(trusted_certificates.ca_path))
+    context.verify_mode = ssl.CERT_REQUIRED
+    client_cert, client_key = trusted_certificates.leaves[client_variant]
+    config = TlsConfig.secure()
+    config.cipher_suites = [cipher]
+    config.client_cert = str(client_cert)
+    config.client_key = str(client_key)
+
+    def handler(conn):
+        assert conn.getpeercert(binary_form=True)
+        assert read_headers(conn).startswith(b"GET / HTTP/1.1\r\n")
+        conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+
+    with LocalServer(handler, context) as server:
+        with Session(tls_config=config, use_pooling=False) as session:
+            assert (
+                session.get(f"https://127.0.0.1:{server.port}/", timeout=3).content
+                == b"ok"
+            )
+            assert config.session_cache.get_tls13("127.0.0.1", server.port) is None
+
+
+def test_tls13_optional_client_certificate_can_be_empty(
+    trusted_certificates, monkeypatch
+):
+    monkeypatch.setenv("SSL_CERT_FILE", str(trusted_certificates.ca_path))
+    context = tls13_context(*trusted_certificates.leaves["valid"])
+    context.load_verify_locations(cafile=str(trusted_certificates.ca_path))
+    context.verify_mode = ssl.CERT_OPTIONAL
+    config = TlsConfig.secure()
+
+    def handler(conn):
+        assert conn.getpeercert(binary_form=True) is None
+        assert read_headers(conn).startswith(b"GET / HTTP/1.1\r\n")
+        conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+
+    with LocalServer(handler, context) as server:
+        with Session(tls_config=config, use_pooling=False) as session:
+            assert (
+                session.get(f"https://127.0.0.1:{server.port}/", timeout=3).content
+                == b"ok"
+            )
+
+
+def test_tls13_rejects_mismatched_client_private_key(trusted_certificates, monkeypatch):
+    monkeypatch.setenv("SSL_CERT_FILE", str(trusted_certificates.ca_path))
+    context = tls13_context(*trusted_certificates.leaves["valid"])
+    context.load_verify_locations(cafile=str(trusted_certificates.ca_path))
+    context.verify_mode = ssl.CERT_REQUIRED
+    config = TlsConfig.secure()
+    config.client_cert = str(trusted_certificates.leaves["client-rsa"][0])
+    config.client_key = str(trusted_certificates.leaves["client-ecdsa"][1])
+    requests = []
+
+    def handler(conn):
+        requests.append(read_headers(conn))
+
+    with pytest.raises(ssl.SSLError):
+        with LocalServer(handler, context) as server:
+            with Session(tls_config=config, use_pooling=False) as session:
+                with pytest.raises(ConnectionError, match="TLS handshake failed"):
+                    session.get(f"https://127.0.0.1:{server.port}/", timeout=3)
+    assert requests == []
 
 
 @pytest.mark.parametrize("version", [12, 13, "12-ecdhe"])

@@ -1,6 +1,7 @@
 """Mutual TLS (mTLS): client certificate authentication."""
 
 from ja3requests import Session, TlsConfig
+from ja3requests.protocol.tls.extensions import PostHandshakeAuthExtension
 
 # Configure client certificate
 config = TlsConfig()
@@ -16,6 +17,12 @@ config.client_key = "/path/to/client-key.pem"
 # MIICpDCCAYwCCQD...
 # -----END CERTIFICATE-----"""
 
+# For TLS 1.3 post-handshake requests, use a TLS 1.3 profile and opt in:
+# config = TlsConfig.secure()
+# config.client_cert = "/path/to/client.pem"
+# config.client_key = "/path/to/client-key.pem"
+# config.extensions.append(PostHandshakeAuthExtension())
+
 session = Session(tls_config=config, use_pooling=False)
 
 # When the server sends CertificateRequest during TLS handshake,
@@ -23,7 +30,9 @@ session = Session(tls_config=config, use_pooling=False)
 # 1. Parse cert types and signature algorithms from the request
 # 2. Load the configured client certificate PEM
 # 3. Send the certificate chain in the TLS Certificate message
-# 4. (If no client cert configured, sends empty certificate)
+# 4. Sign the transcript with client_key in CertificateVerify
+# 5. (If no client cert configured, sends empty certificate)
+# TLS 1.3 uses the same client_cert/client_key settings with a TLS 1.3 config.
 
 # resp = session.get("https://mtls.example.com/api")
 

@@ -65,7 +65,7 @@ CONNECTION_PREFACE = b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
 # Default settings
 DEFAULT_SETTINGS = {
     SETTINGS_HEADER_TABLE_SIZE: 4096,
-    SETTINGS_ENABLE_PUSH: 1,
+    SETTINGS_ENABLE_PUSH: 0,
     SETTINGS_MAX_CONCURRENT_STREAMS: 100,
     SETTINGS_INITIAL_WINDOW_SIZE: 65535,
     SETTINGS_MAX_FRAME_SIZE: 16384,
@@ -124,10 +124,15 @@ class H2Frame:
         return frame, remaining
 
     @staticmethod
-    def parse_all(data):
+    def parse_all(data, max_payload_size=None):
         """Parse all complete frames from data, return (frames, remaining)."""
         frames = []
         while len(data) >= H2Frame.HEADER_SIZE:
+            if (
+                max_payload_size is not None
+                and int.from_bytes(data[:3], "big") > max_payload_size
+            ):
+                raise ValueError("HTTP/2 frame exceeds local maximum frame size")
             frame, data = H2Frame.parse(data)
             if frame is None:
                 break
@@ -240,3 +245,34 @@ def parse_settings_payload(payload):
         settings[setting_id] = value
         offset += 6
     return settings
+
+
+def header_block_fragment(frame):
+    """Return a HEADERS field block without optional priority or padding fields."""
+    payload = frame.payload
+    offset = 0
+    padding = 0
+    if frame.flags & FLAG_PADDED:
+        if not payload:
+            raise ValueError("Invalid HTTP/2 HEADERS padding")
+        padding = payload[0]
+        offset = 1
+    if frame.flags & FLAG_PRIORITY:
+        if len(payload) - offset < 5:
+            raise ValueError("Invalid HTTP/2 HEADERS priority fields")
+        offset += 5
+    if padding > len(payload) - offset:
+        raise ValueError("Invalid HTTP/2 HEADERS padding")
+    return payload[offset : len(payload) - padding if padding else len(payload)]
+
+
+def data_payload(frame):
+    """Return DATA content without the optional Pad Length and padding bytes."""
+    if not frame.flags & FLAG_PADDED:
+        return frame.payload
+    if not frame.payload:
+        raise ValueError("Invalid HTTP/2 DATA padding")
+    padding = frame.payload[0]
+    if padding > frame.length - 1:
+        raise ValueError("Invalid HTTP/2 DATA padding")
+    return frame.payload[1 : frame.length - padding if padding else frame.length]

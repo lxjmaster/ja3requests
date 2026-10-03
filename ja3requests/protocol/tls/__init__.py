@@ -10,10 +10,14 @@ import os
 import struct
 import time
 import traceback
+import copy
+import hashlib
+import hmac
 
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from ja3requests.exceptions import TLSEncryptionError, TLSHandshakeError, TLSKeyError
@@ -55,6 +59,10 @@ ECDHE_CIPHER_SUITES = frozenset(
     }
 )
 
+HELLO_RETRY_REQUEST_RANDOM = bytes.fromhex(
+    "cf21ad74e59a6111be1d8c021e65b891c2a211167abb8c5e079e09e2c8a8339c"
+)
+
 
 class TLS:
     """TLS 1.2 handshake handler with support for custom JA3 fingerprints."""
@@ -92,6 +100,13 @@ class TLS:
         self._offered_extended_master_secret = False
         self._extended_master_secret = False
         self._negotiated_protocol = None  # ALPN result (e.g., "h2", "http/1.1")
+        self._tls13_psk = None
+        self._tls13_pending_record_data = b""
+        self._tls12_pending_record_data = b""
+        self._offered_session = None
+        self._resumed_session = None
+        self._server_offered_session_ticket = False
+        self._new_session_ticket = (0, b'')
 
         # Sequence numbers for record layer encryption/decryption
         # These are reset to 0 after ChangeCipherSpec
@@ -192,6 +207,7 @@ class TLS:
             )
             if is_tls13:
                 self._setup_tls13_extensions(extensions, tls_config)
+                self._select_tls13_ticket(extensions)
 
             self._body = ClientHello(
                 client_hello_version,
@@ -206,19 +222,72 @@ class TLS:
             )
 
             self._is_tls13 = is_tls13
+            self._select_tls12_session()
 
-            # Set cached session ID for resumption
-            if (
-                self._session_cache is not None
-                and self._server_host
-                and not self._verify_cert
-            ):
-                cached = self._session_cache.get(
-                    self._server_host, self._server_port or 443
+    def _select_tls12_session(self):
+        """Offer a policy-compatible EMS ticket or Session ID."""
+        self._offered_session = None
+        if self._session_cache is None or self._server_host is None:
+            return
+        ticket_extension = next(
+            (
+                ext
+                for ext in self.body._custom_extensions
+                if getattr(ext, 'extension_type', None) == 0x0023
+            ),
+            None,
+        )
+        ticket = (
+            self._session_cache.get_tls12_ticket(
+                self._server_host, self._server_port or 443
+            )
+            if ticket_extension is not None
+            else None
+        )
+        offered = {
+            suite.value if hasattr(suite, 'value') else suite
+            for suite in self._cipher_suites
+        }
+
+        def compatible(entry):
+            return (
+                entry is not None
+                and entry.tls_version == b'\x03\x03'
+                and entry.extended_master_secret
+                and self._offered_extended_master_secret
+                and entry.cipher_suite in offered
+                and len(entry.master_secret) == 48
+                and entry.sni == self._server_name
+                and not getattr(self, '_client_cert_pem', None)
+                and (
+                    not getattr(self, '_verify_cert', False)
+                    or (entry.verified and entry.verified_hostname == self._server_host)
                 )
-                if cached:
-                    debug(f"Using cached session ID for {self._server_host}")
-                    self._body.session_id = cached.session_id
+            )
+
+        if not compatible(ticket):
+            ticket = None
+        entry = ticket or self._session_cache.get(
+            self._server_host, self._server_port or 443
+        )
+        if not compatible(entry) or (
+            ticket is None and (entry.is_ticket or not 1 <= len(entry.session_id) <= 32)
+        ):
+            return
+        if ticket is not None:
+            from ja3requests.protocol.tls.extensions import (  # pylint: disable=import-outside-toplevel
+                SessionTicketExtension,
+            )
+
+            self.body._custom_extensions = [
+                SessionTicketExtension(entry.ticket) if ext is ticket_extension else ext
+                for ext in self.body._custom_extensions
+            ]
+            self.body._build_extensions()
+            self.body.session_id = os.urandom(32)
+        else:
+            self.body.session_id = entry.session_id
+        self._offered_session = entry
 
     def handshake(self):
         """
@@ -228,10 +297,13 @@ class TLS:
         try:
             # Initialize handshake message tracking
             self._handshake_messages = b''
+            self._pending_server_handshake = b''
 
             # Step 1: Send Client Hello
             client_hello = self.body
             self._client_random = client_hello.random
+            if self._tls13_psk is not None:
+                self._bind_tls13_client_hello()
             debug("Sending Client Hello...")
             self.conn.sendall(client_hello.message)
 
@@ -287,43 +359,48 @@ class TLS:
             self.conn.settimeout(
                 self._handshake_timeout if self._handshake_timeout is not None else 5.0
             )
-            buffer = b""
-            server_hello_msg = None
-            first_record = b""
+            server_hello_msg, first_records, buffer, trailing = (
+                self._receive_server_hello()
+            )
+            retry_suite = None
+            if server_hello_msg[2:34] == HELLO_RETRY_REQUEST_RANDOM:
+                if trailing:
+                    raise TLSHandshakeError(
+                        "Unexpected plaintext after HelloRetryRequest"
+                    )
+                retry_suite, group, cookie = self._parse_hello_retry_request(
+                    server_hello_msg
+                )
+                self._send_retried_client_hello(
+                    server_hello_msg, retry_suite, group, cookie
+                )
+                server_hello_msg, first_records, buffer, trailing = (
+                    self._receive_server_hello(buffer, allow_ccs=True)
+                )
+                if server_hello_msg[2:34] == HELLO_RETRY_REQUEST_RANDOM:
+                    raise TLSHandshakeError("Second HelloRetryRequest")
+            self._parse_server_hello(server_hello_msg)
 
-            # Read until we get a complete ServerHello
-            while True:
-                data = self.conn.recv(4096)
-                if not data:
-                    break
-                buffer += data
+            selected_version = self._selected_handshake_version()
+            if retry_suite is not None and (
+                selected_version != b'\x03\x04'
+                or self._selected_cipher_suite != retry_suite
+                or (self._server_session_id or b"")
+                != (self.body.session_id if self.body.session_id != b"\x00" else b"")
+            ):
+                raise TLSHandshakeError(
+                    "ServerHello changed HelloRetryRequest selection"
+                )
 
-                # Parse TLS records
-                if len(buffer) >= 5:
-                    record_type = buffer[0]
-                    record_length = struct.unpack("!H", buffer[3:5])[0]
-                    if len(buffer) >= 5 + record_length:
-                        if record_type == 22:  # Handshake
-                            record_data = buffer[5 : 5 + record_length]
-                            if record_data[0] == 2:  # ServerHello
-                                msg_len = struct.unpack(
-                                    "!I", b"\x00" + record_data[1:4]
-                                )[0]
-                                server_hello_msg = record_data[4 : 4 + msg_len]
-                                # Also parse with our existing method for cipher suite etc.
-                                self._parse_server_hello(server_hello_msg)
-                                first_record = buffer[: 5 + record_length]
-                                buffer = buffer[5 + record_length :]
-                        break
-
-            if server_hello_msg is None:
-                debug("TLS 1.3: No ServerHello received")
-                return False
-
-            if self._selected_handshake_version() == b'\x03\x03':
+            if selected_version == b'\x03\x03':
                 self._is_tls13 = False
                 self._tls_version = b'\x03\x03'
-                return self._handshake_tls12(first_record + buffer)
+                return self._handshake_tls12(first_records + buffer)
+
+            if trailing:
+                raise TLSHandshakeError(
+                    "Unexpected plaintext after TLS 1.3 ServerHello"
+                )
 
             # Initialize TLS 1.3 handshake handler
             hs = TLS13Handshake(
@@ -332,6 +409,13 @@ class TLS:
                 self._tls13_key_share_group,
                 self._handshake_messages,
                 private_keys=self._tls13_private_keys,
+                offered_psk=self._tls13_psk,
+                post_handshake_auth=any(
+                    getattr(ext, 'extension_type', None) == 0x0031
+                    for ext in self.body._custom_extensions
+                ),
+                client_cert_pem=getattr(self, '_client_cert_pem', None),
+                client_key_pem=getattr(self, '_client_key_pem', None),
             )
             if getattr(self, '_verify_cert', False):
                 hs._certificate_verifier = self._verify_server_certificate
@@ -377,11 +461,20 @@ class TLS:
                             for msg_type, msg_data in messages:
                                 if msg_type == 20:  # Finished
                                     server_finished_received = True
+                            if server_finished_received:
+                                break
                 buffer = buffer[offset:]
 
             if not server_finished_received:
                 debug("TLS 1.3: Server Finished not received")
                 return False
+
+            client_authentication = hs.build_client_authentication(
+                getattr(self, '_client_cert_pem', None),
+                getattr(self, '_client_key_pem', None),
+            )
+            if client_authentication:
+                self.conn.sendall(client_authentication)
 
             # Send client Finished
             finished_record = hs.build_client_finished()
@@ -395,6 +488,18 @@ class TLS:
             self._tls13_server_rp = server_rp
             self._tls13_handshake = hs
             self._negotiated_protocol = hs._negotiated_protocol
+            self._tls13_pending_record_data = buffer
+            if hs._resumed:
+                self._cert_verified = self._tls13_psk.verified
+                self._verified_hostname = self._tls13_psk.verified_hostname
+                self._server_cert_not_after = self._tls13_psk.certificate_expires_at
+            if self._tls13_psk is not None and self._session_cache is not None:
+                self._session_cache.remove_tls13(
+                    self._server_host,
+                    self._server_port or 443,
+                    self._tls13_psk.ticket,
+                )
+            hs._ticket_callback = self._cache_tls13_ticket
 
             debug("✅ TLS 1.3 handshake completed successfully!")
             self._save_session_to_cache()
@@ -408,6 +513,169 @@ class TLS:
         finally:
             self.conn.settimeout(None)
 
+    def _receive_server_hello(self, initial_data=b"", allow_ccs=False):
+        """Reassemble the first handshake message across TLS records."""
+        buffer = initial_data
+        handshake = b""
+        consumed = b""
+        while True:
+            while len(buffer) < 5:
+                chunk = self.conn.recv(4096)
+                if not chunk:
+                    raise TLSHandshakeError("Truncated ServerHello record")
+                buffer += chunk
+            record_length = int.from_bytes(buffer[3:5], 'big')
+            if record_length > 18432:
+                raise TLSHandshakeError("Invalid ServerHello record length")
+            while len(buffer) < 5 + record_length:
+                chunk = self.conn.recv(4096)
+                if not chunk:
+                    raise TLSHandshakeError("Truncated ServerHello record")
+                buffer += chunk
+            record, buffer = buffer[: 5 + record_length], buffer[5 + record_length :]
+            if allow_ccs and record[0] == 20 and record[5:] == b"\x01":
+                continue
+            if record[0] != 22:
+                raise TLSHandshakeError("Expected ServerHello handshake record")
+            consumed += record
+            handshake += record[5:]
+            if len(handshake) < 4:
+                continue
+            if handshake[0] != 2:
+                raise TLSHandshakeError("Expected ServerHello handshake message")
+            length = int.from_bytes(handshake[1:4], 'big')
+            if len(handshake) >= 4 + length:
+                return (
+                    handshake[4 : 4 + length],
+                    consumed,
+                    buffer,
+                    handshake[4 + length :],
+                )
+
+    def _parse_hello_retry_request(self, data):
+        """Validate a TLS 1.3 retry request before changing ClientHello."""
+        from ja3requests.protocol.tls.tls13 import (  # pylint: disable=import-outside-toplevel
+            TLS13_CIPHER_PARAMS,
+        )
+
+        if len(data) < 40 or data[:34] != b"\x03\x03" + HELLO_RETRY_REQUEST_RANDOM:
+            raise TLSHandshakeError("Invalid HelloRetryRequest")
+        offset = 34
+        session_id_length = data[offset]
+        offset += 1
+        expected_id = self.body.session_id
+        if expected_id == b"\x00":
+            expected_id = b""
+        if (
+            session_id_length > 32
+            or data[offset : offset + session_id_length] != expected_id
+        ):
+            raise TLSHandshakeError("HelloRetryRequest changed session ID")
+        offset += session_id_length
+        if offset + 5 > len(data):
+            raise TLSHandshakeError("Truncated HelloRetryRequest")
+        suite = int.from_bytes(data[offset : offset + 2], "big")
+        offered = {
+            item.value if hasattr(item, "value") else item
+            for item in self._cipher_suites
+        }
+        if suite not in TLS13_CIPHER_PARAMS or suite not in offered:
+            raise TLSHandshakeError("HelloRetryRequest selected an unoffered suite")
+        if data[offset + 2] != 0:
+            raise TLSHandshakeError("Invalid HelloRetryRequest compression")
+        offset += 3
+        extension_length = int.from_bytes(data[offset : offset + 2], "big")
+        offset += 2
+        if offset + extension_length != len(data):
+            raise TLSHandshakeError("Invalid HelloRetryRequest extensions")
+        extensions = {}
+        while offset < len(data):
+            if offset + 4 > len(data):
+                raise TLSHandshakeError("Truncated HelloRetryRequest extension")
+            kind, size = struct.unpack("!HH", data[offset : offset + 4])
+            offset += 4
+            if kind in extensions or offset + size > len(data):
+                raise TLSHandshakeError("Invalid HelloRetryRequest extension")
+            extensions[kind] = data[offset : offset + size]
+            offset += size
+        if extensions.get(0x002B) != b"\x03\x04" or set(extensions) - {
+            0x002B,
+            0x002C,
+            0x0033,
+        }:
+            raise TLSHandshakeError("Invalid HelloRetryRequest version or extension")
+        share = extensions.get(0x0033)
+        if share is not None and len(share) != 2:
+            raise TLSHandshakeError("Invalid HelloRetryRequest key share")
+        group = int.from_bytes(share, "big") if share is not None else None
+        if group is not None and (
+            group not in self._supported_groups
+            or not self._tls13_private_keys
+            or group in self._tls13_private_keys
+            or group not in (23, 29)
+        ):
+            raise TLSHandshakeError("HelloRetryRequest selected an invalid group")
+        cookie_extension = extensions.get(0x002C)
+        cookie = None
+        if cookie_extension is not None:
+            if (
+                len(cookie_extension) < 3
+                or int.from_bytes(cookie_extension[:2], "big")
+                != len(cookie_extension) - 2
+            ):
+                raise TLSHandshakeError("Invalid HelloRetryRequest cookie")
+            cookie = cookie_extension[2:]
+        if group is None and cookie is None:
+            raise TLSHandshakeError("HelloRetryRequest made no change")
+        return suite, group, cookie
+
+    def _send_retried_client_hello(self, retry, suite, group, cookie):
+        """Send ClientHello2 and replace ClientHello1 with message_hash."""
+        from ja3requests.protocol.tls.extensions import (  # pylint: disable=import-outside-toplevel
+            CookieExtension,
+            KeyShareExtension,
+        )
+        from ja3requests.protocol.tls.tls13 import (  # pylint: disable=import-outside-toplevel
+            TLS13KeyExchange,
+            TLS13_CIPHER_PARAMS,
+        )
+
+        extensions = list(self.body._custom_extensions)
+        if group is not None:
+            if group == 29:
+                private_key, public_bytes = TLS13KeyExchange.generate_x25519_keypair()
+            else:
+                private_key, public_bytes = (
+                    TLS13KeyExchange.generate_secp256r1_keypair()
+                )
+            extensions = [
+                (
+                    KeyShareExtension([(group, public_bytes)])
+                    if getattr(ext, "extension_type", None) == 0x0033
+                    else ext
+                )
+                for ext in extensions
+            ]
+            self._tls13_private_keys = {group: private_key}
+            self._tls13_private_key = private_key
+            self._tls13_key_share_group = group
+        if cookie is not None:
+            extensions.append(CookieExtension(cookie))
+        retried = copy.copy(self.body)
+        retried._custom_extensions = extensions
+        retried._build_extensions()
+        hash_algo = TLS13_CIPHER_PARAMS[suite][1]
+        digest = hash_algo(self._handshake_messages).digest()
+        retry_message = b"\x02" + len(retry).to_bytes(3, "big") + retry
+        transcript_prefix = (
+            b"\xfe" + len(digest).to_bytes(3, "big") + digest + retry_message
+        )
+        self._body = retried
+        if self._tls13_psk is not None:
+            self._bind_tls13_client_hello(transcript_prefix)
+        self._handshake_messages = transcript_prefix + retried.handshake_message
+        self.conn.sendall(retried.message)
+
     def _handshake_tls12(self, initial_data=b""):
         """TLS 1.2 handshake flow after ClientHello is sent."""
         try:
@@ -417,6 +685,24 @@ class TLS:
                 self, '_cert_verified', False
             ):
                 raise TLSHandshakeError("Server certificate was not verified")
+
+            if self._resumed_session is not None:
+                self.conn.settimeout(
+                    self._handshake_timeout
+                    if self._handshake_timeout is not None
+                    else 5.0
+                )
+                try:
+                    if not self._wait_for_server_handshake_completion():
+                        raise TLSHandshakeError("Invalid resumed server Finished")
+                    self.conn.sendall(b'\x14\x03\x03\x00\x01\x01')
+                    self._client_seq_num = 0
+                    self.conn.sendall(self._build_finished_message())
+                    self._cache_new_tls12_ticket()
+                    debug("TLS 1.2 abbreviated handshake completed successfully")
+                    return True
+                finally:
+                    self.conn.settimeout(None)
 
             # Step 7-9: Send client finishing messages
             self._send_client_finishing_messages()
@@ -432,7 +718,28 @@ class TLS:
                 success = self._wait_for_server_handshake_completion()
                 if success:
                     debug("✅ Full TLS 1.2 handshake completed successfully!")
-                    self._save_session_to_cache()
+                    if self._offered_session is not None:
+                        if self._offered_session.is_ticket:
+                            self._session_cache.remove_tls12_ticket(
+                                self._server_host,
+                                self._server_port or 443,
+                                self._offered_session.ticket,
+                            )
+                        else:
+                            self._session_cache.remove_tls12(
+                                self._server_host,
+                                self._server_port or 443,
+                                self._offered_session.session_id,
+                            )
+                    new_ticket = self._new_session_ticket
+                    if (
+                        new_ticket[1]
+                        and new_ticket[0]
+                        and self._session_cache is not None
+                    ):
+                        self._cache_new_tls12_ticket()
+                    else:
+                        self._save_session_to_cache()
                     self.conn.settimeout(None)
                     return True
                 raise TLSHandshakeError("Server did not complete handshake")
@@ -441,6 +748,12 @@ class TLS:
 
         except Exception as e:  # pylint: disable=broad-exception-caught
             debug(f"TLS 1.2 Handshake failed: {e}")
+            if self._resumed_session is not None and self._resumed_session.is_ticket:
+                self._session_cache.remove_tls12_ticket(
+                    self._server_host,
+                    self._server_port or 443,
+                    self._resumed_session.ticket,
+                )
             return False
 
     def _setup_tls13_extensions(self, extensions, tls_config):
@@ -469,8 +782,23 @@ class TLS:
         if KeyShareExtension.extension_type not in existing_types:
             if not self._supported_groups:
                 self._supported_groups = [0x001D]
+            initial_groups = getattr(tls_config, "key_share_groups", None)
+            if initial_groups is None:
+                initial_groups = self._supported_groups
+            elif (
+                not initial_groups
+                or len(initial_groups) != len(set(initial_groups))
+                or not set(initial_groups).issubset(
+                    set(self._supported_groups) & {0x0017, 0x001D}
+                )
+                or initial_groups
+                != [
+                    group for group in self._supported_groups if group in initial_groups
+                ]
+            ):
+                raise TLSHandshakeError("Invalid initial TLS 1.3 key share groups")
             key_shares = []
-            for group in self._supported_groups:
+            for group in initial_groups:
                 if group in self._tls13_private_keys:
                     continue
                 if group == 0x001D:
@@ -497,6 +825,101 @@ class TLS:
         if PSKKeyExchangeModesExtension.extension_type not in existing_types:
             extensions.append(PSKKeyExchangeModesExtension([1]))  # psk_dhe_ke
 
+    def _select_tls13_ticket(self, extensions):
+        """Offer one compatible ticket from this destination's in-memory cache."""
+        from ja3requests.protocol.tls.extensions import (  # pylint: disable=import-outside-toplevel
+            PreSharedKeyExtension,
+        )
+        from ja3requests.protocol.tls.tls13 import (  # pylint: disable=import-outside-toplevel
+            TLS13_CIPHER_PARAMS,
+        )
+
+        self._tls13_psk = None
+        if self._session_cache is None or self._server_host is None:
+            return
+        if any(getattr(ext, 'extension_type', None) == 0x0029 for ext in extensions):
+            return
+        ticket = self._session_cache.get_tls13(
+            self._server_host, self._server_port or 443
+        )
+        offered_suites = {
+            suite.value if hasattr(suite, 'value') else suite
+            for suite in self._cipher_suites
+        }
+        if (
+            ticket is None
+            or getattr(self, '_client_cert_pem', None)
+            or ticket.cipher_suite not in offered_suites
+            or ticket.cipher_suite not in TLS13_CIPHER_PARAMS
+            or ticket.sni != self._server_name
+            or (
+                getattr(self, '_verify_cert', False)
+                and (
+                    not ticket.verified or ticket.verified_hostname != self._server_host
+                )
+            )
+        ):
+            return
+        hash_algo = TLS13_CIPHER_PARAMS[ticket.cipher_suite][1]
+        extensions.append(
+            PreSharedKeyExtension(
+                ticket.ticket, ticket.obfuscated_age(), hash_algo().digest_size
+            )
+        )
+        self._tls13_psk = ticket
+
+    def _bind_tls13_client_hello(self, transcript_prefix=b""):
+        """Fill the resumption binder over the truncated ClientHello."""
+        from ja3requests.protocol.tls.tls13 import (  # pylint: disable=import-outside-toplevel
+            HKDF,
+            TLS13_CIPHER_PARAMS,
+        )
+
+        ticket = self._tls13_psk
+        extension = next(
+            ext
+            for ext in self.body._custom_extensions
+            if getattr(ext, 'extension_type', None) == 0x0029
+        )
+        hash_algo = TLS13_CIPHER_PARAMS[ticket.cipher_suite][1]
+        hash_length = hash_algo().digest_size
+        extension.age = ticket.obfuscated_age()
+        extension.binder = b"\x00" * hash_length
+        self.body._build_extensions()
+        truncated = self.body.handshake_message[: -(3 + hash_length)]
+        early = HKDF.extract(None, ticket.psk, hash_algo)
+        binder_key = HKDF.derive_secret(early, "res binder", b"", hash_algo)
+        finished_key = HKDF.expand_label(
+            binder_key, "finished", b"", hash_length, hash_algo
+        )
+        extension.binder = hmac.new(
+            finished_key,
+            hash_algo(transcript_prefix + truncated).digest(),
+            hash_algo,
+        ).digest()
+        self.body._build_extensions()
+
+    def _cache_tls13_ticket(self, ticket, psk, cipher_suite, lifetime, age_add):
+        if (
+            self._session_cache is None
+            or self._server_host is None
+            or getattr(self, '_client_cert_pem', None)
+        ):
+            return
+        self._session_cache.put_tls13(
+            self._server_host,
+            self._server_port or 443,
+            ticket,
+            psk,
+            cipher_suite,
+            lifetime,
+            age_add,
+            self._server_name,
+            verified=getattr(self, '_cert_verified', False),
+            verified_hostname=getattr(self, '_verified_hostname', None),
+            certificate_expires_at=getattr(self, '_server_cert_not_after', None),
+        )
+
     def _save_session_to_cache(self):
         """Save the current session to the session cache for future resumption."""
         if (
@@ -504,6 +927,10 @@ class TLS:
             and self._server_host
             and self._server_session_id
             and self._master_secret
+            and not (
+                getattr(self, '_client_cert_requested', False)
+                and getattr(self, '_client_cert_pem', None)
+            )
         ):
             cipher = getattr(self, '_selected_cipher_suite', 0)
             self._session_cache.put(
@@ -513,41 +940,54 @@ class TLS:
                 self._master_secret,
                 cipher,
                 tls_version=self._tls_version,
+                extended_master_secret=self._extended_master_secret,
+                verified=getattr(self, '_cert_verified', False),
+                verified_hostname=getattr(self, '_verified_hostname', None),
+                certificate_expires_at=getattr(self, '_server_cert_not_after', None),
+                sni=self._server_name,
             )
             debug(f"Saved TLS session for {self._server_host}:{self._server_port}")
 
     def _parse_new_session_ticket(self, data):
-        """
-        Parse NewSessionTicket message (handshake type 4) and cache ticket.
-        TLS 1.2: lifetime(4) + ticket_data
-        """
+        """Parse the TLS 1.2 ticket, leaving cache writes until Finished."""
         if len(data) < 6:
-            return
+            raise TLSHandshakeError("Invalid NewSessionTicket length")
         lifetime = struct.unpack("!I", data[:4])[0]
         ticket_len = struct.unpack("!H", data[4:6])[0]
-        if len(data) < 6 + ticket_len:
-            return
-        ticket = data[6 : 6 + ticket_len]
-        debug(
-            f"Received NewSessionTicket: lifetime={lifetime}s, ticket_len={ticket_len}"
-        )
+        if len(data) != 6 + ticket_len:
+            raise TLSHandshakeError("Invalid NewSessionTicket length")
+        return lifetime, data[6:]
 
-        # Store ticket as session ID for resumption
+    def _cache_new_tls12_ticket(self):
+        """Keep an authenticated ticket and its original verification policy."""
+        new_ticket = self._new_session_ticket
         if (
-            self._session_cache is not None
+            new_ticket[0]
+            and new_ticket[1]
+            and self._session_cache is not None
             and self._server_host
             and self._master_secret
+            and not (
+                getattr(self, '_client_cert_requested', False)
+                and getattr(self, '_client_cert_pem', None)
+            )
         ):
-            cipher = getattr(self, '_selected_cipher_suite', 0)
-            self._session_cache.put(
+            lifetime, ticket = new_ticket
+            self._session_cache.put_tls12_ticket(
                 self._server_host,
                 self._server_port or 443,
-                ticket,  # Use ticket as session ID
+                ticket,
                 self._master_secret,
-                cipher,
+                self._selected_cipher_suite,
+                lifetime,
                 tls_version=self._tls_version,
+                extended_master_secret=self._extended_master_secret,
+                verified=getattr(self, '_cert_verified', False),
+                verified_hostname=getattr(self, '_verified_hostname', None),
+                certificate_expires_at=getattr(self, '_server_cert_not_after', None),
+                sni=self._server_name,
             )
-            debug(f"Cached session ticket for {self._server_host}")
+            debug(f"Cached TLS 1.2 session ticket for {self._server_host}")
 
     def _parse_server_handshake_messages(
         self,
@@ -612,6 +1052,17 @@ class TLS:
 
                     if record_type == 22:  # Handshake message
                         self._process_handshake_record(record_data)
+                        if self._resumed_session is not None:
+                            trailing = self._pending_server_handshake
+                            self._tls12_pending_record_data = (
+                                b'\x16\x03\x03'
+                                + len(trailing).to_bytes(2, 'big')
+                                + trailing
+                                if trailing
+                                else b''
+                            ) + buffer
+                            self.conn.settimeout(None)
+                            return
                     elif record_type == 21:  # Alert
                         if len(record_data) >= 2:
                             alert_level = record_data[0]
@@ -623,6 +1074,10 @@ class TLS:
                                 raise ConnectionError(
                                     f"TLS Fatal Alert: {alert_description}"
                                 )
+                    else:
+                        raise TLSHandshakeError(
+                            "Unexpected record before TLS 1.2 ServerHelloDone"
+                        )
 
                     # Check if we've received all expected messages
                     if (
@@ -645,40 +1100,35 @@ class TLS:
                 raise
 
         self.conn.settimeout(None)  # Reset timeout
+        raise TLSHandshakeError("Server handshake did not complete")
 
     def _process_handshake_record(self, record_data):
         """
-        Process handshake messages within a TLS record
+        Process complete handshake messages across TLS record boundaries.
         """
+        pending = getattr(self, '_pending_server_handshake', b'') + record_data
         offset = 0
-        while offset < len(record_data):
-            if offset + 4 > len(record_data):
+        while offset + 4 <= len(pending):
+            msg_type = pending[offset]
+            msg_length = struct.unpack(
+                "!I", b'\x00' + pending[offset + 1 : offset + 4]
+            )[0]
+            if offset + 4 + msg_length > len(pending):
                 break
 
-            msg_type = record_data[offset]
-
-            # Ensure we have enough bytes for length field
-            if offset + 4 > len(record_data):
-                break
-
-            length_bytes = record_data[offset + 1 : offset + 4]
-            if len(length_bytes) != 3:
-                break
-
-            msg_length = struct.unpack("!I", b'\x00' + length_bytes)[0]
-
-            if offset + 4 + msg_length > len(record_data):
-                break
-
-            msg_data = record_data[offset + 4 : offset + 4 + msg_length]
+            msg_data = pending[offset + 4 : offset + 4 + msg_length]
 
             # Add handshake message to running hash (excluding record header)
-            handshake_msg = record_data[offset : offset + 4 + msg_length]
+            handshake_msg = pending[offset : offset + 4 + msg_length]
             if hasattr(self, '_handshake_messages'):
                 self._handshake_messages += handshake_msg
 
             if msg_type == 2:  # ServerHello
                 self._parse_server_hello(msg_data)
+                self._check_resumed_server_hello()
+                if self._resumed_session is not None:
+                    self._pending_server_handshake = pending[offset + 4 + msg_length :]
+                    return
                 debug("Received Server Hello")
             elif msg_type == 11:  # Certificate
                 self._parse_certificate(msg_data)
@@ -693,9 +1143,30 @@ class TLS:
                 self._parse_server_hello_done(msg_data)
                 debug("Received Server Hello Done")
                 self._server_hello_done_received = True
+                self._pending_server_handshake = pending[offset + 4 + msg_length :]
                 return
 
             offset += 4 + msg_length
+        self._pending_server_handshake = pending[offset:]
+
+    def _check_resumed_server_hello(self):
+        """Accept an echoed Session ID only with its original session policy."""
+        entry = self._offered_session
+        if entry is None or self._server_session_id != self.body.session_id:
+            return
+        if (
+            self._server_legacy_version != b'\x03\x03'
+            or self._selected_cipher_suite != entry.cipher_suite
+            or self._extended_master_secret != entry.extended_master_secret
+            or getattr(self, '_selected_compression_method', None) != 0
+        ):
+            raise TLSHandshakeError("Invalid resumed TLS 1.2 ServerHello")
+        self._master_secret = entry.master_secret
+        self._generate_session_keys()
+        self._cert_verified = entry.verified
+        self._verified_hostname = entry.verified_hostname
+        self._server_cert_not_after = entry.certificate_expires_at
+        self._resumed_session = entry
 
     def _parse_server_hello(self, data):
         """Parse ServerHello message"""
@@ -710,6 +1181,7 @@ class TLS:
         self._server_legacy_version = data[offset : offset + 2]
         self._server_supported_version = None
         self._extended_master_secret = False
+        self._server_offered_session_ticket = False
         offset += 2
 
         # Server random (32 bytes)
@@ -723,6 +1195,9 @@ class TLS:
             return
         session_id_length = data[offset]
         offset += 1
+        self._server_session_id = None
+        if session_id_length > 32:
+            raise TLSHandshakeError("Invalid ServerHello session ID length")
         if session_id_length > 0:
             if offset + session_id_length > len(data):
                 return
@@ -737,11 +1212,18 @@ class TLS:
         if len(cipher_bytes) == 2:
             self._selected_cipher_suite = struct.unpack("!H", cipher_bytes)[0]
             debug(f"Server selected cipher suite: 0x{self._selected_cipher_suite:04X}")
+            if self._cipher_suites is not None:
+                offered = {
+                    suite.value if hasattr(suite, 'value') else suite
+                    for suite in self._cipher_suites
+                }
+                if self._selected_cipher_suite not in offered:
+                    raise TLSHandshakeError("Server selected an unoffered cipher suite")
         offset += 2
 
         # Compression method (1 byte)
         if offset < len(data):
-            _compression_method = data[offset]
+            self._selected_compression_method = data[offset]
             offset += 1
 
         # Parse extensions (if present)
@@ -768,6 +1250,13 @@ class TLS:
                             "Invalid extended master secret extension"
                         )
                     self._extended_master_secret = True
+                elif ext_type == 0x0023:
+                    if ext_data or not any(
+                        getattr(ext, 'extension_type', None) == 0x0023
+                        for ext in self.body._custom_extensions
+                    ):
+                        raise TLSHandshakeError("Invalid SessionTicket extension")
+                    self._server_offered_session_ticket = True
 
                 # ALPN (0x0010): extract negotiated protocol
                 if ext_type == 0x0010 and len(ext_data) >= 4:
@@ -899,6 +1388,8 @@ class TLS:
         if getattr(self, '_client_cert_requested', False):
             client_cert_pem = getattr(self, '_client_cert_pem', None)
             if client_cert_pem:
+                if not getattr(self, '_client_key_pem', None):
+                    raise TLSHandshakeError("Client certificate requires a private key")
                 certificate_record = self._build_client_certificate(client_cert_pem)
                 debug("Sent client Certificate")
             else:
@@ -911,6 +1402,11 @@ class TLS:
         client_key_exchange = self._build_client_key_exchange()
         self.conn.sendall(client_key_exchange)
         debug("Sent Client Key Exchange")
+
+        if getattr(self, '_client_cert_requested', False) and getattr(
+            self, '_client_cert_pem', None
+        ):
+            self.conn.sendall(self._build_client_certificate_verify())
 
         # Send ChangeCipherSpec
         change_cipher_spec = b'\x14\x03\x03\x00\x01\x01'
@@ -929,11 +1425,68 @@ class TLS:
         self.conn.sendall(finished_message)
         debug("Sent Finished")
 
+    def _build_client_certificate_verify(self):
+        """Sign the TLS 1.2 transcript through ClientKeyExchange."""
+        try:
+            key = serialization.load_pem_private_key(
+                self._client_key_pem, password=None
+            )
+        except (TypeError, ValueError) as error:
+            raise TLSHandshakeError("Invalid client private key") from error
+
+        for scheme in getattr(self, '_cert_sig_algs', []):
+            hash_id = scheme & 0xFF if 0x0804 <= scheme <= 0x0806 else scheme >> 8
+            digest_type = {4: hashes.SHA256, 5: hashes.SHA384, 6: hashes.SHA512}.get(
+                hash_id
+            )
+            if digest_type is None:
+                continue
+            digest = digest_type()
+            if isinstance(key, rsa.RSAPrivateKey) and scheme in (
+                0x0401,
+                0x0501,
+                0x0601,
+            ):
+                signature = key.sign(
+                    self._handshake_messages, padding.PKCS1v15(), digest
+                )
+            elif isinstance(key, rsa.RSAPrivateKey) and scheme in (
+                0x0804,
+                0x0805,
+                0x0806,
+            ):
+                signature = key.sign(
+                    self._handshake_messages,
+                    padding.PSS(
+                        mgf=padding.MGF1(digest), salt_length=digest.digest_size
+                    ),
+                    digest,
+                )
+            elif isinstance(key, ec.EllipticCurvePrivateKey) and scheme in (
+                0x0403,
+                0x0503,
+                0x0603,
+            ):
+                signature = key.sign(self._handshake_messages, ec.ECDSA(digest))
+            else:
+                continue
+
+            body = struct.pack('!HH', scheme, len(signature)) + signature
+            message = b'\x0f' + len(body).to_bytes(3, 'big') + body
+            self._handshake_messages += message
+            return b'\x16\x03\x03' + len(message).to_bytes(2, 'big') + message
+
+        raise TLSHandshakeError("No supported client certificate signature algorithm")
+
     def _read_server_handshake_record(self):
         """Read exactly one record without consuming later application data."""
 
         def read_exact(size):
             data = b''
+            pending = self._tls12_pending_record_data
+            if pending:
+                data = pending[:size]
+                self._tls12_pending_record_data = pending[size:]
             while len(data) < size:
                 chunk = self.conn.recv(size - len(data))
                 if not chunk:
@@ -1015,11 +1568,16 @@ class TLS:
             received_ccs = False
             pending = b''
             transcript = self._handshake_messages
+            ticket = None
             while True:
                 header, payload = self._read_server_handshake_record()
                 if header[0] == 20:
                     if received_ccs or payload != b'\x01' or pending:
                         raise TLSHandshakeError("Unexpected ChangeCipherSpec")
+                    if self._server_offered_session_ticket != (ticket is not None):
+                        raise TLSHandshakeError(
+                            "Missing or unsolicited NewSessionTicket"
+                        )
                     received_ccs = True
                     self._server_seq_num = 0
                     continue
@@ -1052,9 +1610,11 @@ class TLS:
                                 "Unexpected messages after server Finished"
                             )
                         self._handshake_messages = transcript + message
+                        self._new_session_ticket = ticket or (0, b'')
                         return True
-                    if int.from_bytes(message[8:10], 'big') != len(message) - 10:
-                        raise TLSHandshakeError("Invalid NewSessionTicket length")
+                    if ticket is not None or not self._server_offered_session_ticket:
+                        raise TLSHandshakeError("Unexpected NewSessionTicket")
+                    ticket = self._parse_new_session_ticket(message[4:])
                     transcript += message
         except Exception as error:  # pylint: disable=broad-exception-caught
             debug(f"Failed to authenticate server Finished: {error}")
@@ -1665,3 +2225,6 @@ class TLS:
             raise TLSHandshakeError(f"Certificate verification failed: {error}")
         self._cert_verified = True
         self._verified_hostname = hostname
+        leaf_size = int.from_bytes(certificate_data[3:6], 'big')
+        leaf = x509.load_der_x509_certificate(certificate_data[6 : 6 + leaf_size])
+        self._server_cert_not_after = leaf.not_valid_after_utc.timestamp()

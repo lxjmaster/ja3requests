@@ -44,6 +44,7 @@ class TlsConfig:
 
         # Supported Groups (for Elliptic Curve) - minimal for compatibility
         self._supported_groups = []  # Empty for maximum compatibility
+        self._key_share_groups = None  # None offers all implemented groups
 
         # Signature Algorithms - minimal for compatibility
         self._signature_algorithms = []  # Empty for maximum compatibility
@@ -170,6 +171,15 @@ class TlsConfig:
     def supported_groups(self, groups: List[int]):
         """Set supported groups"""
         self._supported_groups = groups
+
+    @property
+    def key_share_groups(self) -> Optional[List[int]]:
+        """Groups with a key share in the initial TLS 1.3 ClientHello."""
+        return self._key_share_groups
+
+    @key_share_groups.setter
+    def key_share_groups(self, groups: Optional[List[int]]):
+        self._key_share_groups = groups
 
     @property
     def signature_algorithms(self) -> List[int]:
@@ -554,6 +564,16 @@ class TlsConfig:
             self._supported_groups
         ).intersection({23, 29}):
             issues.append("TLS 1.3 requires an implemented key share group")
+        if self._tls_version == 0x0304 and self._key_share_groups is not None:
+            shares = self._key_share_groups
+            if (
+                not shares
+                or len(shares) != len(set(shares))
+                or not set(shares).issubset(set(self._supported_groups) & {23, 29})
+                or shares
+                != [group for group in self._supported_groups if group in shares]
+            ):
+                issues.append("Initial key shares must follow supported group order")
 
         if strict and issues:
             raise ValueError(f"TLS config validation failed: {issues[0]}")
