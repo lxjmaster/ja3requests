@@ -8,10 +8,11 @@ merges, publication, history rewriting, subagents, or T06-T10 implementation.
 
 Follow-up status: the user requested execution of the revised plan. Verified
 repairs are now committed on both branches, and #53 incorporates the updated
-#52 ancestry without additional runtime changes. Fresh remote CI is pending;
+#52 ancestry without additional runtime changes. Fresh remote CI passed;
 the local-only and uncommitted statements below describe the original review
-snapshot. Separate server-side merge authorization is still required by the
-controlling plan. No package publication is included.
+snapshot. The user's subsequent correction and resumed execution confirm the
+E3 merge workflow; the previous missing-authority classification is superseded.
+No package publication is included.
 
 PR #52 is based on master `7a545688d12327a4487d9ea87f39d496303db6bc` and has head
 `21f72ae397fd7656ac1c58fcdbfa207bdc7bb94a`. PR #53 is based on #52 and has head
@@ -198,3 +199,35 @@ Cleanup readback: after fixture teardown, candidate verification and moving
 pytest fixture links remained. The task-owned links were unlinked and directories
 removed with empty-directory removal. Both patches were reverse-checked again
 at the final worktree locations. No user files or retained evidence were removed.
+
+## E3 pushed-candidate handoff
+
+On 2026-10-03 the follow-up execution request advanced the verified repairs to
+the remote branches. #52 is now `ad62e9a022bdc271d43c4aba88925773273eaab2`;
+#53 is `8e8c0926f9df1e72ef6cf2727993ca7efa9dbfb1`, including the #52 ancestry.
+Every entry of the original source/test manifests also matches these commits.
+The incremental #53 diff contains no duplicate #52 repair delta.
+
+Both exact remote heads have ten successful checks and report CLEAN/MERGEABLE.
+They remain OPEN/draft; no server-side merge, retarget or publication occurred.
+
+| Candidate | Python 3.11-3.13 (each) | Python 3.7-3.10 (each) | Remote coverage |
+| --- | --- | --- | --- |
+| #52 | 1374 passed | 1356 passed, 18 skipped | 88.89% |
+| #53 | 1427 passed | 1409 passed, 18 skipped | 89.04% |
+
+The existing manual-test exclusion and older-runtime skip boundaries remain.
+Fresh check identities and URLs are retained in
+`dist/delivery_review/remote_post_push.json`. Test runs are 37090686073 (#52)
+and 37090746597 (#53); coverage runs are 37090686106 and 37090746583.
+
+Recommendation: the updated candidates are ready for the separately authorized
+merge sequence: mark #52 ready and merge server-side; retarget #53 to master;
+inspect final ancestry/diff and integration checks, then mark ready and merge
+#53. Prefer preserving ancestry with merge commits; do not rewrite history or
+delete the retained branches/worktrees. Publication remains separate.
+
+The user corrected the missing-authority interpretation and resumed execution.
+#52 was marked ready and merged server-side on 2026-10-03 at 02:59:12 UTC as
+`f0a00507c449e746b287fe58836b4c4c4111341f`. #53 now targets master; its final
+integration candidate will be checked before the second server-side merge.

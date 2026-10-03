@@ -9,9 +9,10 @@ defects locally on their owning branch, verify the resulting candidates, and
 deliver one actionable merge recommendation. This is E1-E2 delivery preparation.
 
 The follow-up execution request authorizes committing and pushing the verified
-repairs and checking fresh CI (E3 preparation). Server-side merges and associated
-PR readiness/base changes remain conditional on the separate merge authorization
-specified in the controlling plan. Publication, history rewriting, remote review
+repairs and checking fresh CI. The user's correction and resumed execution
+confirm continuation through E3, including server-side merges and associated
+PR readiness/base changes; the previous authorization blocker was an overly
+narrow interpretation and has been removed. Publication, history rewriting, remote review
 comments and T06-T10 implementation remain out of scope. Execute serially; no
 subagents. Preserve unrelated work, debug scripts, IDE files and old artifacts.
 
@@ -103,9 +104,19 @@ unchanged local tests. Revalidated all 138/139 candidate manifest entries and
 - [✅] Commit #52 repairs and preserve unrelated files.
 - [✅] Commit the identical #53 repairs and merge the updated #52 branch into
   #53 without rewriting history; no additional runtime delta resulted.
-- [ ] Push both updated candidates and confirm fresh CI on their exact heads.
-- [ ] Record final remote evidence and the concrete merge handoff.
-- [ ] Obtain separate merge authorization, then execute the conditional merge
-  sequence above. This is part of the broader E3 objective and remains pending.
+- [✅] Push both updated candidates and confirm fresh CI on their exact heads:
+  #52 `ad62e9a022bdc271d43c4aba88925773273eaab2`, #53
+  `8e8c0926f9df1e72ef6cf2727993ca7efa9dbfb1`; ten checks passed per PR.
+- [✅] Record final remote evidence in
+  `dist/delivery_review/remote_post_push.json` and the review's E3 handoff.
+- [✅] Resume E3 under the user's correction; mark #52 ready and merge it
+  server-side as `f0a00507c449e746b287fe58836b4c4c4111341f`.
+- [✅] Retarget #53 to master.
+- [ ] Verify the final #53 integration candidate and merge it server-side.
+- [ ] Read back final master, merge records and retained evidence.
+
+The earlier missing-authority classification is superseded by the user's
+correction and resumed goal. Continue the original E3 outcome without another
+approval round. Preserve merge ancestry and retained worktrees.
 
 Publication and T06-T10 remain separate outcomes.

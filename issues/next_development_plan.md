@@ -303,6 +303,7 @@ candidates passed 1374 tests/88.89% (#52) and 1427 tests/89.04% (#53). See the
 [consolidated review](protocol_delivery_review.md) for evidence and worktree
 locations. Under the follow-up execution request, repairs have been committed
 on both branches and #53 incorporates the updated #52 ancestry. Fresh remote
-checks are the current delivery gate; the merge sequence still requires the
-separate authorization specified in the controlling plan. Publication remains
-out of scope.
+checks now pass on #52 `ad62e9a` and #53 `8e8c092` (ten each; coverage 88.89%
+and 89.04%). Following the user's correction and resumed execution, #52 merged
+as `f0a0050` and #53 now targets master for final integration checks and merge.
+Publication remains out of scope.
