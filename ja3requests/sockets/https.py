@@ -118,6 +118,7 @@ class HttpsSocket(BaseSocket):
                     port,
                     policy_key,
                     verified_host=host if tls_config.verify_cert else None,
+                    timeout=getattr(self.context, 'connect_timeout', None),
                 )
                 if h2_pooled is not None:
                     self.conn = h2_pooled.conn
@@ -300,8 +301,13 @@ class HttpsSocket(BaseSocket):
 
             def h2_send(data):
                 with self._h2_io_lock:
-                    encrypted = self._encrypt_application_data(data)
-                    self.conn.sendall(encrypted)
+                    # HTTP/2 frames include a nine-byte header and may exceed
+                    # one TLS plaintext record even at the default frame size.
+                    for offset in range(0, len(data), 16384):
+                        encrypted = self._encrypt_application_data(
+                            data[offset : offset + 16384]
+                        )
+                        self.conn.sendall(encrypted)
 
             def h2_recv(n):
                 return self._decrypt_single_record() or b""
