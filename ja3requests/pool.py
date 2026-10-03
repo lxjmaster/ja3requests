@@ -259,9 +259,12 @@ class ConnectionPool:
                     return c
             return None
 
-    def get_h2_or_reserve(self, host, port, policy_key, verified_host=None):
+    def get_h2_or_reserve(
+        self, host, port, policy_key, verified_host=None, *, timeout=None
+    ):
         """Check out a stream or reserve the first connection handshake."""
         key = (self._get_pool_key(host, port, "https"), policy_key)
+        deadline = time.monotonic() + (5.0 if timeout is None else timeout)
         with self._h2_condition:
             while True:
                 pooled = self.get_h2_connection(
@@ -272,7 +275,10 @@ class ConnectionPool:
                 if key not in self._h2_connecting:
                     self._h2_connecting.add(key)
                     return None, key
-                self._h2_condition.wait()
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("Timed out waiting for HTTP/2 connection")
+                self._h2_condition.wait(remaining)
 
     def release_h2_reservation(self, key):
         if key is None:

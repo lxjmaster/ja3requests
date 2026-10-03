@@ -695,14 +695,22 @@ class TLS:
                 raise TLSHandshakeError("Server certificate was not verified")
 
             if self._resumed_session is not None:
-                if not self._wait_for_server_handshake_completion():
-                    raise TLSHandshakeError("Invalid resumed server Finished")
-                self.conn.sendall(b'\x14\x03\x03\x00\x01\x01')
-                self._client_seq_num = 0
-                self.conn.sendall(self._build_finished_message())
-                self._cache_new_tls12_ticket()
-                debug("TLS 1.2 abbreviated handshake completed successfully")
-                return True
+                self.conn.settimeout(
+                    self._handshake_timeout
+                    if self._handshake_timeout is not None
+                    else 5.0
+                )
+                try:
+                    if not self._wait_for_server_handshake_completion():
+                        raise TLSHandshakeError("Invalid resumed server Finished")
+                    self.conn.sendall(b'\x14\x03\x03\x00\x01\x01')
+                    self._client_seq_num = 0
+                    self.conn.sendall(self._build_finished_message())
+                    self._cache_new_tls12_ticket()
+                    debug("TLS 1.2 abbreviated handshake completed successfully")
+                    return True
+                finally:
+                    self.conn.settimeout(None)
 
             # Step 7-9: Send client finishing messages
             self._send_client_finishing_messages()
