@@ -1,10 +1,16 @@
 # Protocol Delivery Review
 
+Current delivery status: PR #52 and PR #53 are both merged into master, in
+dependency order. #53's final candidate `e83d3c4` passed ten remote checks after
+the test-only teardown synchronization fix. Final master `f0cac58` matches that
+candidate's complete tree. Earlier sections retain the dated local-review and
+pre-merge evidence; their uncommitted/open status statements are historical.
+
 Date: 2026-10-03. Original scope: PR #52 and the incremental PR #53, necessary local
 fixes, verification, and a merge recommendation. No remote writes, commits,
 merges, publication, history rewriting, subagents, or T06-T10 implementation.
 
-## Candidate identity and review result
+## Historical candidate identity and review result
 
 Follow-up status: the user requested execution of the revised plan. Verified
 repairs are now committed on both branches, and #53 incorporates the updated
@@ -229,8 +235,8 @@ delete the retained branches/worktrees. Publication remains separate.
 
 The user corrected the missing-authority interpretation and resumed execution.
 #52 was marked ready and merged server-side on 2026-10-03 at 02:59:12 UTC as
-`f0a00507c449e746b287fe58836b4c4c4111341f`. #53 now targets master; its final
-integration candidate will be checked before the second server-side merge.
+`f0a00507c449e746b287fe58836b4c4c4111341f`. #53 then targeted master for final
+integration checks before the second server-side merge recorded below.
 
 Final-integration CI exposed a test-peer teardown race in
 `test_padded_response_body_over_tls[False]` on Python 3.7 (run 37091730925):
@@ -242,3 +248,29 @@ DATA integration cases pass locally. A drain-until-close experiment was not
 retained because the unpooled path does not close before fixture teardown.
 This is a test-only synchronization change; runtime code and wheel evidence
 remain unchanged. Fresh remote checks cover the corrected test.
+
+## Completed merge readback
+
+- #52 merged at 2026-10-03 02:59:12 UTC as
+  `f0a00507c449e746b287fe58836b4c4c4111341f`.
+- #53 was retargeted to master, integrated without runtime changes, and merged
+  at 2026-10-03 03:07:23 UTC as
+  `f0cac58b3339a8ef68850cd9075efac159a3bea3`.
+- Final #53 head `e83d3c47505a13ab7bdbc70ad0f2fb7b70fa71a9` passed all ten
+  checks. Python 3.11-3.13 each passed 1427; Python 3.7-3.10 each passed 1409
+  with the existing 18 explicit skips. Coverage is 89.04%.
+- At the post-merge readback, the final #53 candidate and master `f0cac58`
+  had identical trees, with #52's merge commit an ancestor of that master.
+  The original runtime/wheel evidence remains applicable;
+  only the documented padded-DATA test synchronization differs from that test
+  snapshot and is covered by final CI.
+- Both worktrees, recovery patches and original verification artifacts remain.
+  Test-generated certificates and the two new empty fixture directories were
+  removed. User debug scripts and IDE metadata are untouched.
+- These final plan/review/roadmap readback notes are delivered through a
+  documentation PR; no direct master push, history rewrite, branch deletion
+  or package publication is part of this closeout.
+- Final master's automatically triggered CI also passed all ten checks:
+  Tests 37092142239, Coverage 37092142284 and Lint 37092142228. Coverage is
+  89.04%, with 1427 tests passing in the coverage job. Readback is retained in
+  `dist/delivery_review/remote_merged.json`. E1-E3 are complete.
