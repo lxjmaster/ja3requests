@@ -109,7 +109,8 @@ verify remote CI. The delivery branch is `feature/protocol-delivery`; manual
 debug scripts and IDE metadata remain outside the commits. The source and test
 hashes still match the passing T04 installed-wheel snapshot. Remote verification
 is tracked on the delivery pull request; the earlier records remain snapshots
-of their respective local batches. T05 still requires a breaking-release decision.
+of their respective local batches. T05's 2.0.0 candidate decision and implementation
+are complete; merge and publication remain separate authorized outcomes.
 
 ## T01: Prepare the existing implementation for delivery
 
@@ -288,7 +289,20 @@ last usable artifact and return to the smallest reproducible case; after two
 attempts without progress, use a safe alternative or report the precise blocker.
 
 T05 implementation and local acceptance are complete for the 2.0.0 candidate.
-Its dependent migration PR records remote delivery checks. Recommended next
-outcome: **select a concrete T06 TLS 1.3 group and independent peer**. T07-T10
-retain their stated target/use-case dependencies. No later implementation is
-included in T05 delivery.
+On 2026-10-03, PRs #52 and #53 were confirmed OPEN and draft, each with 10
+successful checks. Neither has been merged. Recommended next outcome:
+**review #52 and #53 and complete delivery preparation**, following the
+[execution plan](protocol_delivery_execution_plan.md). Merge in dependency order
+only after authorization; publication remains separate. T06 is the next optional
+development candidate and requires a selected group/peer. T07-T10 retain their
+target/use-case dependencies. No later implementation is included in T05 delivery.
+
+On 2026-10-03, delivery review found and locally repaired three #52 runtime
+defects and one flaky test, then propagated the repairs to #53. The installed
+candidates passed 1374 tests/88.89% (#52) and 1427 tests/89.04% (#53). See the
+[consolidated review](protocol_delivery_review.md) for evidence and worktree
+locations. Under the follow-up execution request, repairs have been committed
+on both branches and #53 incorporates the updated #52 ancestry. Fresh remote
+checks are the current delivery gate; the merge sequence still requires the
+separate authorization specified in the controlling plan. Publication remains
+out of scope.
