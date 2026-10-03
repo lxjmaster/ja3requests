@@ -92,10 +92,10 @@ class TestBasicAuth(unittest.TestCase):
 class TestVerify(unittest.TestCase):
     """Test verify parameter."""
 
-    def test_default_verify_false(self):
-        """Default verify should be False."""
+    def test_default_verify_true(self):
+        """Implicit configuration verifies certificates."""
         config = TlsConfig()
-        self.assertFalse(config.verify_cert)
+        self.assertTrue(config.verify_cert)
 
     def test_verify_true_sets_config(self):
         """verify=True should set verify_cert on TlsConfig."""

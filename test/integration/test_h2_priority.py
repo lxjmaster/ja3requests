@@ -40,7 +40,7 @@ def test_priority_frames_and_headers_fields_keep_connection_usable(local_certifi
                         + h2_frame(0, 1, stream, b"second")
                     )
 
-    config = TlsConfig()
+    config = TlsConfig.legacy()
     config.tls_version = 0x0304
     config.cipher_suites = [0x1301]
     config.supported_groups = [29]

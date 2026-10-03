@@ -22,7 +22,7 @@ def _read_request_headers(conn):
 
 
 def _h2_config():
-    config = TlsConfig()
+    config = TlsConfig.legacy()
     config.alpn_protocols = ["h2", "http/1.1"]
     config.h2_settings = {1: 64}
     return config

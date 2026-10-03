@@ -293,7 +293,7 @@ class TestJA3NoneEdgeCases(unittest.TestCase):
     def test_ja3_with_none_supported_groups(self):
         from ja3requests.protocol.tls.config import TlsConfig
 
-        config = TlsConfig()
+        config = TlsConfig.legacy()
         config.supported_groups = None
         # Should not crash
         ja3 = config.get_ja3_string()
@@ -304,7 +304,7 @@ class TestJA3NoneEdgeCases(unittest.TestCase):
     def test_ja3_with_empty_supported_groups(self):
         from ja3requests.protocol.tls.config import TlsConfig
 
-        config = TlsConfig()
+        config = TlsConfig.legacy()
         config.supported_groups = []
         ja3 = config.get_ja3_string()
         parts = ja3.split(",")
