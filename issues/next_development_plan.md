@@ -1,6 +1,8 @@
 # Next Development Plan
 
-Revised: 2026-10-03. R01 is the selected active batch; later batches remain reference.
+Revised: 2026-10-03 after live state readback. R01 remains incomplete; later
+batches remain reference. This revision plans the remaining work; it does not
+report remote delivery or publication as completed.
 
 ## Outcome and scope
 
@@ -47,6 +49,43 @@ Completed evidence, not new tasks:
 Retain existing `dist/t01/` through `dist/t05/` and `dist/delivery_review/`.
 
 ## Recommended sequence
+
+### Immediate remaining work: R01 closeout
+
+Verified at this revision: remote master is `bfe1263`; the release-preparation
+branch is pushed at `9a6977e9d1cf887b8dc77d71e5673497513ffe41`. No PR exists for
+that branch and no candidate CI run is shown in the latest runs. Master Tests,
+Lint and Coverage workflows succeeded. Those successes do not validate the new
+packaging workflow. The task-owned staging directory still exists.
+
+- [ ] Finalize and deliver this revised plan together with the existing five-file
+  R01 change through one PR from `release/2.0.0-preparation` to `master`.
+  Inspect the final diff; preserve user files. Do not add runtime features.
+- [ ] Validate the exact PR head with the existing CI gates, particularly the
+  changed sdist-to-wheel build and installed-package smoke check. Investigate
+  any new failure by commit, job and failing step; fix only required defects.
+  Historical failed runs are not current failures and need no cosmetic reruns.
+- [ ] Under the established R01 delivery scope, merge the green PR server-side,
+  read back master and confirm all five deliverables. Check automatically
+  triggered master CI; do not manually duplicate unchanged successful tests.
+- [ ] Read back retained artifact hashes/reports, then remove only validated
+  task-owned `/tmp/ja3requests-r01.8jWorW` staging. Retain `dist/r01/`, prior
+  evidence, existing worktrees, user debug scripts and IDE files.
+- [ ] Reconcile local acceptance, remote delivery, CI and cleanup evidence.
+  Only then complete the active R01 goal. A finished plan or local test run
+  alone must not complete it. Record remote evidence without creating an
+  uncommitted tracked-document tail after merging.
+
+The existing 1427 tests plus 107 subtests and 89.05% coverage are retained
+local acceptance evidence, not a new test task. Rebuild only if package inputs
+change; rerun affected checks for a new relevant failure. Documentation-only
+revisions need content, relative-link and diff checks.
+
+If CI fails, keep R01 open and return to its closeout after the scoped fix.
+An unavailable plan-session binding does not prevent repository work. Registry
+credentials or a release destination are inputs to R02, not blockers for R01.
+Execute serially without subagents; this coupled closeout needs no parallel
+workstreams or new automation framework.
 
 | Batch | Status | Entry condition | Deliverable |
 | --- | --- | --- | --- |
