@@ -47,8 +47,10 @@ jobs:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: requirements*.txt
-      - name: Build wheel
-        run: python -m pip wheel . --no-deps --wheel-dir "$RUNNER_TEMP/wheels"
+      - name: Build source distribution and wheel from it
+        run: |
+          python -m pip install build
+          python -m build --outdir "$RUNNER_TEMP/wheels"
       - name: Install wheel and exercise HTTP/2 request framing
         run: |
           python -m venv "$RUNNER_TEMP/wheel-venv"
@@ -56,6 +58,7 @@ jobs:
           cd "$RUNNER_TEMP"
           "$RUNNER_TEMP/wheel-venv/bin/python" - <<'PY'
           import ja3requests
+          from importlib.metadata import metadata
           from ja3requests.protocol.h2.connection import H2Connection
           from ja3requests.protocol.h2.frame import CONNECTION_PREFACE
 
@@ -65,4 +68,5 @@ jobs:
           assert connection.send_request('GET', 'example.com', '/') == 1
           assert sent[0] == CONNECTION_PREFACE and len(sent) == 3
           assert 'site-packages' in ja3requests.__file__
+          assert metadata('ja3requests')['Requires-Python'] == '>=3.7'
           PY
