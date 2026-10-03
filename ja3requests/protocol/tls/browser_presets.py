@@ -4,7 +4,8 @@ ja3requests.protocol.tls.browser_presets
 
 Version-specific browser TLS fingerprint presets.
 Each preset defines: TLS version, cipher suites, extensions, supported groups,
-signature algorithms, ALPN, GREASE, and H2 settings — matching real browser JA3 fingerprints.
+signature algorithms, ALPN, GREASE, and H2 settings. Historical presets are
+browser-inspired; capture-calibrated subsets explicitly document their gaps.
 """
 
 from ja3requests.protocol.tls.cipher_suites.suites import (
@@ -318,7 +319,54 @@ PRESETS = {
     },
 }
 
-# Latest known version for each browser
+# Capture-calibrated supported subset, explicit selection only. This is NOT
+# byte-identical Chrome or a matching JA3: see docs/tls_wire_control.md.
+PRESETS[("chrome", 154)] = {
+    "tls_version": 0x0304,
+    "cipher_suites": [
+        0x1301,
+        0x1302,
+        0x1303,
+        0xC02B,
+        0xC02F,
+        0xC02C,
+        0xC030,
+        0xC013,
+        0xC014,
+        0x009C,
+        0x009D,
+        0x002F,
+        0x0035,
+    ],
+    "supported_groups": [29, 23, 24],
+    "key_share_groups": [29],
+    "signature_algorithms": [
+        0x0403,
+        0x0804,
+        0x0401,
+        0x0503,
+        0x0805,
+        0x0501,
+        0x0806,
+        0x0601,
+    ],
+    "alpn_protocols": ["h2", "http/1.1"],
+    "use_grease": True,
+    "session_id_length": 32,
+    "extensions": [
+        SessionTicketExtension(),
+        RenegotiationInfoExtension(),
+        ECPointFormatsExtension([0]),
+        ExtendedMasterSecretExtension(),
+        StatusRequestExtension(),
+    ],
+    "extension_order": [35, 65281, 11, 0, 45, 51, 23, 5, 10, 13, 43, 16, 41],
+    "capture": "test/fixtures/chrome154_macos_hello.json",
+    "fidelity": "supported subset; different JA3, no browser-identity guarantee",
+    # The capture covers TLS only; no invented Chrome H2 SETTINGS.
+}
+
+# Compatibility defaults remain pinned; new samples require explicit selection.
 _LATEST_VERSIONS = {
     "chrome": 124,
     "firefox": 121,

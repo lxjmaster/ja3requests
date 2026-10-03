@@ -42,6 +42,8 @@ class ClientHello(HandShake):
         alpn_protocols=None,
         use_grease=True,
         _extensions=None,
+        extension_order=None,
+        record_version=0x0301,
     ):
         super().__init__()
         self._version = tls_version
@@ -55,6 +57,8 @@ class ClientHello(HandShake):
         self._alpn_protocols = alpn_protocols or []
         self._use_grease = use_grease
         self._custom_extensions = _extensions or []
+        self._extension_order = extension_order
+        self.record_version = record_version
 
         # Set cipher suites
         if cipher_suites:
@@ -162,10 +166,32 @@ class ClientHello(HandShake):
             extension_list.append(ALPNExtension(self._alpn_protocols))
 
         if extension_list:
+            types = [ext.extension_type for ext in extension_list]
+            if len(types) != len(set(types)):
+                raise ValueError("Duplicate ClientHello extension")
+            if self._extension_order is not None:
+                # SNI, HRR cookie and PSK are conditional slots. Their absence
+                # never creates a new extension; all others must be present.
+                order = [
+                    kind
+                    for kind in self._extension_order
+                    if kind in types or kind not in (0, 41, 44)
+                ]
+                if len(order) != len(types) or set(order) != set(types):
+                    raise ValueError(
+                        "Exact extension order must include every emitted extension once"
+                    )
+                if 41 in types and order[-1] != 41:
+                    raise ValueError("pre_shared_key must be the final extension")
+                extension_list.sort(
+                    key=lambda ext: self._extension_order.index(ext.extension_type)
+                )
             # RFC 8446 requires pre_shared_key to be the final ClientHello extension.
             extension_list.sort(key=lambda ext: ext.extension_type == 0x0029)
             extensions_data = b"".join(ext.to_bytes() for ext in extension_list)
             self._extensions = struct.pack("!H", len(extensions_data)) + extensions_data
+        elif self._extension_order and set(self._extension_order) - {0, 41, 44}:
+            raise ValueError("Exact extension order contains extensions not emitted")
 
 
 if __name__ == '__main__':

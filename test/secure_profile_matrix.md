@@ -1,5 +1,13 @@
 # Secure Profile Interoperability Matrix
 
+The subsequent [wire-control contract](../docs/tls_wire_control.md) adds explicit
+P-384 verification in `integration/test_wire_p384.py`: normal/seven-byte reads,
+direct/HRR handshakes, AES-128-GCM/AES-256-GCM and verified certificates against
+an independent OpenSSL server. It also records the real Chrome 154 capture and
+the deliberately incomplete calibrated subset. Existing defaults are unchanged.
+The dated matrix below remains historical evidence, not a claim that newly
+advertised browser fields or all environments are fully implemented.
+
 Recorded: 2026-10-01. T02 local verification is complete for the selected cases.
 
 ## Scope and evidence

@@ -152,6 +152,7 @@ class TestBrowserFingerprints(unittest.TestCase):
         """Firefox-like TLS 1.3 config."""
         config = TlsConfig().create_firefox_config()
         config.tls_version = 0x0304
+        config.cipher_suites = [0x1301] + config.cipher_suites
         ja3 = config.get_ja3_string()
         self.assertTrue(ja3.startswith("771,"))  # TLS 1.3 ClientHello legacy_version
 

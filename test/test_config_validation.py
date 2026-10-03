@@ -121,7 +121,7 @@ class TestValidateTLS13Requirements(unittest.TestCase):
         c = TlsConfig()
         c.tls_version = 0x0304
         c.cipher_suites = [0x1301]
-        c.supported_groups = [24]
+        c.supported_groups = [25]
         issues = c.validate()
         self.assertTrue(any("key share" in i for i in issues))
 
