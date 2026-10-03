@@ -231,3 +231,14 @@ The user corrected the missing-authority interpretation and resumed execution.
 #52 was marked ready and merged server-side on 2026-10-03 at 02:59:12 UTC as
 `f0a00507c449e746b287fe58836b4c4c4111341f`. #53 now targets master; its final
 integration candidate will be checked before the second server-side merge.
+
+Final-integration CI exposed a test-peer teardown race in
+`test_padded_response_body_over_tls[False]` on Python 3.7 (run 37091730925):
+the peer returned immediately after sending its response, allowing an unread
+SETTINGS ACK to race with TCP close and reset the client's response read.
+The fixture now waits on a bounded event signaled after the client reads and
+asserts the complete body; failure cleanup also signals it. The three padded
+DATA integration cases pass locally. A drain-until-close experiment was not
+retained because the unpooled path does not close before fixture teardown.
+This is a test-only synchronization change; runtime code and wheel evidence
+remain unchanged. Fresh remote checks cover the corrected test.
