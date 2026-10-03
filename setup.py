@@ -72,6 +72,7 @@ setup(
     zip_safe=False,
     include_package_data=True,
     platforms="any",
+    python_requires=">=3.7",
     install_requires=requires,
     tests_require=test_requirements,
     cmdclass={"test": PyTest},
