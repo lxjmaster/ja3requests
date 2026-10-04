@@ -17,7 +17,9 @@ repos:
     hooks:
       - id: pylint
         name: pylint (errors)
-        entry: python -m pylint --errors-only
+        # Analyze the package together so cross-module assignments are visible.
+        entry: python -m pylint --errors-only ja3requests
+        pass_filenames: false
         language: system
         types: [python]
         files: ^ja3requests/

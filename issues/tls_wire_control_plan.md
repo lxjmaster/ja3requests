@@ -95,3 +95,10 @@ existing required CI checks. Record the PR URL, head and check conclusions in
 dist/wire-control/remote_ci.json and local_acceptance.json; those final records
 close the pending remote item above without a self-referential CI-only commit.
 The A-E goal must not be completed without that remaining CI evidence.
+
+PR #56: https://github.com/lxjmaster/ja3requests/pull/56 (draft, base master).
+The first CI lint run reproduced Pylint E1102 when pre-commit analyzed files
+separately: the TLS ticket callback is assigned in another module. The normal
+whole-package Pylint command passed. Align the hook with that same whole-package
+command (pass_filenames: false), retaining error checks without runtime changes.
+All local pre-commit hooks then passed; final head CI still requires readback.
