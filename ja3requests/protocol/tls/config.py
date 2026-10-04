@@ -476,6 +476,7 @@ class TlsConfig:
             SignatureAlgorithmsExtension,
             ALPNExtension,
             SupportedVersionsExtension,
+            PSKKeyExchangeModesExtension,
         )  # pylint: disable=import-outside-toplevel
 
         declarations = {
@@ -485,6 +486,7 @@ class TlsConfig:
         }
         if self._tls_version == 0x0304:
             declarations[43] = SupportedVersionsExtension([0x0304, 0x0303])
+            declarations[45] = PSKKeyExchangeModesExtension([1])
         for extension in self._extensions or []:
             if not isinstance(extension, Extension):
                 issues.append("Configured extensions must be Extension objects")
@@ -510,6 +512,8 @@ class TlsConfig:
             issues.append("Only null TLS compression [0] is implemented")
         if self.client_hello_record_version not in (0x0301, 0x0302, 0x0303):
             issues.append("Invalid ClientHello record version")
+        elif self._tls_version == 0x0304 and self.client_hello_record_version == 0x0302:
+            issues.append("TLS 1.3 ClientHello record version must be 0x0301 or 0x0303")
         if self.extension_order is not None and (
             not isinstance(self.extension_order, list)
             or any(

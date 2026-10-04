@@ -376,6 +376,13 @@ class TLS:
             0x1303,
         ):
             raise TLSHandshakeError("Invalid TLS 1.3 version selection")
+        expected_id = self.body.session_id
+        if expected_id == b"\x00" and not getattr(
+            self.body, '_session_id_explicit', False
+        ):
+            expected_id = b""
+        if (self._server_session_id or b"") != expected_id:
+            raise TLSHandshakeError("ServerHello session ID does not match ClientHello")
         return b'\x03\x04'
 
     def _handshake_tls13(self):
@@ -418,13 +425,6 @@ class TLS:
             if retry_suite is not None and (
                 selected_version != b'\x03\x04'
                 or self._selected_cipher_suite != retry_suite
-                or (self._server_session_id or b"")
-                != (
-                    self.body.session_id
-                    if self.body.session_id != b"\x00"
-                    or getattr(self.body, '_session_id_explicit', False)
-                    else b""
-                )
             ):
                 raise TLSHandshakeError(
                     "ServerHello changed HelloRetryRequest selection"
@@ -706,6 +706,8 @@ class TLS:
         if cookie is not None:
             extensions.append(CookieExtension(cookie))
         retried = copy.copy(self.body)
+        # RFC 8446 section 5.1 allows 0x0301 only on the initial ClientHello.
+        retried.record_version = 0x0303
         if (
             cookie is not None
             and retried._extension_order is not None
