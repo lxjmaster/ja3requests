@@ -12,7 +12,7 @@ The project owns ClientHello, handshake state, retry/resumption, key schedule
 and records. Cryptography may provide primitive operations; no external TLS
 engine may drive the client. OpenSSL is an independent test server only.
 No pure-Python cipher rewrite, backend framework, QUIC/ECH, 0-RTT, persisted
-TLS sessions, push, or unrelated suite expansion. Keep secure defaults and
+TLS sessions, server push, or unrelated suite expansion. Keep secure defaults and
 existing preset wire behavior stable unless an explicitly documented correction
 is necessary. Do not republish 2.0.0 or start a new release.
 
@@ -88,7 +88,10 @@ replace or be confused with the already published R02 files. No release is in
 scope. Source/test inputs are frozen; subsequent plan-only edits do not require
 rebuilding or rerunning passing tests.
 
-The original handoff excluded pushes. The present implementation request did
-not explicitly lift that remote-action limit for this new branch. All local
-work is prepared before requesting feature-branch push/PR authorization for CI;
-the active A-E goal must not be completed without that remaining CI evidence.
+The user explicitly approved pushing feature/tls-wire-control and creating its
+PR for final CI verification on 2026-10-04. Merge and publication remain out of
+scope. Remote final acceptance is pending until the PR's exact head passes all
+existing required CI checks. Record the PR URL, head and check conclusions in
+dist/wire-control/remote_ci.json and local_acceptance.json; those final records
+close the pending remote item above without a self-referential CI-only commit.
+The A-E goal must not be completed without that remaining CI evidence.
