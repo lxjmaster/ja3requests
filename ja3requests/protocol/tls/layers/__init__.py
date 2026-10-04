@@ -308,6 +308,7 @@ class HandShake(ABC):
     def session_id(self, attr: bytes):
 
         self._session_id = attr
+        self._session_id_explicit = bool(attr)
 
     @property
     def cipher_suites(self) -> bytes:
@@ -385,7 +386,9 @@ class HandShake(ABC):
                 self.t.append("random")
 
         if self.session_id:
-            if self.session_id == b'\x00':
+            if self.session_id == b'\x00' and not getattr(
+                self, '_session_id_explicit', False
+            ):
                 content += self.session_id
             else:
                 content += struct.pack("B", len(self.session_id))
@@ -444,7 +447,7 @@ class HandShake(ABC):
         handshake_msg = self.handshake_message
         message = (
             b'\x16'
-            + b'\x03\x01'  # Use TLS 1.0 version for record layer (for compatibility)
+            + getattr(self, 'record_version', 0x0301).to_bytes(2, 'big')
             + struct.pack("!H", len(handshake_msg))
             + handshake_msg
         )

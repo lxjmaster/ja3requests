@@ -1,3 +1,3 @@
 include requirements.txt requirements-dev.txt README-zh.md CHANGELOG.md
 recursive-include docs *.md
-recursive-include test *.py *.md
+recursive-include test *.py *.md *.json

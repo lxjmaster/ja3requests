@@ -1,5 +1,26 @@
 # Release Notes
 
+## 2.0.1 — explicit TLS wire control
+
+- Honor configured Session IDs, reject unsupported compression and conflicting
+  extension declarations before sending TLS bytes, and support exact extension
+  ordering and inspection of the actual sent ClientHello/JA3.
+- Add opt-in TLS 1.3 P-384, including HelloRetryRequest and fragmented reads.
+  Secure defaults and historical preset initial key shares remain unchanged.
+- Add an explicitly selected Chrome 154 supported-subset profile, calibrated
+  against a retained browser capture. It has a different JA3 and does not claim
+  complete browser impersonation; ECH and post-quantum groups are not implemented.
+- Validate TLS 1.3 Session ID echoes on direct and retried handshakes, require
+  record version 0x0303 on retry, and reject unimplemented PSK exchange modes.
+- Keep the client TLS protocol project-owned. Cryptography supplies primitive
+  operations; OpenSSL is used only as the independent TLS test server.
+
+Compatibility: invalid custom configurations that were previously ignored or
+accepted now fail early. TLS 1.3 initial record versions are 0x0301/0x0303;
+TLS 1.2 also permits 0x0302. Custom PSK exchange modes must be `[1]`.
+See [the wire-control contract](docs/tls_wire_control.md) for supported fields,
+protocol constraints and browser-profile differences.
+
 ## 2.0.0 candidate — secure TLS defaults
 
 This is a development candidate, not a package publication announcement.

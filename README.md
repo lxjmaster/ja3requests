@@ -7,6 +7,12 @@
 
 **Ja3Requests** is a http request library that can customize ja3 or h2 fingerprints.
 
+TLS handshakes and records are implemented by this project; cryptographic
+primitives use `cryptography`. See the [wire-control contract](docs/tls_wire_control.md)
+for exact extension ordering, actual ClientHello inspection, opt-in P-384 and
+capture-backed browser-profile limitations. Browser-inspired presets are not
+a guarantee of complete browser impersonation.
+
 [中文文档](README-zh.md)
 
 ```pycon

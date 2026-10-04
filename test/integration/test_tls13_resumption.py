@@ -3,6 +3,9 @@
 import pytest
 
 from ja3requests import Session, TlsConfig
+from ja3requests.protocol.tls import TLS
+from ja3requests.protocol.tls.client_hello_info import inspect_client_hello
+from test.wire_client_hello import profile
 from test.integration.test_local_tls13 import fragmented_reads
 from test.mock_servers.local import LocalServer, read_headers, tls13_context
 
@@ -30,7 +33,17 @@ def test_verified_tls13_resumption_or_full_handshake_fallback(
         conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
 
     config = TlsConfig.secure()
+    config.extension_order = [0, 43, 10, 51, 13, 16, 45, 23, 44, 41]
     config.cipher_suites = [cipher]
+    observed = []
+    original = TLS.handshake
+
+    def handshake(tls):
+        result = original(tls)
+        observed.append(tls.sent_client_hellos)
+        return result
+
+    monkeypatch.setattr(TLS, 'handshake', handshake)
     if hello_retry:
         config.key_share_groups = [29]
     with LocalServer(handler, context, connections=2) as server:
@@ -44,3 +57,12 @@ def test_verified_tls13_resumption_or_full_handshake_fallback(
                 ticket.ticket = b"unknown-ticket"
             assert session.get(url, timeout=3).content == b"ok"
     assert reused == [False, not reject_ticket]
+    assert len(observed) == 2
+    for flight in observed:
+        assert flight[0][1:3] == b'\x03\x01'
+        if len(flight) == 2:
+            assert flight[1][1:3] == b'\x03\x03'
+        for record in flight:
+            assert inspect_client_hello(record)['ja3'] == profile(record)['ja3']
+    assert 41 not in inspect_client_hello(observed[0][0])['extensions']
+    assert inspect_client_hello(observed[1][0])['extensions'][-1] == 41
