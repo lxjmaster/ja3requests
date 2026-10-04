@@ -59,6 +59,9 @@ def test_verified_tls13_resumption_or_full_handshake_fallback(
     assert reused == [False, not reject_ticket]
     assert len(observed) == 2
     for flight in observed:
+        assert flight[0][1:3] == b'\x03\x01'
+        if len(flight) == 2:
+            assert flight[1][1:3] == b'\x03\x03'
         for record in flight:
             assert inspect_client_hello(record)['ja3'] == profile(record)['ja3']
     assert 41 not in inspect_client_hello(observed[0][0])['extensions']

@@ -79,6 +79,9 @@ def test_p384_handshake_and_retry(
                 == b'ok'
             )
     assert received == sent and len(sent) == (2 if retry else 1)
+    assert sent[0][1:3] == b'\x03\x01'
+    if retry:
+        assert sent[1][1:3] == b'\x03\x03'
     assert profile(sent[-1])['key_shares'] == [[24, 97]]
     for record in sent:
         assert decode(record)['session_id'] == b'\0'

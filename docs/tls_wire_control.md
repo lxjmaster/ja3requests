@@ -20,7 +20,7 @@ OpenSSL in integration tests is an independent **server**, not the client.
 | `session_id` | Bytes of length 0..32, including empty and a one-byte zero value | Explicit setter value takes precedence over TLS 1.2 cache offers; constructor default permits cache policy |
 | `compression_methods` | Only `[0]` | Other values rejected before ClientHello, not silently replaced |
 | `client_random` | Explicit 32 bytes or generated per hello | HRR preserves the original random; callers should not pin production randomness |
-| `client_hello_record_version` | `0x0301` default; also `0x0302`/`0x0303` | Controls the initial/retried ClientHello record header only |
+| `client_hello_record_version` | `0x0301` default; TLS 1.3 also allows `0x0303`, TLS 1.2 also allows `0x0302`/`0x0303` | Controls the initial ClientHello header; TLS 1.3 retries always use `0x0303` |
 | `server_name`/destination | SNI generated when hostname supplied | A custom SNI must match this value; certificate identity remains the request destination |
 | `extensions` | Extension objects; custom content precedes automatic additions | Duplicates rejected; groups/signatures/ALPN declarations must agree with configuration |
 | `extension_order` | Explicit ordering of the final generated extension set | Conditional SNI(0), cookie(44), PSK(41) slots may be absent; PSK must be last when emitted |
@@ -39,6 +39,10 @@ keys/cache state. Caller-provided replacements are rejected: replaying a public
 key or binder without the matching secret cannot establish a working session.
 Custom `supported_versions` in that path must match the implemented default
 TLS 1.3/TLS 1.2 offer. Trust verification remains independent of wire choices.
+Custom `psk_key_exchange_modes` must advertise only `[1]` (`psk_dhe_ke`);
+PSK-only mode is not implemented. TLS 1.3 ServerHello must echo the exact
+ClientHello Session ID on both direct and retried handshakes. TLS 1.2 may assign
+a different ID when establishing a new session.
 
 ## Exact order and actual sent bytes
 
