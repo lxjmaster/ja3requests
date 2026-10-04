@@ -280,6 +280,25 @@ class TLS13KeyExchange:
         )
         return private_key.exchange(ec.ECDH(), peer_public)
 
+    @staticmethod
+    def generate_secp384r1_keypair():
+        """Generate a P-384 share; protocol encoding remains project-owned."""
+        private_key = ec.generate_private_key(ec.SECP384R1(), default_backend())
+        public_bytes = private_key.public_key().public_bytes(
+            serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint
+        )
+        return private_key, public_bytes
+
+    @staticmethod
+    def compute_secp384r1_shared_secret(private_key, peer_public_bytes):
+        """Validate an uncompressed P-384 point before deriving its secret."""
+        if len(peer_public_bytes) != 97 or peer_public_bytes[0] != 4:
+            raise ValueError("Invalid P-384 key share encoding")
+        peer_public = ec.EllipticCurvePublicKey.from_encoded_point(
+            ec.SECP384R1(), peer_public_bytes
+        )
+        return private_key.exchange(ec.ECDH(), peer_public)
+
 
 # ============================================================================
 # TLS 1.3 Record Layer Encryption
@@ -364,6 +383,7 @@ class TLS13RecordProtection:
 # Named group IDs
 GROUP_X25519 = 0x001D
 GROUP_SECP256R1 = 0x0017
+GROUP_SECP384R1 = 0x0018
 
 # Cipher suite → (key_length, hash_algo)
 TLS13_CIPHER_PARAMS = {
@@ -546,6 +566,10 @@ class TLS13Handshake:
             )
         elif server_group == GROUP_SECP256R1:
             shared_secret = TLS13KeyExchange.compute_secp256r1_shared_secret(
+                private_key, server_public_key
+            )
+        elif server_group == GROUP_SECP384R1:
+            shared_secret = TLS13KeyExchange.compute_secp384r1_shared_secret(
                 private_key, server_public_key
             )
         else:

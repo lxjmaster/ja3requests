@@ -278,7 +278,7 @@ class TestTlsConfigWithExtensions(unittest.TestCase):
 
         config = TlsConfig()
         config.server_name = "example.com"
-        config.add_extension(ExtendedMasterSecretExtension())
+        config.extensions = [ExtendedMasterSecretExtension()]
         ja3 = config.get_ja3_string()
         extensions_field = ja3.split(",")[2]
         # Should include EMS type (0x0017 = 23) and SNI type (0x0000 = 0)
