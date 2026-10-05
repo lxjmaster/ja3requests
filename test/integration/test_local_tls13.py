@@ -141,6 +141,36 @@ def test_tls13_h2_reuse_replenishes_window_and_tracks_table_size(local_certifica
     assert any(stream == 0 for stream, _ in observed["window_updates"])
 
 
+def test_h2_serial_peer_drains_window_updates_after_final_response():
+    class Peer:
+        def __init__(self):
+            self.incoming = bytearray(
+                b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
+                + h2_frame(4, 0, 0)
+                + h2_frame(1, 5, 1, b"\x82")
+                + h2_frame(8, 0, 0, (32768).to_bytes(4, "big"))
+                + h2_frame(8, 0, 1, (32768).to_bytes(4, "big"))
+            )
+            self.saw_eof = False
+
+        def selected_alpn_protocol(self):
+            return "h2"
+
+        def recv(self, size):
+            data = bytes(self.incoming[:size])
+            del self.incoming[:size]
+            self.saw_eof = not data
+            return data
+
+        def sendall(self, data):
+            pass
+
+    peer = Peer()
+    serve_h2_serial(peer, {}, count=1, body=b"x" * 40000)
+    assert not peer.incoming
+    assert peer.saw_eof
+
+
 def test_tls13_h2_post_reuse_obeys_send_windows(local_certificate):
     observed = {"streams": [], "bodies": [], "data_sizes": [], "connection_updates": 0}
     config = tls13_config()

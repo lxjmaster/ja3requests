@@ -207,6 +207,11 @@ def serve_h2_serial(
             if goaway and len(observed["streams"]) == count:
                 response += h2_frame(7, 0, 0, stream.to_bytes(4, "big") + b"\x00" * 4)
             conn.sendall(response)
+    if not goaway:
+        # Keep the peer alive while the client processes the final response and
+        # sends WINDOW_UPDATE frames; closing first races those control writes.
+        while recv_with_ragged_eof(conn, 4096):
+            pass
 
 
 def read_cstring(conn):

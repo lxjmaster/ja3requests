@@ -283,6 +283,16 @@ class AsyncTransport:
                 waiter.set_exception(ConnectionError("Transport is closed"))
         for task in tuple(self._native_tasks):
             task.cancel()
+        # Python 3.7 socket operations unregister on readiness, not cancellation.
+        # Detach registrations before close allows the descriptor to be reused.
+        descriptor = self._socket.fileno()
+        if descriptor >= 0:
+            try:
+                self._loop.remove_reader(descriptor)
+                self._loop.remove_writer(descriptor)
+            except NotImplementedError:
+                # Proactor loops own completion-based I/O, not fd registrations.
+                pass
         try:
             self._socket.shutdown(socket.SHUT_RDWR)
         except OSError:

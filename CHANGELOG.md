@@ -29,6 +29,8 @@
   retries and 307/308 method/body-preserving redirects, with public typing and
   a local runnable async guide/example. Async file uploads, Cookie-file helpers,
   prepared-request APIs and module-level convenience functions remain deferred.
+- Remove native socket event registrations before async close, including on
+  Python 3.7, so cancelled reads/writes cannot poison a reused file descriptor.
 - Honor `HTTPRetry.raise_on_status` after the final retryable response. With
   the default `True`, exhaustion now raises `MaxRetriedException` instead of
   silently returning the failed response; `False` still returns it. The retry
