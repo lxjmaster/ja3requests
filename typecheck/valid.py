@@ -12,6 +12,9 @@ from ja3requests import AsyncConnectionPool, AsyncResponse, AsyncSession
 from ja3requests.base import BaseRequest
 from ja3requests.cookies import Ja3RequestsCookieJar
 from ja3requests.pool import ConnectionPool
+from ja3requests.protocol.h2.frame import H2Frame, build_settings_frame
+from ja3requests.protocol.h2.huffman import huffman_decode, huffman_encode
+from ja3requests.protocol.tls.client_hello_info import inspect_client_hello
 from ja3requests.requests.request import Request
 
 
@@ -23,6 +26,24 @@ def before(request: BaseRequest) -> Optional[BaseRequest]:
 def after(response: Response) -> Optional[Response]:
     assert_type(response.status_code, int)
     return None
+
+
+def protocol_value_boundaries(record: bytes) -> None:
+    frame = build_settings_frame({1: 4096})
+    assert_type(frame, H2Frame)
+    assert_type(frame.serialize(), bytes)
+    parsed, remaining = H2Frame.parse(record)
+    assert_type(parsed, Optional[H2Frame])
+    assert_type(remaining, bytes)
+    assert_type(H2Frame.parse_all(record), Tuple[List[H2Frame], bytes])
+    assert_type(huffman_encode('header'), bytes)
+    assert_type(huffman_encode(bytearray(b'header')), bytes)
+    assert_type(huffman_decode(iter(record), max_size=1024), bytes)
+    hello = inspect_client_hello(record)
+    assert_type(hello['version'], int)
+    assert_type(hello['groups'], List[int])
+    assert_type(hello['key_shares'], List[Tuple[int, int]])
+    assert_type(hello['ja3'], str)
 
 
 def public_calls(url: str, cookie_path: Path) -> None:

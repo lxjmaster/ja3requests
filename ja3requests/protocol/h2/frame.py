@@ -16,7 +16,10 @@ Frame format:
     +---------------------------------------------------------------+
 """
 
+from __future__ import annotations
+
 import struct
+from typing import Dict, List, Mapping, Optional, Tuple
 
 
 # Frame types (RFC 7540 Section 6)
@@ -78,21 +81,27 @@ class H2Frame:
 
     HEADER_SIZE = 9  # 3 (length) + 1 (type) + 1 (flags) + 4 (stream_id)
 
-    def __init__(self, frame_type=0, flags=0, stream_id=0, payload=b""):
+    def __init__(
+        self,
+        frame_type: int = 0,
+        flags: int = 0,
+        stream_id: int = 0,
+        payload: bytes = b"",
+    ) -> None:
         self.type = frame_type
         self.flags = flags
         self.stream_id = stream_id & 0x7FFFFFFF  # Clear reserved bit
         self.payload = payload
 
     @property
-    def length(self):
+    def length(self) -> int:
         return len(self.payload)
 
     @property
-    def type_name(self):
+    def type_name(self) -> str:
         return FRAME_TYPE_NAMES.get(self.type, f"UNKNOWN(0x{self.type:02X})")
 
-    def serialize(self):
+    def serialize(self) -> bytes:
         """Serialize frame to bytes for sending."""
         header = struct.pack("!I", self.length)[1:]  # 24-bit length (3 bytes)
         header += struct.pack("!BB", self.type, self.flags)
@@ -100,7 +109,7 @@ class H2Frame:
         return header + self.payload
 
     @staticmethod
-    def parse(data):
+    def parse(data: bytes) -> Tuple[Optional[H2Frame], bytes]:
         """
         Parse a single frame from bytes.
         Returns (H2Frame, remaining_bytes) or (None, data) if incomplete.
@@ -124,9 +133,11 @@ class H2Frame:
         return frame, remaining
 
     @staticmethod
-    def parse_all(data, max_payload_size=None):
+    def parse_all(
+        data: bytes, max_payload_size: Optional[int] = None
+    ) -> Tuple[List[H2Frame], bytes]:
         """Parse all complete frames from data, return (frames, remaining)."""
-        frames = []
+        frames: List[H2Frame] = []
         while len(data) >= H2Frame.HEADER_SIZE:
             if (
                 max_payload_size is not None
@@ -139,7 +150,7 @@ class H2Frame:
             frames.append(frame)
         return frames, data
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return (
             f"<H2Frame {self.type_name} stream={self.stream_id} "
             f"flags=0x{self.flags:02X} length={self.length}>"
@@ -151,7 +162,9 @@ class H2Frame:
 # ============================================================================
 
 
-def build_settings_frame(settings=None, ack=False):
+def build_settings_frame(
+    settings: Optional[Mapping[int, int]] = None, ack: bool = False
+) -> H2Frame:
     """
     Build a SETTINGS frame.
 
@@ -169,7 +182,7 @@ def build_settings_frame(settings=None, ack=False):
     return H2Frame(FRAME_SETTINGS, 0, 0, payload)
 
 
-def build_window_update_frame(stream_id, increment):
+def build_window_update_frame(stream_id: int, increment: int) -> H2Frame:
     """
     Build a WINDOW_UPDATE frame.
 
@@ -181,7 +194,12 @@ def build_window_update_frame(stream_id, increment):
     return H2Frame(FRAME_WINDOW_UPDATE, 0, stream_id, payload)
 
 
-def build_headers_frame(stream_id, header_block, end_stream=False, end_headers=True):
+def build_headers_frame(
+    stream_id: int,
+    header_block: bytes,
+    end_stream: bool = False,
+    end_headers: bool = True,
+) -> H2Frame:
     """
     Build a HEADERS frame.
 
@@ -199,7 +217,7 @@ def build_headers_frame(stream_id, header_block, end_stream=False, end_headers=T
     return H2Frame(FRAME_HEADERS, flags, stream_id, header_block)
 
 
-def build_data_frame(stream_id, data, end_stream=False):
+def build_data_frame(stream_id: int, data: bytes, end_stream: bool = False) -> H2Frame:
     """
     Build a DATA frame.
 
@@ -212,20 +230,22 @@ def build_data_frame(stream_id, data, end_stream=False):
     return H2Frame(FRAME_DATA, flags, stream_id, data)
 
 
-def build_goaway_frame(last_stream_id, error_code=0, debug_data=b""):
+def build_goaway_frame(
+    last_stream_id: int, error_code: int = 0, debug_data: bytes = b""
+) -> H2Frame:
     """Build a GOAWAY frame."""
     payload = struct.pack("!II", last_stream_id & 0x7FFFFFFF, error_code)
     payload += debug_data
     return H2Frame(FRAME_GOAWAY, 0, 0, payload)
 
 
-def build_ping_frame(opaque_data=b"\x00" * 8, ack=False):
+def build_ping_frame(opaque_data: bytes = b"\x00" * 8, ack: bool = False) -> H2Frame:
     """Build a PING frame."""
     flags = FLAG_ACK if ack else 0
     return H2Frame(FRAME_PING, flags, 0, opaque_data[:8].ljust(8, b"\x00"))
 
 
-def build_rst_stream_frame(stream_id, error_code=0):
+def build_rst_stream_frame(stream_id: int, error_code: int = 0) -> H2Frame:
     """Build a RST_STREAM frame."""
     payload = struct.pack("!I", error_code)
     return H2Frame(FRAME_RST_STREAM, 0, stream_id, payload)
@@ -236,9 +256,9 @@ def build_rst_stream_frame(stream_id, error_code=0):
 # ============================================================================
 
 
-def parse_settings_payload(payload):
+def parse_settings_payload(payload: bytes) -> Dict[int, int]:
     """Parse SETTINGS frame payload into dict."""
-    settings = {}
+    settings: Dict[int, int] = {}
     offset = 0
     while offset + 6 <= len(payload):
         setting_id, value = struct.unpack("!HI", payload[offset : offset + 6])
@@ -247,7 +267,7 @@ def parse_settings_payload(payload):
     return settings
 
 
-def header_block_fragment(frame):
+def header_block_fragment(frame: H2Frame) -> bytes:
     """Return a HEADERS field block without optional priority or padding fields."""
     payload = frame.payload
     offset = 0
@@ -266,7 +286,7 @@ def header_block_fragment(frame):
     return payload[offset : len(payload) - padding if padding else len(payload)]
 
 
-def data_payload(frame):
+def data_payload(frame: H2Frame) -> bytes:
     """Return DATA content without the optional Pad Length and padding bytes."""
     if not frame.flags & FLAG_PADDED:
         return frame.payload

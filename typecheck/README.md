@@ -45,7 +45,7 @@ including `assert_type` checks that catch an accidental `Any` return. Every
 `# E:` line in `invalid.py` must produce its specific diagnostic; wrong URLs,
 timeouts, streaming options, upload tuples, callback returns, TLS configuration,
 Cookie values, and response return types are covered. The current consumers
-include 36 negative markers: async additions reject synchronous pools, incorrect
+include 39 negative markers: async additions reject synchronous pools, incorrect
 awaited return types, invalid budgets/iterators, and deferred file-upload APIs.
 Temporary files are
 removed on exit. The script never sends HTTP requests.
@@ -53,7 +53,11 @@ removed on exit. The script never sends HTTP requests.
 The checker uses `follow_imports = silent`, which loads imported inline types
 while withholding diagnostics from implementation bodies. It does **not** use
 `follow_imports = skip`, `ignore_errors`, or a global missing-import exemption.
-The source gate strictly checks the aliases, top-level facade, and retry policy.
+The source gate strictly checks the aliases, top-level facade, retry policy,
+HTTP/2 frame values, HPACK Huffman codec, and ClientHello inspection schema.
+The protocol modules are an incremental internal migration, not a claim that
+the full connection and TLS implementation is type-clean. Installed consumers
+also check precise protocol-value return types and three invalid protocol uses.
 To inspect the non-gating internal migration backlog explicitly:
 
 ```sh

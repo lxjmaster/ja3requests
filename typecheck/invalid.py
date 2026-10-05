@@ -6,6 +6,9 @@ import ja3requests
 from ja3requests import HTTPRetry, Response, Session, TlsConfig
 from ja3requests.cookies import Ja3RequestsCookieJar
 from ja3requests.pool import ConnectionPool
+from ja3requests.protocol.h2.frame import H2Frame
+from ja3requests.protocol.h2.huffman import huffman_decode
+from ja3requests.protocol.tls.client_hello_info import inspect_client_hello
 
 
 def rejects(url: str, response: Response, session: Session) -> None:
@@ -34,6 +37,12 @@ def rejects(url: str, response: Response, session: Session) -> None:
     jar = Ja3RequestsCookieJar()
     jar.set('name', 42)  # E: arg-type
     jar.save(42)  # E: arg-type
+
+
+def rejects_protocol_values(record: bytes) -> None:
+    H2Frame.parse('not bytes')  # E: arg-type
+    huffman_decode(record, max_size='unbounded')  # E: arg-type
+    value: int = inspect_client_hello(record)['ja3']  # E: assignment
 
 
 async def async_rejects(

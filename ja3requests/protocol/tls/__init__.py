@@ -46,7 +46,7 @@ from .crypto import (
     is_gcm_cipher_suite,
 )
 from .certificate_verify import CertificateVerifier, verify_tls_signature
-from ._io import Call, Pause, Read, Write, handshake_io
+from ._io import Call, Read, Write, handshake_io
 
 # ECDHE Cipher Suite Constants
 # These cipher suites use Elliptic Curve Diffie-Hellman Ephemeral key exchange
@@ -789,7 +789,6 @@ class TLS:
 
             # Step 10: Wait for server's response to our Finished message
             try:
-                yield Pause(0.3)
                 self.conn.settimeout(
                     self._handshake_timeout
                     if self._handshake_timeout is not None

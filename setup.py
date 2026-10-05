@@ -1,38 +1,9 @@
 import os
-import sys
 from setuptools import setup
-from setuptools.command.test import test as TestCommand
-
-
-class PyTest(TestCommand):
-    user_options = [("pytest-args=", "a", "Arguments to pass into py.test")]
-
-    def initialize_options(self):
-        TestCommand.initialize_options(self)
-        try:
-            from multiprocessing import cpu_count
-
-            self.pytest_args = ["-n", str(cpu_count()), "--boxed"]
-        except (ImportError, NotImplementedError):
-            self.pytest_args = ["-n", "1", "--boxed"]
-
-    def finalize_options(self):
-        TestCommand.finalize_options(self)
-        self.test_args = []
-        self.test_suite = True
-
-    def run_tests(self):
-        import pytest
-
-        errno = pytest.main(self.pytest_args)
-        sys.exit(errno)
 
 
 with open("requirements.txt", "r", encoding="utf8") as f:
     requires = f.readlines()
-
-with open("requirements-dev.txt", "r", encoding="utf8") as f:
-    test_requirements = f.readlines()
 
 about = {}
 here = os.path.abspath(os.path.dirname(__file__))
@@ -75,6 +46,4 @@ setup(
     platforms="any",
     python_requires=">=3.7",
     install_requires=requires,
-    tests_require=test_requirements,
-    cmdclass={"test": PyTest},
 )

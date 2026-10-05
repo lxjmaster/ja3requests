@@ -8,7 +8,7 @@ tests do not establish every supported interpreter's CI result.
 For the version described by these guides:
 
 ```sh
-python -m pip install 'ja3requests==2.1.0'
+python -m pip install 'ja3requests==2.1.1'
 ```
 
 For source development, install the checkout into an isolated environment:

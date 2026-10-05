@@ -5,9 +5,37 @@ ja3requests.protocol.h2.huffman
 HPACK Huffman coding table and codec (RFC 7541 Appendix B).
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Iterable, List, Optional, Tuple, Union, cast
+
+if TYPE_CHECKING:
+    from typing import overload
+    from typing_extensions import Literal, Protocol
+
+    class _DecodeNode(Protocol):
+        """Integer keys hold child nodes; only 'value' holds a decoded byte."""
+
+        @overload
+        def __getitem__(self, key: int) -> _DecodeNode: ...
+
+        @overload
+        def __getitem__(self, key: Literal['value']) -> int: ...
+
+        @overload
+        def __setitem__(self, key: int, value: _DecodeNode) -> None: ...
+
+        @overload
+        def __setitem__(self, key: Literal['value'], value: int) -> None: ...
+
+        def __contains__(self, key: object) -> bool: ...
+
+        def get(self, key: int) -> Optional[_DecodeNode]: ...
+
+
 # Huffman code table: (code, bit_length) indexed by byte value 0-255 + EOS
 # From RFC 7541 Appendix B
-HUFFMAN_TABLE = [
+HUFFMAN_TABLE: List[Tuple[int, int]] = [
     (0x1FF8, 13),
     (0x7FFFD8, 23),
     (0xFFFFFE2, 28),
@@ -268,17 +296,19 @@ HUFFMAN_TABLE = [
 ]
 
 # Build decode tree
-_DECODE_TREE = {}
+# The private builder is the sole writer and preserves _DecodeNode's key schema.
+# Cast only empty nodes during construction; decoding adds no per-bit casts.
+_DECODE_TREE: _DecodeNode = cast('_DecodeNode', {})
 
 
-def _build_decode_tree():
+def _build_decode_tree() -> None:
     """Build a binary trie for Huffman decoding."""
     for byte_val, (code, bit_len) in enumerate(HUFFMAN_TABLE[:256]):
         node = _DECODE_TREE
         for i in range(bit_len - 1, -1, -1):
             bit = (code >> i) & 1
             if bit not in node:
-                node[bit] = {}
+                node[bit] = cast('_DecodeNode', {})
             node = node[bit]
         node['value'] = byte_val
 
@@ -286,7 +316,7 @@ def _build_decode_tree():
 _build_decode_tree()
 
 
-def huffman_encode(data):
+def huffman_encode(data: Union[str, Iterable[int]]) -> bytes:
     """
     Encode bytes using HPACK Huffman coding.
 
@@ -321,7 +351,7 @@ class HuffmanLimitError(ValueError):
     """A literal would exceed its caller's decoded output budget."""
 
 
-def huffman_decode(data, max_size=None):
+def huffman_decode(data: Iterable[int], max_size: Optional[int] = None) -> bytes:
     """
     Decode Huffman-encoded bytes.
 
@@ -336,9 +366,10 @@ def huffman_decode(data, max_size=None):
     for byte in data:
         for i in range(7, -1, -1):
             bit = (byte >> i) & 1
-            node = node.get(bit)
-            if node is None:
+            child = node.get(bit)
+            if child is None:
                 raise ValueError("Invalid HPACK Huffman code")
+            node = child
             padding = (padding << 1) | bit
             padding_bits += 1
             if 'value' in node:
