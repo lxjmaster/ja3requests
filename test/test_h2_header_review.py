@@ -122,10 +122,14 @@ def test_large_request_headers_interoperate_with_frame_limited_peer(
             except OSError:
                 # A rejecting peer can close before client cleanup begins.
                 pass
-            sock.close()
-            if isinstance(conn, H2MultiplexConnection) and conn._reader is not None:
-                conn._reader.join(2)
-                assert not conn._reader.is_alive()
+            try:
+                # Keep the descriptor valid until the reader observes shutdown;
+                # closing it first can strand a concurrent socket timeout poll.
+                if isinstance(conn, H2MultiplexConnection) and conn._reader is not None:
+                    conn._reader.join(2)
+                    assert not conn._reader.is_alive()
+            finally:
+                sock.close()
     assert not rejected
     assert [len(frame[3]) for frame in observed[0][:-1]] == [frame_size] * (
         len(observed[0]) - 1
