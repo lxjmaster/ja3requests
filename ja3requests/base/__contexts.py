@@ -5,9 +5,12 @@ Ja3Requests.base.__contexts
 Basic of Context.
 """
 
+from __future__ import annotations
+
 from urllib.parse import urlparse, urlencode, parse_qsl
 from abc import ABC, abstractmethod
-from typing import AnyStr, Dict
+from typing import Any, Dict, List, Optional, Tuple, Union
+from ja3requests._typing import Data, HeaderValue, JsonBody, Timeout
 from json import dumps
 import mimetypes
 
@@ -21,7 +24,7 @@ class BaseContext(ABC):
     Basic connection context.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._protocol_version = None
         self._method = None
         self._destination_address = None
@@ -40,7 +43,7 @@ class BaseContext(ABC):
         self._cookies = None
 
     @property
-    def protocol_version(self):
+    def protocol_version(self) -> Optional[str]:
         """
         Version
         :return:
@@ -48,7 +51,7 @@ class BaseContext(ABC):
         return self._protocol_version
 
     @protocol_version.setter
-    def protocol_version(self, attr):
+    def protocol_version(self, attr: str) -> None:
         """
         Set version
         :param attr:
@@ -57,7 +60,7 @@ class BaseContext(ABC):
         self._protocol_version = attr
 
     @property
-    def method(self) -> AnyStr:
+    def method(self) -> Optional[str]:
         """
         Method
         :return:
@@ -65,7 +68,7 @@ class BaseContext(ABC):
         return self._method
 
     @method.setter
-    def method(self, attr: AnyStr):
+    def method(self, attr: str) -> None:
         """
         Set method
         :param attr:
@@ -74,7 +77,7 @@ class BaseContext(ABC):
         self._method = attr
 
     @property
-    def destination_address(self) -> AnyStr:
+    def destination_address(self) -> Optional[str]:
         """
         Context property destination_address
         :return:
@@ -82,7 +85,7 @@ class BaseContext(ABC):
         return self._destination_address
 
     @destination_address.setter
-    def destination_address(self, attr: AnyStr):
+    def destination_address(self, attr: Optional[str]) -> None:
         """
         Conntext property destination_address set
         :param attr:
@@ -91,7 +94,7 @@ class BaseContext(ABC):
         self._destination_address = attr
 
     @property
-    def path(self) -> AnyStr:
+    def path(self) -> Optional[str]:
         """
         Context property path
         :return:
@@ -99,7 +102,7 @@ class BaseContext(ABC):
         return self._path
 
     @path.setter
-    def path(self, attr: AnyStr):
+    def path(self, attr: str) -> None:
         """
         Context property path set
         :param attr:
@@ -108,7 +111,7 @@ class BaseContext(ABC):
         self._path = attr
 
     @property
-    def port(self) -> int:
+    def port(self) -> Optional[int]:
         """
         Context property port
         :return:
@@ -116,7 +119,7 @@ class BaseContext(ABC):
         return self._port
 
     @port.setter
-    def port(self, attr: int):
+    def port(self, attr: int) -> None:
         """
         Context property port set
         :param attr:
@@ -125,7 +128,7 @@ class BaseContext(ABC):
         self._port = attr
 
     @property
-    def start_line(self) -> AnyStr:
+    def start_line(self) -> str:
         """
         Start line
         :return:
@@ -137,7 +140,7 @@ class BaseContext(ABC):
         )
 
     @start_line.setter
-    def start_line(self, attr: AnyStr):
+    def start_line(self, attr: str) -> None:
         """
         Set start line
         :param attr:
@@ -156,7 +159,7 @@ class BaseContext(ABC):
         self._start_line = " ".join([self.method, self.path, self.protocol_version])
 
     @property
-    def headers(self) -> Dict:
+    def headers(self) -> Optional[Dict[str, HeaderValue]]:
         """
         Headers
         :return:
@@ -164,7 +167,7 @@ class BaseContext(ABC):
         return self._headers
 
     @headers.setter
-    def headers(self, attr: Dict):
+    def headers(self, attr: Optional[Dict[str, HeaderValue]]) -> None:
         """
         Set headers
         :param attr:
@@ -205,7 +208,7 @@ class BaseContext(ABC):
         self._headers = headers
 
     @property
-    def data(self) -> AnyStr:
+    def data(self) -> Optional[str]:
         """
         Context property data
         :return:
@@ -213,7 +216,7 @@ class BaseContext(ABC):
         return self._data
 
     @data.setter
-    def data(self, attr):
+    def data(self, attr: Optional[Data]) -> None:
         """
         Context property data set
         :param attr:
@@ -228,7 +231,7 @@ class BaseContext(ABC):
         self._data = data
 
     @property
-    def json(self) -> AnyStr:
+    def json(self) -> Optional[str]:
         """
         Context property json
         :return:
@@ -236,7 +239,7 @@ class BaseContext(ABC):
         return self._json
 
     @json.setter
-    def json(self, attr):
+    def json(self, attr: Optional[JsonBody]) -> None:
         """
         Context property json set
         :param attr:
@@ -251,7 +254,7 @@ class BaseContext(ABC):
         self._json = json
 
     @property
-    def files(self):
+    def files(self) -> Optional[Dict[str, List[Dict[str, Any]]]]:
         """
         Context property files
         :return:
@@ -259,7 +262,7 @@ class BaseContext(ABC):
         return self._files
 
     @files.setter
-    def files(self, attr):
+    def files(self, attr: Optional[Dict[str, List[Dict[str, Any]]]]) -> None:
         """
         Context property files set
         :param attr:
@@ -268,7 +271,7 @@ class BaseContext(ABC):
         self._files = attr
 
     @property
-    def body(self) -> AnyStr:
+    def body(self) -> Optional[Union[str, bytes]]:
         """
         Body
         :return:
@@ -277,7 +280,7 @@ class BaseContext(ABC):
         return self._body
 
     @body.setter
-    def body(self, attr):
+    def body(self, attr: Union[str, bytes]) -> None:
         """
         Set body
         :param attr:
@@ -321,7 +324,7 @@ class BaseContext(ABC):
         self._body = body
 
     @property
-    def message(self) -> AnyStr:
+    def message(self) -> bytes:
         """
         Message
         :return:
@@ -357,7 +360,7 @@ class BaseContext(ABC):
         return self._message
 
     @message.setter
-    def message(self, attr: AnyStr):
+    def message(self, attr: bytes) -> None:
         """
         Set message
         :param attr:
@@ -366,7 +369,7 @@ class BaseContext(ABC):
         self._message = attr
 
     @property
-    def source_address(self):
+    def source_address(self) -> Optional[Tuple[str, int]]:
         """
         Context property source_address
         :return:
@@ -374,7 +377,7 @@ class BaseContext(ABC):
         return self._source_address
 
     @source_address.setter
-    def source_address(self, attr):
+    def source_address(self, attr: Optional[Tuple[str, int]]) -> None:
         """
         Context property source_address setter
         :param attr:
@@ -383,7 +386,7 @@ class BaseContext(ABC):
         self._source_address = attr
 
     @property
-    def timeout(self):
+    def timeout(self) -> Timeout:
         """
         Context property timeout.
         Can be a single float (used for both connect and read)
@@ -393,7 +396,7 @@ class BaseContext(ABC):
         return self._timeout
 
     @timeout.setter
-    def timeout(self, attr):
+    def timeout(self, attr: Timeout) -> None:
         """
         Context property timeout set
         :param attr:
@@ -402,27 +405,27 @@ class BaseContext(ABC):
         self._timeout = attr
 
     @property
-    def connect_timeout(self):
+    def connect_timeout(self) -> Optional[float]:
         """Extract connect timeout from timeout setting."""
         if isinstance(self._timeout, tuple):
             return self._timeout[0]
         return self._timeout
 
     @property
-    def read_timeout(self):
+    def read_timeout(self) -> Optional[float]:
         """Extract read timeout from timeout setting."""
         if isinstance(self._timeout, tuple):
             return self._timeout[1] if len(self._timeout) > 1 else self._timeout[0]
         return self._timeout
 
-    def _strip_proxy_scheme(self, value):
+    def _strip_proxy_scheme(self, value: str) -> str:
         """Strip socks5://, socks4://, http:// scheme prefix from proxy value."""
         if value and "://" in value:
             return value.split("://", 1)[1]
         return value
 
     @property
-    def proxy_scheme(self):
+    def proxy_scheme(self) -> Optional[str]:
         """
         Get the proxy scheme (socks5, socks4, http, or None).
         :return:
@@ -432,7 +435,7 @@ class BaseContext(ABC):
         return None
 
     @property
-    def proxy(self):
+    def proxy(self) -> Optional[str]:
         """
         Context property proxy (host:port without scheme).
         :return:
@@ -448,7 +451,7 @@ class BaseContext(ABC):
         return proxy
 
     @proxy.setter
-    def proxy(self, attr):
+    def proxy(self, attr: Optional[str]) -> None:
         """
         Context property proxy set
         :param attr:
@@ -457,7 +460,7 @@ class BaseContext(ABC):
         self._proxy = attr
 
     @property
-    def proxy_auth(self):
+    def proxy_auth(self) -> Optional[str]:
         """
         Context property proxy auth
         :return:
@@ -471,7 +474,7 @@ class BaseContext(ABC):
         return proxy_auth
 
     @property
-    def cookies(self):
+    def cookies(self) -> Optional[str]:
         """
         Context property cookies
         :return:
@@ -479,7 +482,7 @@ class BaseContext(ABC):
         return self._cookies
 
     @cookies.setter
-    def cookies(self, attr: Dict):
+    def cookies(self, attr: Optional[Dict[str, str]]) -> None:
         """
         Context property cookies set
         :param attr:
@@ -496,7 +499,7 @@ class BaseContext(ABC):
             self.headers.setdefault("Cookie", self._cookies)
 
     @abstractmethod
-    def set_payload(self, *args, **kwargs):
+    def set_payload(self, *args: Any, **kwargs: Any) -> None:
         """
         Set context payload
         :return:

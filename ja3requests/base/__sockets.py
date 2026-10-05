@@ -66,3 +66,13 @@ class BaseSocket(ABC):
             ) from err
 
         return conn
+
+    def close(self):
+        """Close an unpooled transport, including proxy tunnels."""
+        if self.conn is not None:
+            self.conn.close()
+            self.conn = None
+
+    def release_response(self, reusable):
+        """Unpooled transports belong to one response."""
+        self.close()

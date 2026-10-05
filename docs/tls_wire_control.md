@@ -108,10 +108,10 @@ new group does not silently add a key_share to those presets.
 ## Chrome 154 capture calibration: an explicit supported subset
 
 `TlsConfig.from_browser("chrome", 154)` is calibrated against the checked-in
-[capture](../test/fixtures/chrome154_macos_hello.json) from Google Chrome
+[capture](https://github.com/lxjmaster/ja3requests/blob/a291ef30bb6ae53cf38b3d79604c8f34e1865547/test/fixtures/chrome154_macos_hello.json) from Google Chrome
 154.0.8037.95 on macOS, headless, a new temporary profile and loopback localhost.
 The artifact records exact flags, platform, capture time, bytes and SHA-256.
-[Capture tool](../test/capture_browser_hello.py) documents reproduction. It does
+[Capture tool](https://github.com/lxjmaster/ja3requests/blob/a291ef30bb6ae53cf38b3d79604c8f34e1865547/test/capture_browser_hello.py) documents reproduction. It does
 not use a personal profile, authenticate to a site or retain the temporary profile.
 
 This profile is intentionally labeled a **supported subset**, not full Chrome

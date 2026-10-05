@@ -7,25 +7,109 @@ This module of HTTPS Socket.
 
 import hashlib
 import hmac
+import io
 import os
 import socket
-import struct
 import threading
-import time
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from ja3requests.base import BaseSocket
 from ja3requests.exceptions import (
+    TLSError,
     TLSDecryptionError,
     TLSKeyError,
-    TLSMACVerificationError,
 )
 from ja3requests.protocol.tls import TLS
-from ja3requests.protocol.tls.crypto import AESCipher
+from ja3requests.protocol.tls.crypto import AESCipher, _decrypt_tls12_cbc_record
 from ja3requests.protocol.tls.debug import debug
 from ja3requests.protocol.tls.extensions import Extension
+
+
+class _TLSRecordReader(io.RawIOBase):
+    """Expose the project's authenticated TLS records as incremental plaintext."""
+
+    def __init__(self, transport):
+        super().__init__()
+        self.transport = transport
+        self.pending = b""
+
+    def readable(self):
+        return True
+
+    def readinto(self, buffer):
+        if not buffer:
+            return 0
+        if not self.pending:
+            try:
+                self.pending = self.transport._decrypt_single_record() or b""
+            except TLSError as error:
+                raise ConnectionError(f"TLS response failed: {error}") from error
+        size = min(len(buffer), len(self.pending))
+        buffer[:size] = self.pending[:size]
+        self.pending = self.pending[size:]
+        return size
+
+
+class _H2StreamReader(io.RawIOBase):
+    """Adapt response headers while reading DATA directly from one H2 stream."""
+
+    def __init__(self, h2, stream_id, headers, timeout):
+        super().__init__()
+        self.h2 = h2
+        self.stream_id = stream_id
+        self.timeout = timeout
+        self.eof = False
+        status = next(value for name, value in headers if name == ':status')
+        lines = [f"HTTP/1.1 {status} OK\r\n"]
+        lines.extend(
+            f"{name}: {value}\r\n"
+            for name, value in headers
+            if not name.startswith(':')
+        )
+        self.pending = (''.join(lines) + '\r\n').encode()
+
+    def readable(self):
+        return True
+
+    def readinto(self, buffer):
+        if not buffer or self.eof:
+            return 0
+        if self.pending:
+            data = self.pending[: len(buffer)]
+            self.pending = self.pending[len(data) :]
+        else:
+            data = self.h2.read_stream(
+                self.stream_id, len(buffer), timeout=self.timeout
+            )
+            if not data:
+                self.eof = True
+        buffer[: len(data)] = data
+        return len(data)
+
+
+class _ResponseConnection:
+    """A file adapter whose response owns transport release, not an eager body."""
+
+    def __init__(self, reader, release, body_framed=False):
+        self.reader = reader
+        self.release_response = release
+        self.body_framed = body_framed
+
+    def makefile(self, mode='rb'):
+        return io.BufferedReader(self.reader)
+
+
+def _post_handshake_records(tls, plaintext):
+    """Advance post-handshake state; the caller owns outbound serialization."""
+    handshake = getattr(tls, '_tls13_handshake', None)
+    if handshake is None:
+        raise TLSDecryptionError("TLS 1.3 post-handshake state is unavailable")
+    try:
+        return handshake.process_post_handshake(plaintext)
+    except ValueError as error:
+        raise TLSDecryptionError("Invalid TLS 1.3 post-handshake message") from error
 
 
 class HttpsSocket(BaseSocket):
@@ -35,6 +119,7 @@ class HttpsSocket(BaseSocket):
 
     def __init__(self, context, pool=None):
         super().__init__(context)
+        self.tls = None
         self._pool = pool
         self._pooled_conn = None  # Reference to pooled connection wrapper
         self._reused = False  # Whether connection was reused from pool
@@ -221,6 +306,13 @@ class HttpsSocket(BaseSocket):
                 debug(f"Pool full, closing connection: {host}:{port}")
                 self.close()
 
+    def release_response(self, reusable):
+        """Release an HTTP/1 response only after framing completes."""
+        if reusable and self._pool:
+            self.return_to_pool()
+        else:
+            self.close()
+
     def close(self):
         """Close the connection"""
         try:
@@ -229,6 +321,11 @@ class HttpsSocket(BaseSocket):
             elif self._pool and self._reused and self._pooled_conn:
                 self._pool.discard_connection(self._pooled_conn)
             elif self.conn:
+                if getattr(self.tls, '_negotiated_protocol', None) == 'h2':
+                    try:
+                        self.conn.shutdown(socket.SHUT_RDWR)
+                    except (OSError, AttributeError):
+                        pass
                 self.conn.close()
         except Exception:  # pylint: disable=broad-exception-caught
             pass
@@ -260,35 +357,29 @@ class HttpsSocket(BaseSocket):
     def _send_h1(self):
         """Send HTTP/1.1 request over TLS."""
         try:
-            # Brief delay for server to process our Finished message
-            time.sleep(0.3)
             read_timeout = getattr(self.context, 'read_timeout', None)
             self.conn.settimeout(read_timeout if read_timeout is not None else 15.0)
 
-            # Encrypt and send HTTP request
-            encrypted_data = self._encrypt_application_data(self.context.message)
-            debug(f"Sending encrypted HTTP request: {len(encrypted_data)} bytes")
-            self.conn.sendall(encrypted_data)
+            # Advance the record sequence once per bounded plaintext fragment.
+            # Keep encryption and writes ordered with post-handshake replies.
+            with self._h2_io_lock:
+                message = self.context.message
+                for offset in range(0, len(message), 16384):
+                    encrypted_data = self._encrypt_application_data(
+                        message[offset : offset + 16384]
+                    )
+                    self.conn.sendall(encrypted_data)
             debug("HTTP request sent successfully")
 
-            # Read and decrypt TLS response records using proper record-level reading
-            result = self._handle_encrypted_response()
-            if result:
-                return result
-
-            raise ConnectionError("No valid HTTP response received from server")
+            return _ResponseConnection(_TLSRecordReader(self), self.release_response)
 
         except Exception as e:  # pylint: disable=broad-exception-caught
             debug(f"Encrypted communication failed: {e}")
+            self.close()
             raise ConnectionError(f"TLS communication failed: {e}") from e
-        finally:
-            self.conn.settimeout(None)
 
     def _send_h2(self):
         """Send HTTP/2 request over TLS using H2Connection."""
-        from ja3requests.protocol.h2.connection import (
-            H2Connection,
-        )  # pylint: disable=import-outside-toplevel
         from ja3requests.protocol.h2.multiplex import (
             H2MultiplexConnection,
         )  # pylint: disable=import-outside-toplevel
@@ -298,11 +389,8 @@ class HttpsSocket(BaseSocket):
         multiplexed = self._pool is not None
         try:
             read_timeout = getattr(self.context, 'read_timeout', None)
-            self.conn.settimeout(
-                None
-                if multiplexed
-                else (read_timeout if read_timeout is not None else 15.0)
-            )
+            # One reader drives the connection; timeouts belong to each stream.
+            self.conn.settimeout(None)
 
             tls = self.tls
 
@@ -330,8 +418,7 @@ class HttpsSocket(BaseSocket):
 
             h2 = getattr(tls, '_h2_connection', None)
             if h2 is None:
-                connection_type = H2MultiplexConnection if multiplexed else H2Connection
-                h2 = connection_type(h2_send, h2_recv, settings=h2_settings)
+                h2 = H2MultiplexConnection(h2_send, h2_recv, settings=h2_settings)
                 h2.initiate(
                     window_update_increment=int(h2_window) if h2_window else None
                 )
@@ -351,8 +438,6 @@ class HttpsSocket(BaseSocket):
                         self._h2_pooled_conn = pooled
                         h2.set_pooled_connection(pooled)
                     self._release_h2_reservation()
-            elif not multiplexed:
-                h2.set_transport(h2_send, h2_recv)
 
             # Parse HTTP request to extract method, path, headers
             method = getattr(self.context, 'method', 'GET')
@@ -372,37 +457,28 @@ class HttpsSocket(BaseSocket):
                 for k, v in ctx_headers.items():
                     req_headers.append((k, v))
 
-            if multiplexed:
-                stream_id = h2.send_request(
-                    method,
-                    host,
-                    path,
-                    headers=req_headers,
-                    body=body,
-                    timeout=read_timeout,
-                )
-                resp_headers, resp_body = h2.receive_response(
-                    stream_id, timeout=read_timeout
-                )
-            else:
-                stream_id = h2.send_request(
-                    method, host, path, headers=req_headers, body=body
-                )
-                resp_headers, resp_body = h2.receive_response(stream_id)
+            stream_id = h2.send_request(
+                method, host, path, headers=req_headers, body=body, timeout=read_timeout
+            )
+            resp_headers = h2.receive_headers(stream_id, timeout=read_timeout)
+            released = False
 
-            # Convert H2 response to HTTP/1.1-like format for Response class compatibility
-            status = next(value for name, value in resp_headers if name == ":status")
+            def release_stream(reusable):
+                nonlocal released
+                if released:
+                    return
+                released = True
+                h2.cancel_stream(stream_id)
+                if self._h2_pooled_conn is not None and not h2.failed:
+                    self.return_to_pool()
+                else:
+                    self.close()
 
-            http_response = f"HTTP/1.1 {status} OK\r\n"
-            for name, value in resp_headers:
-                if not name.startswith(":"):
-                    http_response += f"{name}: {value}\r\n"
-            http_response += f"Content-Length: {len(resp_body)}\r\n"
-            http_response += "\r\n"
-
-            # Build a mock socket connection for HTTPSResponse
-            response_data = http_response.encode() + resp_body
-            return self._create_response_connection(response_data)
+            return _ResponseConnection(
+                _H2StreamReader(h2, stream_id, resp_headers, read_timeout),
+                release_stream,
+                body_framed=True,
+            )
 
         except Exception as e:  # pylint: disable=broad-exception-caught
             debug(f"H2 communication failed: {e}")
@@ -413,37 +489,25 @@ class HttpsSocket(BaseSocket):
             else:
                 self.close()
             raise ConnectionError(f"HTTP/2 communication failed: {e}") from e
-        finally:
-            if self.conn is not None and not multiplexed:
-                self.conn.settimeout(None)
 
     def _decrypt_single_record(self):
         """Read and decrypt a single TLS record, return plaintext."""
+        codec = TLSRecordCodec(self.tls)
         while True:
             header = self._recv_exact(5)
-            if not header or len(header) < 5:
+            if not header:
+                codec.check_handshake_complete()
                 return None
-            record_type = header[0]
-            length = struct.unpack("!H", header[3:5])[0]
+            length = codec.record_length(header)
             payload = self._recv_exact(length)
-            if not payload:
+            record_type, payload = codec.decode_record(header, payload)
+            if record_type == 0x16:
+                self._handle_tls13_post_handshake(payload)
+                continue
+            if record_type == 0x15:
                 return None
-            if len(payload) != length:
-                raise TLSDecryptionError("Truncated TLS record")
-            if getattr(self.tls, '_is_tls13', False):
-                record_type, payload = self._decrypt_tls13_record(header, payload)
-                if record_type == 0x16:
-                    self._handle_tls13_post_handshake(payload)
-                    continue
-                if record_type == 0x17:
-                    self._check_tls13_handshake_complete()
-                    if not payload:
-                        continue
-                    return payload
-                return None
-            if record_type != 0x17:
-                return None
-            return self._decrypt_application_data(payload)
+            if payload:
+                return payload
 
     def _decrypt_tls13_record(self, header, payload):
         """Unwrap TLSInnerPlaintext using the negotiated application keys."""
@@ -460,16 +524,8 @@ class HttpsSocket(BaseSocket):
             raise TLSDecryptionError("Incomplete TLS 1.3 post-handshake message")
 
     def _handle_tls13_post_handshake(self, plaintext):
-        handshake = getattr(self.tls, '_tls13_handshake', None)
-        if handshake is None:
-            raise TLSDecryptionError("TLS 1.3 post-handshake state is unavailable")
         with self._h2_io_lock:
-            try:
-                replies = handshake.process_post_handshake(plaintext)
-            except ValueError as error:
-                raise TLSDecryptionError(
-                    "Invalid TLS 1.3 post-handshake message"
-                ) from error
+            replies = _post_handshake_records(self.tls, plaintext)
             for record in replies:
                 self.conn.sendall(record)
 
@@ -482,9 +538,7 @@ class HttpsSocket(BaseSocket):
         with self._h2_io_lock:
             self.conn.sendall(handshake.build_key_update(request_update))
 
-    def _handle_encrypted_response(
-        self,
-    ):  # pylint: disable=too-many-branches,too-many-nested-blocks
+    def _handle_encrypted_response(self):
         """
         Handle encrypted TLS response from server.
         Reads complete TLS records using _recv_exact and decrypts them.
@@ -492,83 +546,24 @@ class HttpsSocket(BaseSocket):
         http_response_data = b""
 
         while True:
-            # Read TLS record header (5 bytes: type + version + length)
-            header = self._recv_exact(5)
-            if not header:
+            decrypted_data = self._decrypt_single_record()
+            if decrypted_data is None:
                 break
+            http_response_data += decrypted_data
+            debug(f"Decrypted {len(decrypted_data)} bytes of HTTP data")
 
-            record_type = header[0]
-            record_length = int.from_bytes(header[3:5], byteorder='big')
-
-            debug(f"TLS record: type=0x{record_type:02X}, length={record_length}")
-
-            # Read the complete record payload
-            record_data = self._recv_exact(record_length)
-            if not record_data:
-                debug("Failed to read complete TLS record payload")
-                break
-
-            is_tls13 = getattr(self.tls, '_is_tls13', False)
-            if is_tls13:
-                record_type, record_data = self._decrypt_tls13_record(
-                    header, record_data
-                )
-
-            if record_type == 0x17:  # Application data
-                if is_tls13:
-                    self._check_tls13_handshake_complete()
-                decrypted_data = (
-                    record_data
-                    if is_tls13
-                    else self._decrypt_application_data(record_data)
-                )
-                if decrypted_data:
-                    http_response_data += decrypted_data
-                    debug(f"Decrypted {len(decrypted_data)} bytes of HTTP data")
-
-                    # Check if we have a complete HTTP response
-                    if b'\r\n\r\n' in http_response_data:
-                        header_end = http_response_data.find(b'\r\n\r\n') + 4
-                        headers_part = http_response_data[:header_end]
-                        body_part = http_response_data[header_end:]
-
-                        # Check for chunked transfer encoding
-                        headers_lower = headers_part.lower()
-                        if b'transfer-encoding: chunked' in headers_lower:
-                            # For chunked, check if we have the terminator
-                            if body_part.endswith(b'0\r\n\r\n'):
-                                break
-                            # Keep reading more records
-                            continue
-
-                        # Check Content-Length
-                        content_length = self._parse_content_length(headers_part)
-                        if content_length is not None:
-                            if len(body_part) >= content_length:
-                                break
-                            # Keep reading more records
-                            continue
-
-                        # No Content-Length and not chunked: connection-close semantics
-                        # Keep reading until server closes
-
-            elif record_type == 0x15:  # Alert
-                if len(record_data) >= 2:
-                    alert_level = record_data[0]
-                    alert_desc = record_data[1]
-                    debug(f"TLS alert: level={alert_level}, desc={alert_desc}")
-                    if alert_level == 2:  # Fatal
+            if b'\r\n\r\n' in http_response_data:
+                header_end = http_response_data.find(b'\r\n\r\n') + 4
+                headers_part = http_response_data[:header_end]
+                body_part = http_response_data[header_end:]
+                if b'transfer-encoding: chunked' in headers_part.lower():
+                    if body_part.endswith(b'0\r\n\r\n'):
                         break
-                # Close notify (level=1, desc=0) means server is done
-                if len(record_data) >= 2 and record_data[1] == 0:
+                    continue
+                content_length = self._parse_content_length(headers_part)
+                if content_length is not None and len(body_part) >= content_length:
                     break
-
-            elif record_type == 0x16:  # Post-handshake message
-                if is_tls13:
-                    self._handle_tls13_post_handshake(record_data)
-                continue
-            else:
-                debug(f"Unexpected TLS record type: 0x{record_type:02X}")
+                # EOF-delimited responses continue through authenticated alerts.
 
         if http_response_data:
             debug(f"Total decrypted HTTP response: {len(http_response_data)} bytes")
@@ -590,11 +585,7 @@ class HttpsSocket(BaseSocket):
             data = pending[:length]
             setattr(tls, pending_attr, pending[length:])
         while len(data) < length:
-            try:
-                chunk = self.conn.recv(length - len(data))
-            except socket.timeout:
-                debug(f"Socket timeout reading {length} bytes (got {len(data)})")
-                return data if data else None
+            chunk = self.conn.recv(length - len(data))
             if not chunk:
                 return data if data else None
             data += chunk
@@ -656,84 +647,25 @@ class HttpsSocket(BaseSocket):
         except Exception as e:
             raise TLSDecryptionError(f"GCM decryption failed: {e}") from e
 
-    def _decrypt_application_data_cbc(
-        self, encrypted_data
-    ):  # pylint: disable=too-many-locals
+    def _decrypt_application_data_cbc(self, encrypted_data):
         """Decrypt TLS application data using AES-CBC with HMAC"""
         try:
-            # Extract explicit IV (first 16 bytes) and ciphertext
-            if len(encrypted_data) < 16:
-                raise TLSDecryptionError("Encrypted data too short for CBC IV")
-
-            explicit_iv = encrypted_data[:16]
-            ciphertext = encrypted_data[16:]
-
-            # Decrypt using server's keys
             server_write_key = getattr(self.tls, '_server_write_key', None)
             server_write_mac_key = getattr(self.tls, '_server_write_mac_key', None)
 
             if not server_write_key or not server_write_mac_key:
                 raise TLSKeyError("Server encryption keys not available")
 
-            # Decrypt the ciphertext without removing PKCS7 padding
-            # (TLS uses its own padding scheme)
-            plaintext_with_mac_and_padding = AESCipher.decrypt_cbc(
-                ciphertext, server_write_key, explicit_iv, remove_padding=False
-            )
-
-            # Handle TLS padding removal
-            if not plaintext_with_mac_and_padding:
-                raise TLSDecryptionError("AES-CBC decryption returned empty result")
-
-            # TLS padding: last byte indicates padding length - 1
-            # So padding_length = last_byte + 1
-            padding_length = plaintext_with_mac_and_padding[-1] + 1
-            if padding_length > len(plaintext_with_mac_and_padding):
-                raise TLSDecryptionError(
-                    f"Invalid TLS padding length: {padding_length}"
-                )
-
-            plaintext_with_mac = plaintext_with_mac_and_padding[:-padding_length]
-
-            # Separate MAC (last 20 bytes for SHA1) from plaintext
-            mac_length = 20  # SHA1 MAC
-            if len(plaintext_with_mac) < mac_length:
-                raise TLSDecryptionError(
-                    f"Data too short for MAC: {len(plaintext_with_mac)}"
-                )
-
-            plaintext = plaintext_with_mac[:-mac_length]
-            received_mac = plaintext_with_mac[-mac_length:]
-
-            # Verify MAC
-            content_type = 0x17  # Application data
-            version = b'\x03\x03'  # TLS 1.2
             server_seq_num = getattr(self.tls, '_server_seq_num', 0)
-
-            mac_input = (
-                server_seq_num.to_bytes(8, byteorder='big')
-                + bytes([content_type])
-                + version
-                + len(plaintext).to_bytes(2, byteorder='big')
-                + plaintext
+            plaintext = _decrypt_tls12_cbc_record(
+                encrypted_data,
+                server_write_key,
+                server_write_mac_key,
+                server_seq_num.to_bytes(8, 'big') + b'\x17\x03\x03',
             )
-
-            expected_mac = hmac.new(
-                server_write_mac_key, mac_input, hashlib.sha1
-            ).digest()
-
-            if received_mac != expected_mac:
-                raise TLSMACVerificationError("CBC MAC verification failed")
-
-            debug("MAC verification successful")
-
-            # Increment server sequence number
             self.tls._server_seq_num += 1  # pylint: disable=protected-access
-
-            debug(f"Successfully decrypted {len(plaintext)} bytes")
             return plaintext
-
-        except (TLSDecryptionError, TLSKeyError, TLSMACVerificationError):
+        except (TLSDecryptionError, TLSKeyError):
             raise
         except Exception as e:
             raise TLSDecryptionError(f"CBC decryption failed: {e}") from e
@@ -928,3 +860,74 @@ class HttpsSocket(BaseSocket):
 
         self.tls._client_seq_num += 1  # pylint: disable=protected-access
         return record
+
+
+class TLSRecordCodec:
+    """Byte-only access to the active TLS record implementation, without a socket.
+
+    The synchronous adapter and native async transport share these exact crypto
+    methods. Callers must serialize outbound state changes and their writes.
+    """
+
+    def __init__(self, tls):
+        self.tls = tls
+
+    encrypt = HttpsSocket._encrypt_application_data
+    decrypt = HttpsSocket._decrypt_application_data
+    decrypt_tls13 = HttpsSocket._decrypt_tls13_record
+    check_handshake_complete = HttpsSocket._check_tls13_handshake_complete
+    _encrypt_application_data_gcm = HttpsSocket._encrypt_application_data_gcm
+    _encrypt_application_data_cbc = HttpsSocket._encrypt_application_data_cbc
+    _decrypt_application_data_gcm = HttpsSocket._decrypt_application_data_gcm
+    _decrypt_application_data_cbc = HttpsSocket._decrypt_application_data_cbc
+
+    def record_length(self, header):
+        """Validate the protected record header before a driver reads its body."""
+        if len(header) != 5:
+            raise TLSDecryptionError("Truncated TLS record header")
+        length = int.from_bytes(header[3:5], 'big')
+        maximum = 16640 if getattr(self.tls, '_is_tls13', False) else 18432
+        if header[1:3] != b'\x03\x03' or length > maximum:
+            raise TLSDecryptionError("Invalid TLS record header")
+        return length
+
+    def decode_record(self, header, payload):
+        """Authenticate and classify a record without performing any I/O."""
+        if payload is None or len(payload) != self.record_length(header):
+            raise TLSDecryptionError("Truncated TLS record")
+        kind = header[0]
+        is_tls13 = getattr(self.tls, '_is_tls13', False)
+        if is_tls13:
+            kind, payload = self.decrypt_tls13(header, payload)
+        elif kind == 23:
+            payload = self.decrypt(payload)
+        elif kind == 21:
+            try:
+                # Alerts use the same keys/sequence as application records, but
+                # their actual record type is part of the MAC or AEAD input.
+                payload = self.tls._decrypt_server_handshake_record(header, payload)
+            except Exception as error:  # pylint: disable=broad-exception-caught
+                raise TLSDecryptionError("TLS alert authentication failed") from error
+        if len(payload) > 16384:
+            raise TLSDecryptionError("TLS plaintext record exceeds the size limit")
+        if is_tls13 and kind == 22:
+            return kind, payload  # The driver serializes post-handshake replies.
+        if kind == 21:
+            self.check_handshake_complete()
+            if len(payload) != 2:
+                raise TLSDecryptionError("Invalid TLS alert")
+            # TLS 1.3 alert severity follows its description; the level is legacy.
+            if payload[1] != 0 or (not is_tls13 and payload[0] != 1):
+                raise TLSDecryptionError(
+                    "Peer sent a TLS alert (level=%d, description=%d)"
+                    % (payload[0], payload[1])
+                )
+        elif kind == 23:
+            self.check_handshake_complete()
+        else:
+            raise TLSDecryptionError("Unexpected TLS application record")
+        return kind, payload
+
+    def post_handshake(self, plaintext):
+        """Return encrypted control replies while advancing shared key state."""
+        return _post_handshake_records(self.tls, plaintext)

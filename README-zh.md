@@ -1,6 +1,13 @@
 # Ja3Requests
 **Ja3Requests**是一个可以自定义ja3指纹（tls指纹）和HTTP2指纹的请求库
 
+TLS 握手和记录层由本项目实现，密码学基础运算使用 `cryptography`。
+[线级控制说明](docs/tls_wire_control.md)介绍扩展精确排序、实际发送的
+客户端问候（ClientHello）检查、显式启用的 P-384，以及浏览器预设的抓包证据和限制。
+浏览器预设不保证完整模拟浏览器。显式选择的
+`TlsConfig.from_browser("chrome", 154)` 只实现已支持的子集，JA3 与抓包浏览器不同；
+尚未实现加密客户端问候（ECH）和后量子组。未指定版本的 Chrome 预设仍选择 124。
+
 [English Document](README.md)
 
 ```pycon
@@ -19,6 +26,8 @@
 
 Ja3Requests 支持 HTTP 和 HTTPS 上的 HTTP/1.1；HTTPS 连接也可以通过 ALPN
 协商 HTTP/2。2.0 默认验证证书，优先使用 TLS 1.3，并允许 TLS 1.2 ECDHE/GCM 回退。
+2.1.0 版本可在 [PyPI](https://pypi.org/project/ja3requests/2.1.0/)
+和 [GitHub](https://github.com/lxjmaster/ja3requests/releases/tag/v2.1.0) 查看。
 
 ## 安装 Ja3Requests/ 支持的版本
 
@@ -47,7 +56,10 @@ with ja3requests.Session(tls_config=config) as session:
 并通过 ALPN 使用 HTTP/1.1；它不模拟浏览器指纹。TLS 1.3 ClientHello
 默认同时携带 X25519 和 P-256 密钥份额。如需首次只提供 X25519、允许
 P-256 服务端通过 HelloRetryRequest 要求重试，可在创建 Session 前设置
-`config.key_share_groups = [29]`；其他组尚未实现。
+`config.key_share_groups = [29]`。2.0.1 还支持通过
+`supported_groups`/`key_share_groups` 显式启用 P-384，包括握手重试；
+安全配置默认组仍为 `[29, 23]`（X25519/P-256）。配置示例见
+[P-384 与线级控制说明](docs/tls_wire_control.md)。
 TLS 1.3 连接可处理服务端 KeyUpdate，并在服务端要求时更新客户端发送密钥。
 会话缓存可用内存中的票据和 PSK-DHE 恢复 TLS 1.3 连接；目前不支持 0-RTT。
 TLS 1.2 可在原会话使用扩展主密钥、且证书策略仍匹配时，通过内存中的
@@ -62,6 +74,11 @@ HTTP/2 请求（包括带请求体的请求）可在一条 TLS 连接上并发�
 服务端推送尚未实现，因此 HTTP/2 默认禁用推送，并拒绝显式设置
 `SETTINGS_ENABLE_PUSH=1`。
 旧式 HTTP/2 优先级信号可被接收，但不影响请求调度。
+2.1.0 在 `stream=True` 时增量读取 HTTP/1.1 和 HTTP/2 响应，包括项目自身
+TLS 记录解密以及 gzip/deflate/Brotli 解码；2.0.1 则先缓冲完整正文。
+提前停止读取时应关闭响应，迭代不会保留用于重放的完整正文副本。
+[流式响应指南](docs/streaming.md)说明连接归属、解码异常、读取超时，以及
+单次块大小与总内存占用的区别。
 
 请求显式传入的 `verify=True` 或 `verify=False` 会覆盖会话设置，重定向也沿用
 本次请求的设置。`TlsConfig.legacy()` 显式恢复 1.x 的 TLS 1.2 RSA/AES-CBC
@@ -81,6 +98,51 @@ TLS 1.2 和 TLS 1.3 客户端证书认证均在服务端请求证书时使用 `c
 该扩展会改变 ClientHello 指纹。
 
 ## 如何使用
+
+[用户指南与自动生成的 API 参考](docs/index.md)覆盖配置、指纹、TLS、代理、
+重试、回调、Cookie 和连接池；[文档构建说明](docs/contributing_docs.md)
+提供本地构建及校验命令。2.1.0 还包含公共类型注解、可随包分发的
+`py.typed` 标记、[同步性能套件](bench/PERFORMANCE.md)和
+[后续任务路线图](issues/next_development_plan.md)。
+
+2.1.0 提供原生异步（native async）`AsyncSession`、`AsyncResponse` 和
+`AsyncConnectionPool`，用 asyncio 等待套接字，同时保留项目自身的 TLS/H2 协议状态。
+详见[异步指南](docs/async.md)和
+[可直接运行的本地异步示例](docs/examples/async_client.py)。
+
+```python
+import asyncio
+from ja3requests import AsyncSession
+
+async def main():
+    async with AsyncSession() as session:
+        async with await session.get("https://example.com/data", stream=True) as response:
+            response.raise_for_status()
+            async for chunk in response.aiter_content(65536):
+                print(len(chunk))
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+异步完整正文通过 `await response.read()`、`await response.text()` 或
+`await response.json()` 读取；`.content` 只访问已经完成的缓存。异步即时读取和
+流式读取都严格拒绝损坏的压缩数据。显式传入的异步连接池由会话借用，调用方应在
+所有借用会话结束后关闭它。
+
+增量读取时，使用上下文管理器明确响应的生命周期：
+
+```python
+from ja3requests import Session
+from ja3requests.pool import ConnectionPool
+
+with Session(pool=ConnectionPool()) as session:
+    with session.get("https://example.com/data", stream=True, timeout=(3, 10)) as response:
+        response.raise_for_status()
+        for chunk in response.iter_content(chunk_size=65536):
+            print(len(chunk))
+```
+
 ### 不同的请求方法
 Ja3Requests支持多种请求方法，如Get，Post，Put，Delete等
 ```python

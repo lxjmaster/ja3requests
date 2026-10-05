@@ -5,15 +5,125 @@ Ja3Requests.response
 This module contains response.
 """
 
+from __future__ import annotations
+
 import json
 import gzip
 import zlib
+from types import TracebackType
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterator, List, Optional, Type
 import brotli
 from ja3requests.base import BaseResponse
 from ja3requests.cookies import Ja3RequestsCookieJar, extract_cookies_to_jar
 from ja3requests.const import MAX_LINE, MAX_HEADERS
-from ja3requests.exceptions import InvalidStatusLine, InvalidResponseHeaders, HTTPError
+from ja3requests.exceptions import (
+    InvalidStatusLine,
+    InvalidResponseHeaders,
+    HTTPError,
+    StreamConsumedError,
+    ContentDecodingError,
+)
 from ja3requests.protocol.tls.debug import debug
+
+if TYPE_CHECKING:
+    from typing_extensions import Literal
+    from ja3requests.base import BaseRequest
+
+
+class _ContentDecoder:
+    """Byte-fed incremental decoding shared by synchronous and async readers."""
+
+    def __init__(self, encoding: Optional[bytes], chunk_size: int) -> None:
+        self.encoding = encoding
+        self.chunk_size = chunk_size
+        self.decoder = None
+        self.prefix = b""
+        self.deflate_probe = b""
+        self.can_fallback = False
+
+    def feed(self, data: bytes) -> Iterator[bytes]:
+        """Drain bounded decoded blocks before the caller supplies more input."""
+        if self.encoding not in (b"gzip", b"deflate", b"br"):
+            yield data
+            return
+        try:
+            if self.encoding == b"br":
+                if self.decoder is None:
+                    self.decoder = brotli.Decompressor()
+                # Stay below the native allocation quantum (32 KiB in 1.2).
+                while True:
+                    output = self.decoder.process(data, output_buffer_limit=1)
+                    data = b""
+                    for start in range(0, len(output), self.chunk_size):
+                        yield output[start : start + self.chunk_size]
+                    if self.decoder.is_finished() or (
+                        not output and self.decoder.can_accept_more_data()
+                    ):
+                        return
+            if self.can_fallback:
+                if len(self.deflate_probe) + len(data) <= 65536:
+                    self.deflate_probe += data
+                else:
+                    self.can_fallback = False
+                    self.deflate_probe = b""
+            if self.decoder is None:
+                self.prefix += data
+                if self.encoding == b"deflate" and len(self.prefix) < 2:
+                    return
+                wrapped = (
+                    len(self.prefix) >= 2
+                    and self.prefix[0] & 15 == 8
+                    and int.from_bytes(self.prefix[:2], 'big') % 31 == 0
+                )
+                window = (
+                    16 + zlib.MAX_WBITS
+                    if self.encoding == b"gzip"
+                    else (zlib.MAX_WBITS if wrapped else -zlib.MAX_WBITS)
+                )
+                self.decoder = zlib.decompressobj(window)
+                data, self.prefix = self.prefix, b""
+                self.can_fallback = self.encoding == b"deflate" and wrapped
+                self.deflate_probe = data if self.can_fallback else b""
+            while data:
+                if self.decoder.eof:
+                    if self.encoding != b"gzip":
+                        raise ContentDecodingError("Trailing compressed response data")
+                    self.decoder = zlib.decompressobj(16 + zlib.MAX_WBITS)
+                try:
+                    output = self.decoder.decompress(data, self.chunk_size)
+                except zlib.error:
+                    if not self.can_fallback:
+                        raise
+                    # A raw stored block can share a zlib prefix. Fall back only
+                    # before any decoded bytes have escaped to the consumer.
+                    self.decoder = zlib.decompressobj(-zlib.MAX_WBITS)
+                    data, self.deflate_probe = self.deflate_probe, b""
+                    self.can_fallback = False
+                    continue
+                data = (
+                    self.decoder.unused_data
+                    if self.decoder.eof
+                    else self.decoder.unconsumed_tail
+                )
+                if output:
+                    self.can_fallback = False
+                    self.deflate_probe = b""
+                    yield output
+        except (zlib.error, brotli.error) as error:
+            raise ContentDecodingError("Invalid compressed response body") from error
+
+    def finish(self) -> None:
+        """Reject an incomplete compressed stream after framing reaches EOF."""
+        if self.decoder is not None:
+            complete = (
+                self.decoder.is_finished()
+                if self.encoding == b"br"
+                else self.decoder.eof
+            )
+            if not complete:
+                raise ContentDecodingError("Truncated compressed response body")
+        elif self.prefix:
+            raise ContentDecodingError("Truncated compressed response body")
 
 
 class HTTPResponse(BaseResponse):
@@ -21,23 +131,47 @@ class HTTPResponse(BaseResponse):
     An HTTP response from socket connection.
     """
 
-    def __init__(self, sock, method=None):
+    def __init__(
+        self,
+        sock: Any,
+        method: Optional[str] = None,
+        release: Optional[Callable[[bool], None]] = None,
+    ) -> None:
         super().__init__()
         self.fp = sock.makefile("rb")
         self._method = method
         self._chunked = False
         self._content_encoding = None
-        self._content_length = 0
+        self._content_length = None
+        self._remaining = None
+        self._chunk_remaining = 0
+        self._chunk_crlf = False
+        self._finished = False
+        self._reusable = False
+        self._framed_stream = getattr(sock, 'body_framed', False) is True
+        self._release = getattr(sock, 'release_response', None) or release
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return (
             f"<HTTPResponse [{self.status_code.decode()}] {self.status_text.decode()}>"
         )
 
-    def _close_conn(self):
+    def _close_conn(self) -> None:
+        self._finish(False)
+
+    def _finish(self, reusable: bool) -> None:
+        if self._finished:
+            return
+        self._finished = True
         fp = self.fp
         self.fp = None
-        fp.close()
+        try:
+            if fp is not None:
+                fp.close()
+        finally:
+            release, self._release = self._release, None
+            if release is not None:
+                release(reusable)
 
     def _read_status_line(self):
         line = self.fp.readline(MAX_LINE + 1)
@@ -82,7 +216,9 @@ class HTTPResponse(BaseResponse):
                     f"The response headers is too long, exceeding the {MAX_LINE} Max limit"
                 )
 
-            if line in (b"\r\n", b"\n", b""):
+            if not line:
+                raise InvalidResponseHeaders("Response ended before headers completed")
+            if line in (b"\r\n", b"\n"):
                 headers.pop()
                 break
 
@@ -97,30 +233,20 @@ class HTTPResponse(BaseResponse):
         self.headers = b""
         for header in headers_list:
             self.headers += header
-            name, value = header.strip().split(b": ", 1)
-            headers.setdefault(name.lower(), value)
+            try:
+                name, value = header.rstrip(b"\r\n").split(b":", 1)
+            except ValueError as error:
+                raise InvalidResponseHeaders("Invalid response header") from error
+            name, value = name.strip().lower(), value.strip()
+            if name == b"content-length" and name in headers and headers[name] != value:
+                raise InvalidResponseHeaders("Conflicting Content-Length headers")
+            headers.setdefault(name, value)
 
         return headers
 
-    def read_body(self):
-        """
-        Read body from remote connection.
-        :return:
-        """
-        body = b""
-
-        if self.fp is None:
-            return body
-
-        if self._method == "HEAD":
-            self._close_conn()
-            return body
-
-        if self._chunked:
-            body = self._read_chunked()
-
-        if self._content_length > 0:
-            body = self.fp.read(self._content_length)
+    def read_body(self) -> bytes:
+        """Read the complete body, preserving eager decoding compatibility."""
+        body = b"".join(self._iter_raw_body(65536))
 
         if self._content_encoding and self._content_encoding != b"":
             try:
@@ -141,32 +267,78 @@ class HTTPResponse(BaseResponse):
 
         return body
 
-    def _read_chunked(self):
-        chunked_data = b""
-        while True:
-            chunked_size = self.fp.readline(MAX_LINE + 1).strip()
-            if chunked_size == b"":
-                continue
-            if chunked_size == b"0":
-                break
-            try:
-                size = int(chunked_size, 16)
-                chunked_data += self.fp.read(size)
-                # Read the trailing CRLF after chunk data
-                self.fp.readline(MAX_LINE + 1)
-            except ValueError:
-                # If we can't parse as hex, this might not be chunked encoding
-                # Read the line as regular content and break
-                debug(f"Warning: Expected hex chunk size, got: {chunked_size}")
-                chunked_data += chunked_size + b"\n"
-                # Read remaining content
-                remaining = self.fp.read()
-                chunked_data += remaining
-                break
+    def _read_exact(self, size: int) -> bytes:
+        data = self.fp.read(size)
+        if len(data) != size:
+            raise ConnectionError("Truncated HTTP response body")
+        return data
 
-        return chunked_data
+    def _read_chunk_size(self) -> None:
+        if self._chunk_crlf:
+            if self._read_exact(2) != b"\r\n":
+                raise ConnectionError("Invalid HTTP chunk terminator")
+            self._chunk_crlf = False
+        line = self.fp.readline(MAX_LINE + 1)
+        if len(line) > MAX_LINE or not line.endswith(b"\r\n"):
+            raise ConnectionError("Invalid or truncated HTTP chunk size")
+        value = line.split(b";", 1)[0].strip()
+        if not value or any(char not in b"0123456789abcdefABCDEF" for char in value):
+            raise ConnectionError("Invalid HTTP chunk size")
+        self._chunk_remaining = int(value, 16)
+        if not self._chunk_remaining:
+            self._read_headers()  # Consume bounded trailers before reusing HTTP/1.
+            self._finish(self._reusable)
 
-    def handle(self):
+    def _iter_raw_body(self, chunk_size: int) -> Iterator[bytes]:
+        """Read at most one available transport block on each iteration."""
+        try:
+            while not self._finished:
+                if self._chunked:
+                    if not self._chunk_remaining:
+                        self._read_chunk_size()
+                    if self._finished:
+                        break
+                    size = min(chunk_size, self._chunk_remaining)
+                elif self._remaining is not None and not self._framed_stream:
+                    if self._remaining == 0:
+                        self._finish(self._reusable)
+                        break
+                    size = min(chunk_size, self._remaining)
+                else:
+                    size = chunk_size
+                reader = getattr(self.fp, 'read1', self.fp.read)
+                data = reader(size)
+                if not data:
+                    if self._chunked or self._remaining not in (None, 0):
+                        raise ConnectionError("Truncated HTTP response body")
+                    self._finish(self._reusable)
+                    break
+                if self._chunked:
+                    self._chunk_remaining -= len(data)
+                    self._chunk_crlf = self._chunk_remaining == 0
+                elif self._remaining is not None:
+                    self._remaining -= len(data)
+                    if self._remaining < 0:
+                        raise ConnectionError("HTTP response exceeds Content-Length")
+                    if self._remaining == 0 and not self._framed_stream:
+                        self._finish(self._reusable)
+                yield data
+        finally:
+            if not self._finished:
+                self._finish(False)
+
+    def iter_body(self, chunk_size: int) -> Iterator[bytes]:
+        """Incrementally decode without retaining a replay copy of the body."""
+        raw = self._iter_raw_body(min(chunk_size, 65536))
+        decoder = _ContentDecoder(self._content_encoding, chunk_size)
+        try:
+            for data in raw:
+                yield from decoder.feed(data)
+            decoder.finish()
+        finally:
+            raw.close()
+
+    def handle(self) -> None:
         """
         Receive data from remote connection and handle message.
         :return:
@@ -174,24 +346,45 @@ class HTTPResponse(BaseResponse):
         if self.headers is not None:
             return
 
-        self._read_status_line()
-        self.headers = self._read_headers()
-        headers = self._parse_headers()
-
-        self._content_encoding = headers.get(b"content-encoding", b"")
-
-        transfer_encoding = headers.get(b"transfer-encoding", b"")
-        if transfer_encoding and b"chunked" in transfer_encoding.lower():
-            self._chunked = True
-        elif transfer_encoding and transfer_encoding != b"":
-            # Handle other transfer encodings gracefully
-            debug(f"Warning: Unsupported transfer encoding: {transfer_encoding}")
-            self._chunked = False
-
-        self._content_length = int(headers.get(b"content-length", 0))
+        try:
+            while True:
+                self._read_status_line()
+                self.headers = self._read_headers()
+                headers = self._parse_headers()
+                if not 100 <= int(self.status_code) < 200 or self.status_code == b"101":
+                    break
+            self._content_encoding = headers.get(b"content-encoding", b"").lower()
+            transfer = headers.get(b"transfer-encoding", b"").lower()
+            self._chunked = transfer.split(b",")[-1].strip() == b"chunked"
+            length = headers.get(b"content-length")
+            self._content_length = int(length) if length is not None else None
+            if self._content_length is not None and self._content_length < 0:
+                raise InvalidResponseHeaders("Negative Content-Length")
+            self._remaining = None if transfer else self._content_length
+            connection = headers.get(b"connection", b"").lower().split(b",")
+            tokens = {token.strip() for token in connection}
+            no_body = (
+                self._method == "HEAD"
+                or int(self.status_code) in (204, 304)
+                or int(self.status_code) < 200
+            )
+            self._reusable = self._framed_stream or (
+                b"close" not in tokens
+                and (self.protocol_version == b"HTTP/1.1" or b"keep-alive" in tokens)
+                and (no_body or self._chunked or self._remaining is not None)
+            )
+            if no_body:
+                self._remaining = 0
+                self._chunked = False
+                self._finish(self._reusable and self.status_code != b"101")
+            elif self._remaining == 0 and not self._chunked and not self._framed_stream:
+                self._finish(self._reusable)
+        except Exception:
+            self._finish(False)
+            raise
 
     @property
-    def raw_headers(self):
+    def raw_headers(self) -> List[Dict[str, str]]:
         """
         Raw response headers
         :return:
@@ -203,7 +396,7 @@ class HTTPResponse(BaseResponse):
             for header_item in header_list:
                 if header_item == "":
                     continue
-                name, value = header_item.split(": ", 1)
+                name, value = header_item.split(":", 1)
                 headers.append({name.strip(): value.strip()})
 
         return headers
@@ -218,20 +411,26 @@ class Response(BaseResponse):
     <Response [200]>
     """
 
-    def __init__(self, request=None, response=None, stream=False):
+    def __init__(
+        self,
+        request: Optional[BaseRequest] = None,
+        response: Optional[HTTPResponse] = None,
+        stream: bool = False,
+    ) -> None:
         super().__init__()
         self.request = request
         self.response = response
         self._stream = stream
-        self._encoding = None  # user override
-        self._body = None
+        self._encoding: Optional[str] = None  # user override
+        self._body: Optional[bytes] = None
         self._body_consumed = False
+        self._stream_started = False
 
         if not stream:
             self._body = self.response.read_body() if self.response else b""
             self._body_consumed = True
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """
         Response repr
         :return:
@@ -239,7 +438,7 @@ class Response(BaseResponse):
         return f"<Response [{self.status_code}]>"
 
     @property
-    def cookies(self):
+    def cookies(self) -> Ja3RequestsCookieJar:
         """
         Response cookie property
         :return:
@@ -252,7 +451,7 @@ class Response(BaseResponse):
         return cookies
 
     @property
-    def headers(self):
+    def headers(self) -> Dict[str, str]:
         """
         Response Headers.
         :return:
@@ -274,7 +473,7 @@ class Response(BaseResponse):
         return headers
 
     @property
-    def status_code(self):
+    def status_code(self) -> int:
         """
         Response Status Code
         :return:
@@ -286,52 +485,64 @@ class Response(BaseResponse):
         return int(self.response.status_code)
 
     @property
-    def body(self):
+    def body(self) -> bytes:
         """Response body bytes. Triggers full read if streaming."""
+        if self._stream_started and self._body is None:
+            raise StreamConsumedError("The streaming response body cannot be replayed")
         if self._body is None and not self._body_consumed:
-            self._body = self.response.read_body() if self.response else b""
-            self._body_consumed = True
+            # Claim the body before I/O. A failed read closes the underlying
+            # stream and cannot later be retried into an empty success cache.
+            self._stream_started = True
+            try:
+                self._body = self.response.read_body() if self.response else b""
+            finally:
+                self._body_consumed = True
         return self._body or b""
 
     @body.setter
-    def body(self, value):
+    def body(self, value: Optional[bytes]) -> None:
         self._body = value
 
     @property
-    def content(self):
+    def content(self) -> bytes:
         """
         Response Content
         :return:
         """
         return self.body
 
-    def iter_content(self, chunk_size=1024):
+    def iter_content(self, chunk_size: int = 1024) -> Iterator[bytes]:
         """
         Yield response body in chunks.
 
         :param chunk_size: Size of each chunk in bytes.
         :yield: bytes chunks
         """
-        if self._body_consumed:
+        if (
+            not isinstance(chunk_size, int)
+            or isinstance(chunk_size, bool)
+            or chunk_size <= 0
+        ):
+            raise ValueError("chunk_size must be a positive integer")
+        if self._body is not None:
             # Body already fully read, yield from buffer
             data = self._body or b""
             for i in range(0, len(data), chunk_size):
                 yield data[i : i + chunk_size]
             return
 
-        if not self.response or not self.response.fp:
-            return
+        if self._stream_started:
+            raise StreamConsumedError("The streaming response body cannot be replayed")
+        self._stream_started = True
+        try:
+            if self.response:
+                yield from self.response.iter_body(chunk_size)
+        finally:
+            self._body_consumed = True
 
-        # Read raw body in chunks (before decompression)
-        # For simplicity, read full body then yield chunks
-        # (true streaming through TLS records is complex)
-        self._body = self.response.read_body() if self.response else b""
-        self._body_consumed = True
-        data = self._body
-        for i in range(0, len(data), chunk_size):
-            yield data[i : i + chunk_size]
-
-    def iter_lines(self, chunk_size=512, delimiter=None):
+    def iter_lines(
+        self, chunk_size: int = 512, delimiter: Optional[bytes] = None
+    ) -> Iterator[bytes]:
         """
         Yield response body line by line.
 
@@ -345,20 +556,35 @@ class Response(BaseResponse):
             sep = delimiter or b"\n"
             while sep in pending:
                 line, pending = pending.split(sep, 1)
-                yield line
+                yield line[:-1] if delimiter is None and line.endswith(b"\r") else line
         if pending:
             yield pending
 
-    def close(self):
+    def close(self) -> None:
         """Close the underlying connection and release resources."""
         if self.response and hasattr(self.response, 'fp') and self.response.fp:
             try:
                 self.response._close_conn()
             except (OSError, AttributeError):
                 pass
+        if self._body is None:
+            self._stream_started = True
+            self._body_consumed = True
+
+    def __enter__(self) -> Response:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_value: Optional[BaseException],
+        traceback: Optional[TracebackType],
+    ) -> Literal[False]:
+        self.close()
+        return False
 
     @property
-    def encoding(self):
+    def encoding(self) -> str:
         """
         Response encoding, detected from Content-Type header charset.
         Can be set manually to override auto-detection.
@@ -385,7 +611,7 @@ class Response(BaseResponse):
         return "utf-8"
 
     @encoding.setter
-    def encoding(self, value):
+    def encoding(self, value: Optional[str]) -> None:
         """
         Override the auto-detected encoding.
         :param value: encoding name (e.g., 'gbk', 'iso-8859-1')
@@ -393,14 +619,14 @@ class Response(BaseResponse):
         self._encoding = value
 
     @property
-    def text(self):
+    def text(self) -> str:
         """
         Response Text, decoded using the detected or overridden encoding.
         :return:
         """
         return self.content.decode(self.encoding)
 
-    def json(self):
+    def json(self) -> Any:
         """
         Response JSON
         :return:
@@ -408,7 +634,7 @@ class Response(BaseResponse):
         return json.loads(self.body)
 
     @property
-    def is_redirected(self):
+    def is_redirected(self) -> bool:
         """
         Response property of has redirected
         :return:
@@ -416,7 +642,7 @@ class Response(BaseResponse):
 
         return 300 <= self.status_code < 400
 
-    def raise_for_status(self):
+    def raise_for_status(self) -> None:
         """
         Raise an HTTPError if the response status code indicates an error (4xx or 5xx).
         """
@@ -427,7 +653,7 @@ class Response(BaseResponse):
             )
 
     @property
-    def location(self):
+    def location(self) -> Optional[str]:
         """
         Response redirected location
         :return:

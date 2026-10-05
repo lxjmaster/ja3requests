@@ -1,0 +1,281 @@
+{
+  "benchmark": "http1-loopback-v1",
+  "benchmark_script_sha256": "102da44f5bc8283d7a6db78d3376f78c3684c25a99eae5bf0cfc5956555ffd03",
+  "redacted_export": {
+    "fields": ["environment.executable", "environment.package_path"],
+    "path_base": "repository root",
+    "measurement_values_unchanged": true,
+    "original_report_sha256": "ec06a19c8dc3762b9ee535e7918773aa49c84fb114f0c7753d089605b35ed8d0",
+    "note": "Absolute local paths were replaced by repository-relative paths. The original report is retained locally and is not distributed."
+  },
+  "environment": {
+    "dependencies": {
+      "brotli": "1.1.0",
+      "cryptography": "45.0.5",
+      "ja3requests": "2.0.1"
+    },
+    "executable": ".venv/bin/python",
+    "implementation": "CPython",
+    "machine": "arm64",
+    "package_path": "ja3requests/__init__.py",
+    "platform": "macOS-15.7.7-arm64-arm-64bit-Mach-O",
+    "python": "3.13.3 (v3.13.3:6280bb54784, Apr  8 2025, 10:47:54) [Clang 15.0.0 (clang-1500.3.9.4)]"
+  },
+  "finished_at_utc": "2026-10-04T05:07:43.651462+00:00",
+  "git_after": {
+    "head_sha": "a291ef30bb6ae53cf38b3d79604c8f34e1865547",
+    "tracked_changes_present": true,
+    "working_tree_dirty_including_untracked": true
+  },
+  "git_before": {
+    "head_sha": "a291ef30bb6ae53cf38b3d79604c8f34e1865547",
+    "tracked_changes_present": true,
+    "working_tree_dirty_including_untracked": true
+  },
+  "latency_and_memory": [
+    {
+      "accepted_connections": 1,
+      "body_bytes": 1048576,
+      "complete_seconds": 0.055690042208880186,
+      "first_chunk_after_final_send_completed": true,
+      "first_chunk_before_final_send": false,
+      "first_chunk_seconds": 0.055196791887283325,
+      "payload_verified": true,
+      "python_peak_bytes": 1349467,
+      "received_bytes": 1048576,
+      "request_return_seconds": 0.00949825020506978,
+      "sample": 1,
+      "server_first_send_seconds": 0.009339459240436554,
+      "server_last_send_completed_seconds": 0.055132417008280754,
+      "server_last_send_started_seconds": 0.05510587524622679
+    },
+    {
+      "accepted_connections": 1,
+      "body_bytes": 1048576,
+      "complete_seconds": 0.0455804169178009,
+      "first_chunk_after_final_send_completed": true,
+      "first_chunk_before_final_send": false,
+      "first_chunk_seconds": 0.04511075001209974,
+      "payload_verified": true,
+      "python_peak_bytes": 1209724,
+      "received_bytes": 1048576,
+      "request_return_seconds": 0.0007190420292317867,
+      "sample": 2,
+      "server_first_send_seconds": 0.0005823327228426933,
+      "server_last_send_completed_seconds": 0.04504570784047246,
+      "server_last_send_started_seconds": 0.04502529185265303
+    },
+    {
+      "accepted_connections": 1,
+      "body_bytes": 1048576,
+      "complete_seconds": 0.05264216614887118,
+      "first_chunk_after_final_send_completed": true,
+      "first_chunk_before_final_send": false,
+      "first_chunk_seconds": 0.05165733303874731,
+      "payload_verified": true,
+      "python_peak_bytes": 1209756,
+      "received_bytes": 1048576,
+      "request_return_seconds": 0.0007214159704744816,
+      "sample": 3,
+      "server_first_send_seconds": 0.0005718329921364784,
+      "server_last_send_completed_seconds": 0.05152475042268634,
+      "server_last_send_started_seconds": 0.051469458267092705
+    },
+    {
+      "accepted_connections": 1,
+      "body_bytes": 8388608,
+      "complete_seconds": 0.37863087467849255,
+      "first_chunk_after_final_send_completed": true,
+      "first_chunk_before_final_send": false,
+      "first_chunk_seconds": 0.36773029202595353,
+      "payload_verified": true,
+      "python_peak_bytes": 8549700,
+      "received_bytes": 8388608,
+      "request_return_seconds": 0.0014841249212622643,
+      "sample": 1,
+      "server_first_send_seconds": 0.0011764168739318848,
+      "server_last_send_completed_seconds": 0.36757158301770687,
+      "server_last_send_started_seconds": 0.3674940001219511
+    },
+    {
+      "accepted_connections": 1,
+      "body_bytes": 8388608,
+      "complete_seconds": 0.3803339577279985,
+      "first_chunk_after_final_send_completed": true,
+      "first_chunk_before_final_send": false,
+      "first_chunk_seconds": 0.37093770783394575,
+      "payload_verified": true,
+      "python_peak_bytes": 8549549,
+      "received_bytes": 8388608,
+      "request_return_seconds": 0.001167832873761654,
+      "sample": 2,
+      "server_first_send_seconds": 0.0009582499042153358,
+      "server_last_send_completed_seconds": 0.3707736670039594,
+      "server_last_send_started_seconds": 0.37061775010079145
+    },
+    {
+      "accepted_connections": 1,
+      "body_bytes": 8388608,
+      "complete_seconds": 0.38245900021865964,
+      "first_chunk_after_final_send_completed": true,
+      "first_chunk_before_final_send": false,
+      "first_chunk_seconds": 0.3732146662659943,
+      "payload_verified": true,
+      "python_peak_bytes": 8549813,
+      "received_bytes": 8388608,
+      "request_return_seconds": 0.0016501662321388721,
+      "sample": 3,
+      "server_first_send_seconds": 0.001055041328072548,
+      "server_last_send_completed_seconds": 0.37311370810493827,
+      "server_last_send_started_seconds": 0.37303095823153853
+    }
+  ],
+  "measurement_notes": [
+    "HTTP/1.1 cleartext on 127.0.0.1 only; no HTTPS, HTTP/2 or external services.",
+    "First-chunk time starts before Session.get, not before iterator advancement.",
+    "Latency samples use stream=True and consume iter_content without accumulating chunks.",
+    "tracemalloc measures Python allocations, includes the server thread, and is not RSS.",
+    "The server allocates one fixed chunk before tracing and sends memoryview slices in a loop.",
+    "Both paths verify payload length and every byte; latency consumption never joins chunks.",
+    "Throughput includes initial connect, complete body consumption, payload verification and response.close; no warmup.",
+    "Each sample owns a fresh pool/server; connection reuse is counted at server accept.",
+    "Timing and memory are descriptive measurements, not performance pass/fail thresholds."
+  ],
+  "parameters": {
+    "chunk_kib": 64,
+    "gap_ms": 2.0,
+    "repeat": 3,
+    "requests": 30,
+    "sizes_mib": [
+      1,
+      8
+    ],
+    "throughput_bytes": 1024,
+    "timeout": 5.0
+  },
+  "schema_version": 1,
+  "sequential_throughput": [
+    {
+      "accepted_connections": 1,
+      "body_bytes_per_response": 1024,
+      "elapsed_seconds": 0.00497470935806632,
+      "payload_verified": true,
+      "requests": 30,
+      "requests_per_connection": {
+        "1": 30
+      },
+      "requests_per_second": 6030.503058707546,
+      "sample": 1,
+      "single_connection_reused": true
+    },
+    {
+      "accepted_connections": 1,
+      "body_bytes_per_response": 1024,
+      "elapsed_seconds": 0.007209791801869869,
+      "payload_verified": true,
+      "requests": 30,
+      "requests_per_connection": {
+        "1": 30
+      },
+      "requests_per_second": 4161.007810547242,
+      "sample": 2,
+      "single_connection_reused": true
+    },
+    {
+      "accepted_connections": 1,
+      "body_bytes_per_response": 1024,
+      "elapsed_seconds": 0.006661916151642799,
+      "payload_verified": true,
+      "requests": 30,
+      "requests_per_connection": {
+        "1": 30
+      },
+      "requests_per_second": 4503.208884219014,
+      "sample": 3,
+      "single_connection_reused": true
+    }
+  ],
+  "source_after_sha256": "fec7786a072a0f26dbb729ed1d08d7e51866cc861fa9c44184f01aef54cf98e5",
+  "source_before": {
+    "files": {
+      "ja3requests/__init__.py": "c4b82dddd5039af6cb26ffaf6f002b359407c3396c33d2bc7c38fd218353d4fe",
+      "ja3requests/__version__.py": "44f6a91e078c2677ae7436b64fbec6bb63e6f5092d55e884270ef75097df5dc2",
+      "ja3requests/_cookie_file.py": "bb2e9eabfc0edeac882b50dca969471bfe3d79bc19bb19420e0e641d1339b3c5",
+      "ja3requests/base/__contexts.py": "1f16cdde087d80bd7cc319573661563e9a88aa47be65f792bab2151d5b46bc17",
+      "ja3requests/base/__init__.py": "fc12dccb50d8c51711283d10d8cc5045f726b2aa011edec7e5bcc582ff2a5c74",
+      "ja3requests/base/__requests.py": "c765a9cc401c1b10598a7cecd4bb1c4258a4dd08b9f1da4bb3dfdffffbeffcab",
+      "ja3requests/base/__response.py": "4af3fe1389f20b4e474b5ad13a0be16e5ce9dbfe1e03ec60f7cec757b0dd1d59",
+      "ja3requests/base/__sessions.py": "652fc947f861001be3f7ce09cdf90c4940fde7a6d85e41d3b5816fe34bfeed6e",
+      "ja3requests/base/__sockets.py": "111e74faf0c24250f6ae639a2b57a58d42aed512e9dd8e8d02e667cfa708ed00",
+      "ja3requests/const.py": "fe7456005f40a81240a0ec2e0f5ca10708d4143b20de70fe10507c34f9e6faa0",
+      "ja3requests/contexts/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "ja3requests/contexts/context.py": "a99e79f87a40f69cdc2fc3f9e19a58e4a212abc30cbbe1eb46f961311675f3e3",
+      "ja3requests/cookies.py": "94d8cb72a08fa05b35e1cfff1a419b31e6760ee23d0d7b410adaece4202f45f1",
+      "ja3requests/exceptions.py": "a84777bf8f31664d33dfa68e22a6573e73d6dcd262581ac86d25294b6e4bf139",
+      "ja3requests/pool.py": "9e47ce3ed8f141cdcfbd9b8f3c40ad07cb8e453e5df6b0d787a210ceb1625d34",
+      "ja3requests/protocol/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "ja3requests/protocol/exceptions.py": "60f5aa021a1ea0c81c778d379562189c4e43b5709ad0f21f0e0655b1a8a52a3a",
+      "ja3requests/protocol/h2/__init__.py": "2f197b55056a1b2d1cb9ea5aa9fc22e0101f303e51eb268a16d8909ae4fa5d95",
+      "ja3requests/protocol/h2/connection.py": "8b36f846a4af4c271f28ca3aa119b2c6047be9b93fb757bb7934aa186d2fb8d4",
+      "ja3requests/protocol/h2/frame.py": "4153e0d8513d7926f5902d32a162522f3752765d04e7f8b5ffd6802e6ce2fac9",
+      "ja3requests/protocol/h2/hpack.py": "2add4aebf98e7aac17a3a16775fe446ea2e54cb48f2a3928d50c98a229fd3404",
+      "ja3requests/protocol/h2/huffman.py": "2f6966c406f7762614345a588e4e0255e2121c3b49e721136246f5f5d2814d77",
+      "ja3requests/protocol/h2/multiplex.py": "e5dafea24d83eef0f4310b71c715cf60df7dbc9d638c670feb1e4306e4a111ca",
+      "ja3requests/protocol/sockets.py": "4c9b31b22c9b46d84bc5b8de9e68a97a1dbd7c62895911dcf462186b84c2228c",
+      "ja3requests/protocol/tls/__init__.py": "46cb9915b596e14097b5679a975f443bcc42d192973fce92e958b377c8d7c5b4",
+      "ja3requests/protocol/tls/browser_presets.py": "cbb34d5c4ee792146e00a99f7a1640f38af0059362222dd58d87de95d65b7a85",
+      "ja3requests/protocol/tls/certificate_verify.py": "08127599052c7d5d3d8da4a206c5f86459b61ff01dc589e202cda84b5be0fa94",
+      "ja3requests/protocol/tls/cipher_suites/__init__.py": "9feca4dfb876bad2cb45a45285c3a1066b6b53d6911cf1657f442d64163da1c2",
+      "ja3requests/protocol/tls/cipher_suites/suites.py": "d7a4ce0349fa881b2d718bf2211e9fef160ce9d062d3912cb5be4083611950d4",
+      "ja3requests/protocol/tls/client_hello_info.py": "cfb58b4f920aa0b1a7ab5b4d153c1996c0191797718ce51d7c34ad1970c27de4",
+      "ja3requests/protocol/tls/config.py": "8203d6ff070fec7f4d9b9f9a3c923df18813c88d992044b037e40e000da6eb68",
+      "ja3requests/protocol/tls/crypto.py": "2fb7253ddb74f8a55b9b4376f38aad94c8e1af0773fb5f4266b241427945a0c1",
+      "ja3requests/protocol/tls/debug.py": "c3666e30bbdda249d230c075b2530d8dffdfb848d82791db104444a900a53971",
+      "ja3requests/protocol/tls/extensions/__init__.py": "b6fa0403df879d599335dd9fe6b61f30b601cf8fb2e750a2a90873ddf37329fc",
+      "ja3requests/protocol/tls/layers/__init__.py": "f554da8b5253692ed9aa68fe18355d92001039adb82603b672dfa06878f2fc6c",
+      "ja3requests/protocol/tls/layers/certificate.py": "b7262200af48c2a1b34ec488a8feba18a57243abb8b1cf88e0c8de7d904f5c81",
+      "ja3requests/protocol/tls/layers/certificate_request.py": "4e993a8531feb34394e5e70b873cd65e6929c76e853238cb32432a3ffe0f0bcd",
+      "ja3requests/protocol/tls/layers/client_hello.py": "f00c9b4c685e04229e093370f8a1c8a5b2742e8414bf6c2588f967305fe527fb",
+      "ja3requests/protocol/tls/layers/hello_request.py": "e1745772d36cd7a2261c8fe1f7192ce9cce3f4b5d393124921dbf1de80c626f2",
+      "ja3requests/protocol/tls/layers/server_hello.py": "be76698c214990b26f87c603c20787c8eeb62ec2bee1380859075a87b57d266b",
+      "ja3requests/protocol/tls/layers/server_hello_done.py": "8d334967d307987c77d00f83e827179d9e6e0037def3c2063bbd588257186a8a",
+      "ja3requests/protocol/tls/layers/server_key_exchange.py": "cd487d14bb089b189adc8bf1fdadd1d30e182128b7756b41d4f082af0485cec2",
+      "ja3requests/protocol/tls/record_layer.py": "d6110b432ff67501b00a59b01cc5061f642de8cd79d4f0b69be19a908cce19f9",
+      "ja3requests/protocol/tls/security_warnings.py": "b57b37907cf70214450abbdfff84e03fa6efce74a3555205ae7391b2eee53381",
+      "ja3requests/protocol/tls/session_cache.py": "f441196c4e15297b6c245f26369582fb7e7f2f2419c8315d8ad4aeabcd3e3437",
+      "ja3requests/protocol/tls/tls13.py": "ff417d691ee04d3a149dd975cf86a45ed315532d2a7316969a74bd5f3f6325fa",
+      "ja3requests/requests/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "ja3requests/requests/http.py": "7624249741f9765f2da1f9be70aadd7e2cc7693081c0a417deb7c7824fdcfc1c",
+      "ja3requests/requests/https.py": "40d6052d2598333eaa265eb6c9f02e5d1f8fd7476dc3713a2dd85e37a16256cd",
+      "ja3requests/requests/request.py": "be968e37fc8fc3b0a86aee5134752d0ff35a0bad1e306fa99f52b288432722ce",
+      "ja3requests/response.py": "cee4215b16e5eb156d666c56c8e4718b28fbf864f12da1d07664b435f4813dea",
+      "ja3requests/retry.py": "b0fd549ff87d0eae0a24cb41977e7ec7d060fbed9cda8d99812dab577cb27047",
+      "ja3requests/sessions.py": "6ea87f12e674c192594e0049dd7a82012cb70d9fcc3198e0957e49d237343eac",
+      "ja3requests/sockets/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "ja3requests/sockets/http.py": "b50d5ee89c073b352f475b53597f4eb9f96972b709d9e85922849179d55de86d",
+      "ja3requests/sockets/https.py": "45dccd6bd909249c91e404b60d06c54228ca02176f2ced0a51d5c84027aa8b07",
+      "ja3requests/sockets/proxy.py": "bfc7d6fe8f6335c9d603d1789f86e99b739a99fe3cc71b3d51d9540a7e2c8c94",
+      "ja3requests/sockets/socks.py": "4f7b9d24f54f9873f9da3711c13f48f8c6c23ff34f13227e20bf0d262cf4e3d8",
+      "ja3requests/utils.py": "cadf0a5752600da60f4606f3704c44e39f0dff688e211a6435a7aabb99fd2f96"
+    },
+    "module_count": 59,
+    "sha256": "fec7786a072a0f26dbb729ed1d08d7e51866cc861fa9c44184f01aef54cf98e5"
+  },
+  "source_stable_during_run": true,
+  "started_at_utc": "2026-10-04T05:07:41.671799+00:00",
+  "summary": {
+    "median_requests_per_second": 4503.208884219014,
+    "sizes": [
+      {
+        "body_bytes": 1048576,
+        "median_first_chunk_seconds": 0.05165733303874731,
+        "median_python_peak_bytes": 1209756
+      },
+      {
+        "body_bytes": 8388608,
+        "median_first_chunk_seconds": 0.37093770783394575,
+        "median_python_peak_bytes": 8549700
+      }
+    ]
+  }
+}

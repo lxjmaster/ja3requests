@@ -8,7 +8,6 @@ import hashlib
 import hmac
 import os
 import struct
-import time
 import traceback
 import copy
 import hashlib
@@ -20,7 +19,12 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
-from ja3requests.exceptions import TLSEncryptionError, TLSHandshakeError, TLSKeyError
+from ja3requests.exceptions import (
+    TLSDecryptionError,
+    TLSEncryptionError,
+    TLSHandshakeError,
+    TLSKeyError,
+)
 from ja3requests.protocol.tls.layers import HandShake
 from ja3requests.protocol.tls.debug import debug, debug_hex
 from ja3requests.protocol.tls.layers.client_hello import ClientHello
@@ -37,10 +41,12 @@ from .crypto import (
     RSAKeyExchange,
     ECDHEKeyExchange,
     AESCipher,
+    _decrypt_tls12_cbc_record,
     get_cipher_info,
     is_gcm_cipher_suite,
 )
 from .certificate_verify import CertificateVerifier, verify_tls_signature
+from ._io import Call, Pause, Read, Write, handshake_io
 
 # ECDHE Cipher Suite Constants
 # These cipher suites use Elliptic Curve Diffie-Hellman Ephemeral key exchange
@@ -320,6 +326,7 @@ class TLS:
             self.body.session_id = entry.session_id
         self._offered_session = entry
 
+    @handshake_io
     def handshake(self):
         """
         Complete TLS handshake process.
@@ -338,15 +345,15 @@ class TLS:
             if self._tls13_psk is not None:
                 self._bind_tls13_client_hello()
             debug("Sending Client Hello...")
-            self._send_client_hello(client_hello)
+            yield Call(self._send_client_hello, (client_hello,))
 
             # Add Client Hello to handshake messages (without TLS record header)
             self._handshake_messages += client_hello.handshake_message
 
             if self._is_tls13:
-                return self._handshake_tls13()
+                return (yield Call(self._handshake_tls13))
 
-            return self._handshake_tls12()
+            return (yield Call(self._handshake_tls12))
 
         except Exception as e:  # pylint: disable=broad-exception-caught
             debug(f"TLS Handshake failed: {e}")
@@ -385,6 +392,7 @@ class TLS:
             raise TLSHandshakeError("ServerHello session ID does not match ClientHello")
         return b'\x03\x04'
 
+    @handshake_io
     def _handshake_tls13(self):
         """
         TLS 1.3 handshake flow after ClientHello is sent.
@@ -399,8 +407,8 @@ class TLS:
             self.conn.settimeout(
                 self._handshake_timeout if self._handshake_timeout is not None else 5.0
             )
-            server_hello_msg, first_records, buffer, trailing = (
-                self._receive_server_hello()
+            server_hello_msg, first_records, buffer, trailing = yield Call(
+                self._receive_server_hello
             )
             retry_suite = None
             if server_hello_msg[2:34] == HELLO_RETRY_REQUEST_RANDOM:
@@ -411,11 +419,12 @@ class TLS:
                 retry_suite, group, cookie = self._parse_hello_retry_request(
                     server_hello_msg
                 )
-                self._send_retried_client_hello(
-                    server_hello_msg, retry_suite, group, cookie
+                yield Call(
+                    self._send_retried_client_hello,
+                    (server_hello_msg, retry_suite, group, cookie),
                 )
-                server_hello_msg, first_records, buffer, trailing = (
-                    self._receive_server_hello(buffer, allow_ccs=True)
+                server_hello_msg, first_records, buffer, trailing = yield Call(
+                    self._receive_server_hello, (buffer, True)
                 )
                 if server_hello_msg[2:34] == HELLO_RETRY_REQUEST_RANDOM:
                     raise TLSHandshakeError("Second HelloRetryRequest")
@@ -433,7 +442,7 @@ class TLS:
             if selected_version == b'\x03\x03':
                 self._is_tls13 = False
                 self._tls_version = b'\x03\x03'
-                return self._handshake_tls12(first_records + buffer)
+                return (yield Call(self._handshake_tls12, (first_records + buffer,)))
 
             if trailing:
                 raise TLSHandshakeError(
@@ -469,7 +478,7 @@ class TLS:
                 if len(buffer) < 5 or len(buffer) < 5 + int.from_bytes(
                     buffer[3:5], 'big'
                 ):
-                    data = self.conn.recv(4096)
+                    data = yield Read(4096)
                     if not data:
                         break
                     buffer += data
@@ -512,11 +521,11 @@ class TLS:
                 getattr(self, '_client_key_pem', None),
             )
             if client_authentication:
-                self.conn.sendall(client_authentication)
+                yield Write(client_authentication)
 
             # Send client Finished
             finished_record = hs.build_client_finished()
-            self.conn.sendall(finished_record)
+            yield Write(finished_record)
 
             # Derive application traffic keys
             client_rp, server_rp = hs.derive_application_keys()
@@ -551,6 +560,7 @@ class TLS:
         finally:
             self.conn.settimeout(None)
 
+    @handshake_io
     def _receive_server_hello(self, initial_data=b"", allow_ccs=False):
         """Reassemble the first handshake message across TLS records."""
         buffer = initial_data
@@ -558,7 +568,7 @@ class TLS:
         consumed = b""
         while True:
             while len(buffer) < 5:
-                chunk = self.conn.recv(4096)
+                chunk = yield Read(4096)
                 if not chunk:
                     raise TLSHandshakeError("Truncated ServerHello record")
                 buffer += chunk
@@ -566,7 +576,7 @@ class TLS:
             if record_length > 18432:
                 raise TLSHandshakeError("Invalid ServerHello record length")
             while len(buffer) < 5 + record_length:
-                chunk = self.conn.recv(4096)
+                chunk = yield Read(4096)
                 if not chunk:
                     raise TLSHandshakeError("Truncated ServerHello record")
                 buffer += chunk
@@ -669,6 +679,7 @@ class TLS:
             raise TLSHandshakeError("HelloRetryRequest made no change")
         return suite, group, cookie
 
+    @handshake_io
     def _send_retried_client_hello(self, retry, suite, group, cookie):
         """Send ClientHello2 and replace ClientHello1 with message_hash."""
         from ja3requests.protocol.tls.extensions import (  # pylint: disable=import-outside-toplevel
@@ -728,7 +739,7 @@ class TLS:
         if self._tls13_psk is not None:
             self._bind_tls13_client_hello(transcript_prefix)
         self._handshake_messages = transcript_prefix + retried.handshake_message
-        self._send_client_hello(retried)
+        yield Call(self._send_client_hello, (retried,))
 
     @property
     def sent_client_hellos(self):
@@ -738,16 +749,18 @@ class TLS:
         """
         return tuple(self._sent_client_hellos)
 
+    @handshake_io
     def _send_client_hello(self, hello):
         record = hello.message
-        self.conn.sendall(record)
+        yield Write(record)
         self._sent_client_hellos.append(record)
 
+    @handshake_io
     def _handshake_tls12(self, initial_data=b""):
         """TLS 1.2 handshake flow after ClientHello is sent."""
         try:
             # Step 2-6: Receive server handshake messages
-            self._parse_server_handshake_messages(initial_data)
+            yield Call(self._parse_server_handshake_messages, (initial_data,))
             if getattr(self, '_verify_cert', False) and not getattr(
                 self, '_cert_verified', False
             ):
@@ -760,11 +773,11 @@ class TLS:
                     else 5.0
                 )
                 try:
-                    if not self._wait_for_server_handshake_completion():
+                    if not (yield Call(self._wait_for_server_handshake_completion)):
                         raise TLSHandshakeError("Invalid resumed server Finished")
-                    self.conn.sendall(b'\x14\x03\x03\x00\x01\x01')
+                    yield Write(b'\x14\x03\x03\x00\x01\x01')
                     self._client_seq_num = 0
-                    self.conn.sendall(self._build_finished_message())
+                    yield Write(self._build_finished_message())
                     self._cache_new_tls12_ticket()
                     debug("TLS 1.2 abbreviated handshake completed successfully")
                     return True
@@ -772,17 +785,17 @@ class TLS:
                     self.conn.settimeout(None)
 
             # Step 7-9: Send client finishing messages
-            self._send_client_finishing_messages()
+            yield Call(self._send_client_finishing_messages)
 
             # Step 10: Wait for server's response to our Finished message
             try:
-                time.sleep(0.3)
+                yield Pause(0.3)
                 self.conn.settimeout(
                     self._handshake_timeout
                     if self._handshake_timeout is not None
                     else 5.0
                 )
-                success = self._wait_for_server_handshake_completion()
+                success = yield Call(self._wait_for_server_handshake_completion)
                 if success:
                     debug("✅ Full TLS 1.2 handshake completed successfully!")
                     if self._offered_session is not None:
@@ -1060,6 +1073,7 @@ class TLS:
             )
             debug(f"Cached TLS 1.2 session ticket for {self._server_host}")
 
+    @handshake_io
     def _parse_server_handshake_messages(
         self,
         initial_data=b"",
@@ -1086,7 +1100,7 @@ class TLS:
                 if initial_pending:
                     initial_pending = False
                 else:
-                    data = self.conn.recv(4096)
+                    data = yield Read(4096)
                     if not data:
                         timeout_count += 1
                         if timeout_count >= max_timeout:
@@ -1451,6 +1465,7 @@ class TLS:
         self._server_hello_done_received = True
         debug("Received ServerHelloDone - ready to send client finishing messages")
 
+    @handshake_io
     def _send_client_finishing_messages(self):
         """
         Send client finishing messages
@@ -1466,22 +1481,22 @@ class TLS:
             else:
                 certificate_record = self._build_empty_certificate()
                 debug("Sent empty Certificate (no client cert configured)")
-            self.conn.sendall(certificate_record)
+            yield Write(certificate_record)
             self._handshake_messages += certificate_record[5:]
 
         # Send ClientKeyExchange
         client_key_exchange = self._build_client_key_exchange()
-        self.conn.sendall(client_key_exchange)
+        yield Write(client_key_exchange)
         debug("Sent Client Key Exchange")
 
         if getattr(self, '_client_cert_requested', False) and getattr(
             self, '_client_cert_pem', None
         ):
-            self.conn.sendall(self._build_client_certificate_verify())
+            yield Write(self._build_client_certificate_verify())
 
         # Send ChangeCipherSpec
         change_cipher_spec = b'\x14\x03\x03\x00\x01\x01'
-        self.conn.sendall(change_cipher_spec)
+        yield Write(change_cipher_spec)
         debug("Sent Change Cipher Spec")
 
         # Reset sequence numbers for encrypted messages
@@ -1493,7 +1508,7 @@ class TLS:
 
         # Send Finished (first encrypted message with seq num 0)
         finished_message = self._build_finished_message()
-        self.conn.sendall(finished_message)
+        yield Write(finished_message)
         debug("Sent Finished")
 
     def _build_client_certificate_verify(self):
@@ -1549,6 +1564,7 @@ class TLS:
 
         raise TLSHandshakeError("No supported client certificate signature algorithm")
 
+    @handshake_io
     def _read_server_handshake_record(self):
         """Read exactly one record without consuming later application data."""
 
@@ -1559,17 +1575,17 @@ class TLS:
                 data = pending[:size]
                 self._tls12_pending_record_data = pending[size:]
             while len(data) < size:
-                chunk = self.conn.recv(size - len(data))
+                chunk = yield Read(size - len(data))
                 if not chunk:
                     raise TLSHandshakeError("Truncated server handshake record")
                 data += chunk
             return data
 
-        header = read_exact(5)
+        header = yield from read_exact(5)
         length = int.from_bytes(header[3:5], 'big')
         if header[1:3] != b'\x03\x03' or length > 18432:
             raise TLSHandshakeError("Invalid TLS 1.2 record header")
-        return header, read_exact(length)
+        return header, (yield from read_exact(length))
 
     def _decrypt_server_handshake_record(self, header, encrypted):
         """Authenticate a TLS 1.2 handshake record using the server write keys."""
@@ -1587,36 +1603,22 @@ class TLS:
                 aad,
             )
         else:
-            if len(encrypted) < 32 or len(encrypted) % 16:
-                raise TLSHandshakeError("Invalid CBC handshake record length")
-            padded = AESCipher.decrypt_cbc(
-                encrypted[16:],
-                self._server_write_key,
-                encrypted[:16],
-                remove_padding=False,
-            )
-            padding_length = padded[-1] + 1
-            if padding_length > len(padded) or not hmac.compare_digest(
-                padded[-padding_length:], bytes([padding_length - 1]) * padding_length
-            ):
-                raise TLSHandshakeError("Invalid CBC handshake padding")
-            fragment = padded[:-padding_length]
             info = get_cipher_info(self._selected_cipher_suite)
             hash_algo = {
                 'SHA1': hashlib.sha1,
                 'SHA256': hashlib.sha256,
                 'SHA384': hashlib.sha384,
             }[info['mac']]
-            mac_length = hash_algo().digest_size
-            if len(fragment) < mac_length:
-                raise TLSHandshakeError("Truncated handshake MAC")
-            plaintext, received_mac = fragment[:-mac_length], fragment[-mac_length:]
-            mac_data = prefix + len(plaintext).to_bytes(2, 'big') + plaintext
-            expected_mac = hmac.new(
-                self._server_write_mac_key, mac_data, hash_algo
-            ).digest()
-            if not hmac.compare_digest(received_mac, expected_mac):
-                raise TLSHandshakeError("Invalid handshake MAC")
+            try:
+                plaintext = _decrypt_tls12_cbc_record(
+                    encrypted,
+                    self._server_write_key,
+                    self._server_write_mac_key,
+                    prefix,
+                    hash_algo,
+                )
+            except TLSDecryptionError as error:
+                raise TLSHandshakeError("Invalid CBC handshake record") from error
         self._server_seq_num += 1
         return plaintext
 
@@ -1633,6 +1635,7 @@ class TLS:
         if not hmac.compare_digest(message[4:], expected):
             raise TLSHandshakeError("Invalid server Finished verify_data")
 
+    @handshake_io
     def _wait_for_server_handshake_completion(self):
         """Require ChangeCipherSpec and an authenticated server Finished."""
         try:
@@ -1641,7 +1644,7 @@ class TLS:
             transcript = self._handshake_messages
             ticket = None
             while True:
-                header, payload = self._read_server_handshake_record()
+                header, payload = yield Call(self._read_server_handshake_record)
                 if header[0] == 20:
                     if received_ccs or payload != b'\x01' or pending:
                         raise TLSHandshakeError("Unexpected ChangeCipherSpec")
@@ -2288,9 +2291,9 @@ class TLS:
         if not hostname:
             raise TLSHandshakeError("No hostname for certificate verification")
         self._certificate_data = certificate_data
-        valid, error = CertificateVerifier(verify=True).verify_certificate(
-            hostname, certificate_data
-        )
+        valid, error = CertificateVerifier(
+            verify=True, trust_roots=getattr(self, '_trust_roots', None)
+        ).verify_certificate(hostname, certificate_data)
         if not valid:
             self._cert_error = error
             raise TLSHandshakeError(f"Certificate verification failed: {error}")

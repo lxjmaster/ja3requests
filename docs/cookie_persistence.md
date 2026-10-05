@@ -70,7 +70,7 @@ To retain an application-managed session login Cookie intentionally, pass
 `include_session=True` to save and load. To keep unrelated stored entries while
 importing a file, pass `merge=True` to load.
 
-The [runnable example](../examples/11_cookie_file_persistence.py) writes and
+The [runnable example](https://github.com/lxjmaster/ja3requests/blob/a291ef30bb6ae53cf38b3d79604c8f34e1865547/examples/11_cookie_file_persistence.py) writes and
 reloads a scoped demonstration Cookie without contacting a service:
 
 ```sh
@@ -144,11 +144,11 @@ cache entries and application configuration are not included.
 
 ## Verification
 
-[File tests](../test/test_cookie_files.py) cover a separate-process round trip,
+[File tests](https://github.com/lxjmaster/ja3requests/blob/a291ef30bb6ae53cf38b3d79604c8f34e1865547/test/test_cookie_files.py) cover a separate-process round trip,
 host/domain/path/Secure filtering, duplicate names, nullable values and metadata,
 session-Cookie opt-in, expiration, merge/replace, Session/standard CookieJar
 integration, malformed input, size/count limits, failed atomic writes and POSIX
-permissions. Existing [request Cookie tests](../test/test_cookie_persistence.py)
+permissions. Existing [request Cookie tests](https://github.com/lxjmaster/ja3requests/blob/a291ef30bb6ae53cf38b3d79604c8f34e1865547/test/test_cookie_persistence.py)
 are reused for response extraction and request filtering.
 
 Recorded on 2026-10-01: 63 new file cases passed; the targeted selection passed

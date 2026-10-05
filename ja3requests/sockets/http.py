@@ -70,11 +70,21 @@ class HttpSocket(BaseSocket):
             else:
                 self.close()
 
+    def release_response(self, reusable):
+        """Only a completely framed response may return a connection to the pool."""
+        if reusable and self._pool:
+            self.return_to_pool()
+        else:
+            self.close()
+
     def close(self):
         """Close the connection"""
         try:
-            if self.conn:
+            if self._pool and self._pooled_conn:
+                self._pool.discard_connection(self._pooled_conn)
+            elif self.conn:
                 self.conn.close()
         except OSError:
             pass
         self.conn = None
+        self._pooled_conn = None

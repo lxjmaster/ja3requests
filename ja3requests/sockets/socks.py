@@ -218,6 +218,7 @@ class SocksProxySocket(BaseSocket):
         Send data through the established SOCKS tunnel.
         :return:
         """
+        self.conn.settimeout(getattr(self.context, 'read_timeout', None))
         # For HTTPS through SOCKS, TLS handshake happens after SOCKS connect
         if hasattr(self.context, 'tls_config') and self.context.tls_config:
             return self._send_https_through_socks()

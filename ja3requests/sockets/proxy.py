@@ -97,6 +97,7 @@ class ProxySocket(BaseSocket):
         Connection send message
         :return:
         """
+        self.conn.settimeout(getattr(self.context, 'read_timeout', None))
         # Check if this is an HTTPS request through proxy
         if hasattr(self.context, 'tls_config') and self.context.tls_config:
             # For HTTPS through proxy, we need to do TLS handshake through the tunnel

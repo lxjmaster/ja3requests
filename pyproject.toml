@@ -1,6 +1,16 @@
 [tool.black]
 skip-string-normalization = true
 
+[tool.mypy]
+# Check the typed facade strictly. The existing dynamic protocol internals are
+# separately inspectable with `mypy ja3requests`; they are not silently ignored.
+python_version = "3.9"
+files = ["ja3requests/_typing.py", "ja3requests/__init__.py", "ja3requests/retry.py"]
+strict = true
+follow_imports = "silent"
+show_error_codes = true
+pretty = false
+
 [tool.pylint]
 disable = [
     "invalid-name",

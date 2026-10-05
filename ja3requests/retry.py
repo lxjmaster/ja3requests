@@ -5,8 +5,14 @@ Ja3Requests.retry
 HTTP-level retry with configurable backoff strategy.
 """
 
+from __future__ import annotations
+
 import time
 import random
+from typing import TYPE_CHECKING, Collection, Optional
+
+if TYPE_CHECKING:
+    from ja3requests.response import Response
 
 
 DEFAULT_STATUS_FORCELIST = frozenset({502, 503, 504})
@@ -32,21 +38,24 @@ class HTTPRetry:
 
     def __init__(
         self,
-        total=DEFAULT_MAX_RETRIES,
-        backoff_factor=DEFAULT_BACKOFF_FACTOR,
-        status_forcelist=None,
-        allowed_methods=None,
-        raise_on_status=True,
-        respect_retry_after=True,
-    ):
+        total: int = DEFAULT_MAX_RETRIES,
+        backoff_factor: float = DEFAULT_BACKOFF_FACTOR,
+        status_forcelist: Optional[Collection[int]] = None,
+        allowed_methods: Optional[Collection[str]] = None,
+        raise_on_status: bool = True,
+        respect_retry_after: bool = True,
+    ) -> None:
         """
-        :param total: Maximum number of retries.
+        :param total: Maximum number of retries after the initial attempt.
         :param backoff_factor: Factor for exponential backoff.
             Sleep time = backoff_factor * (2 ** (retry_number - 1))
             e.g., 0.5 → 0.5s, 1s, 2s, 4s...
         :param status_forcelist: Set of HTTP status codes to retry on.
         :param allowed_methods: Set of HTTP methods that are safe to retry.
-        :param raise_on_status: If True, raise MaxRetriedException after all retries exhausted.
+        :param raise_on_status: Raise MaxRetriedException when the final response
+            has a retryable status and method, including when total is zero.
+            If False, return that response instead. The final response remains
+            available as session.response after response hooks run.
         :param respect_retry_after: If True, honor Retry-After response header.
         """
         self.total = total
@@ -56,23 +65,23 @@ class HTTPRetry:
         self.raise_on_status = raise_on_status
         self.respect_retry_after = respect_retry_after
 
-    def is_retryable_method(self, method):
+    def is_retryable_method(self, method: str) -> bool:
         """Check if the HTTP method is safe to retry."""
         return method.upper() in self.allowed_methods
 
-    def is_retryable_status(self, status_code):
+    def is_retryable_status(self, status_code: int) -> bool:
         """Check if the status code should trigger a retry."""
         return status_code in self.status_forcelist
 
-    def get_backoff_time(self, retry_number):
+    def get_backoff_time(self, retry_number: int) -> float:
         """Calculate backoff time with jitter for a given retry attempt."""
         if retry_number <= 0:
             return 0
-        base = self.backoff_factor * (2 ** (retry_number - 1))
+        base: float = self.backoff_factor * (2 ** (retry_number - 1))
         # Add jitter: random between 0 and base
         return base + random.uniform(0, base * 0.1)
 
-    def get_retry_after(self, response):
+    def get_retry_after(self, response: Response) -> Optional[float]:
         """Parse Retry-After header value in seconds."""
         if not self.respect_retry_after:
             return None
@@ -86,7 +95,7 @@ class HTTPRetry:
         except (ValueError, TypeError):
             return None
 
-    def sleep_for_retry(self, response, retry_number):
+    def sleep_for_retry(self, response: Optional[Response], retry_number: int) -> None:
         """Sleep before retrying, respecting Retry-After if present."""
         retry_after = self.get_retry_after(response) if response else None
         if retry_after is not None:

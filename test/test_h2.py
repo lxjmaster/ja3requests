@@ -879,7 +879,9 @@ class TestH2Connection(unittest.TestCase):
         updates = [frame for frame in frames if frame.type == FRAME_WINDOW_UPDATE]
         self.assertEqual([frame.stream_id for frame in updates], [0, stream_id])
         self.assertEqual(
-            [int.from_bytes(frame.payload, "big") for frame in updates], [6, 6]
+            # Padding is discarded now; the queued body byte is credited on read.
+            [int.from_bytes(frame.payload, "big") for frame in updates],
+            [6, 5],
         )
 
     def test_cancelled_fragmented_headers_update_hpack_table(self):
