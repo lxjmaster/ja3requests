@@ -1,17 +1,46 @@
 """Finished verification gates real TLS 1.2 HTTP requests and pool insertion."""
 
+from types import SimpleNamespace
+
 import pytest
 
 from ja3requests import Session, TlsConfig
 from ja3requests.pool import ConnectionPool
-from ja3requests.protocol.tls import TLS
+from ja3requests.protocol.tls import TLS, _io
 from ja3requests.protocol.tls.extensions import (
     ExtendedMasterSecretExtension,
     SessionTicketExtension,
 )
+from ja3requests.protocol.tls.session_cache import TLSSessionCache
 from test.integration.test_certificate_verification import config_and_context
 from test.integration.test_local_tls13 import fragmented_reads
 from test.mock_servers.local import LocalServer, read_headers, tls12_context
+
+
+@pytest.mark.parametrize("version", [12, "12-ecdhe"])
+def test_full_tls12_handshake_has_no_fixed_pause(
+    trusted_certificates, monkeypatch, fragmented_reads, version
+):
+    monkeypatch.setenv("SSL_CERT_FILE", str(trusted_certificates.ca_path))
+    config, context = config_and_context(version, trusted_certificates.leaves["valid"])
+    config.verify_cert = True
+    config.session_cache = TLSSessionCache()
+    pauses = []
+    handshakes = []
+    # Replace this module's reference, not time.sleep used by other threads.
+    monkeypatch.setattr(_io, "time", SimpleNamespace(sleep=pauses.append))
+
+    def handler(conn):
+        handshakes.append((conn.version(), conn.session_reused))
+        assert read_headers(conn).startswith(b"GET / HTTP/1.1\r\n")
+        conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+
+    with LocalServer(handler, context) as server:
+        with Session(tls_config=config, use_pooling=False) as session:
+            response = session.get(f"https://127.0.0.1:{server.port}/", timeout=2)
+            assert response.content == b"ok"
+    assert handshakes == [("TLSv1.2", False)]
+    assert pauses == []
 
 
 @pytest.mark.parametrize(

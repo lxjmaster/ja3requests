@@ -22,6 +22,64 @@ async def wait_event(event):
         await asyncio.sleep(0.001)
 
 
+def test_small_reads_reuse_bounded_native_read_ahead(monkeypatch):
+    async def scenario():
+        left, right = socket.socketpair()
+        transport = AsyncTransport(left)
+        loop = asyncio.get_running_loop()
+        native_recv = loop.sock_recv
+        requests = []
+
+        async def observed_recv(conn, size):
+            requests.append(size)
+            return await native_recv(conn, size)
+
+        monkeypatch.setattr(loop, 'sock_recv', observed_recv)
+        try:
+            right.sendall(b'headerbodytail')
+            right.shutdown(socket.SHUT_WR)
+            assert await transport.read(0) == b''
+            assert requests == []
+            assert await transport.read(6) == b'header'
+            assert await transport.read(4) == b'body'
+            assert await transport.read(4) == b'tail'
+            assert requests == [65536]
+            assert transport._pending == b''
+        finally:
+            right.close()
+            await transport.aclose()
+
+    asyncio.run(asyncio.wait_for(scenario(), 2))
+
+
+def test_close_after_native_completion_does_not_restore_read_ahead(monkeypatch):
+    async def scenario():
+        left, right = socket.socketpair()
+        transport = AsyncTransport(left)
+        completed = transport._native_done
+
+        def close_after_result(task):
+            completed(task)
+            transport.close()
+
+        monkeypatch.setattr(transport, '_native_done', close_after_result)
+        try:
+            right.sendall(b'headerbodytail')
+            # A completed native result may already be committed to the caller;
+            # close must still discard any excess buffered bytes permanently.
+            assert await transport.read(6) == b'header'
+            assert transport.closed
+            assert transport._pending == b''
+            assert await transport.read(4) == b''
+        finally:
+            right.close()
+            await transport.aclose()
+        assert not transport._native_tasks
+        assert not transport._native_waiters
+
+    asyncio.run(asyncio.wait_for(scenario(), 2))
+
+
 def test_native_tcp_wait_keeps_loop_responsive_and_closes_read(monkeypatch):
     release = threading.Event()
 

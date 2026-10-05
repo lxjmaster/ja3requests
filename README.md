@@ -34,8 +34,10 @@ groups are not implemented. Implicit Chrome selection remains at version 124.
 
 Ja3Requests supports HTTP/1.1 over HTTP and HTTPS. HTTPS connections can also
 negotiate HTTP/2 with ALPN. Version 2.0 defaults to verified TLS 1.3 with TLS 1.2 ECDHE/GCM fallback.
-Version 2.1.0 is available on [PyPI](https://pypi.org/project/ja3requests/2.1.0/)
-and [GitHub](https://github.com/lxjmaster/ja3requests/releases/tag/v2.1.0).
+Version 2.1.1 release links: [PyPI](https://pypi.org/project/ja3requests/2.1.1/)
+and [GitHub](https://github.com/lxjmaster/ja3requests/releases/tag/v2.1.1).
+This maintenance release improves TLS/async transport performance and internal
+typing; see [release notes](CHANGELOG.md) for scope and measurement limits.
 
 ## Installing Ja3Requests and Supported Versions
 

@@ -10,6 +10,8 @@ they do not impose throughput or memory thresholds on CI.
 
 The completed local snapshot, raw artifact hashes and larger streaming runs are
 recorded in [PERFORMANCE_RESULTS.md](PERFORMANCE_RESULTS.md).
+The later frozen 2.1.0 baseline and controlled maintenance comparisons are in
+[POST_2_1_0_RESULTS.md](POST_2_1_0_RESULTS.md).
 
 ## Run locally
 

@@ -1,5 +1,21 @@
 # Release Notes
 
+## 2.1.1 — transport performance and maintenance
+
+- Remove the fixed 300 ms wait from full TLS1.2 handshakes. Continue waiting for
+  authenticated server Finished with the existing receive timeout and failure
+  behavior; resumed handshakes and secure/wire defaults are unchanged.
+- Reuse bounded 64 KiB native-async socket read-ahead across small TLS reads,
+  retaining cancellation, close wakeups and native-task cleanup. Local controlled
+  comparisons show higher throughput with increased Python allocation peaks;
+  this is not a whole-connection memory or latency guarantee. See the
+  [measurement report](bench/POST_2_1_0_RESULTS.md) for samples and limits.
+- Add strict internal types for HTTP/2 frames, HPACK Huffman values and
+  ClientHello inspection, with installed-consumer acceptance. This is an
+  incremental migration, not a claim that every protocol module is type-clean.
+- Remove obsolete setuptools test-command integration. Runtime dependencies,
+  package contents, `py.typed` and Python >=3.7 support remain unchanged.
+
 ## 2.1.0 — native async, incremental streaming and typed APIs
 
 - Read streaming HTTP/1.1 and HTTP/2 responses incrementally, including project

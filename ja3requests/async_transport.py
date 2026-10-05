@@ -110,7 +110,14 @@ class AsyncTransport:
             return result
         if self.closed:
             return b""
-        return await self._socket_io(self._loop.sock_recv, min(size, 65536))
+        # TLS headers and payloads often arrive together. Reuse one bounded
+        # native read instead of scheduling a task for each small exact read.
+        data = await self._socket_io(self._loop.sock_recv, 65536 if size > 0 else size)
+        if not self.closed:
+            self._pending = data[size:]
+        # A completed read can resume after close; never restore its excess
+        # bytes after close has already discarded the transport's buffers.
+        return data[:size]
 
     async def _send(self, data):
         if self.closed:
@@ -140,8 +147,8 @@ class AsyncTransport:
                     elif isinstance(operation, Write):
                         result = await self._send(operation.data)
                     elif isinstance(operation, Pause):
-                        # The synchronous TLS 1.2 grace sleep is unnecessary with
-                        # readiness-driven reads; still yield to queued loop work.
+                        # Keep pause operations cooperative; handshake I/O waits
+                        # for socket readiness rather than a fixed grace delay.
                         result = await asyncio.sleep(0)
                     elif isinstance(operation, Call):
                         method = operation.method

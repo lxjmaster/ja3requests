@@ -2,10 +2,18 @@
 skip-string-normalization = true
 
 [tool.mypy]
-# Check the typed facade strictly. The existing dynamic protocol internals are
+# Check the typed facade and migrated shared value boundaries strictly.
+# The remaining dynamic protocol internals are
 # separately inspectable with `mypy ja3requests`; they are not silently ignored.
 python_version = "3.9"
-files = ["ja3requests/_typing.py", "ja3requests/__init__.py", "ja3requests/retry.py"]
+files = [
+    "ja3requests/_typing.py",
+    "ja3requests/__init__.py",
+    "ja3requests/retry.py",
+    "ja3requests/protocol/h2/frame.py",
+    "ja3requests/protocol/h2/huffman.py",
+    "ja3requests/protocol/tls/client_hello_info.py",
+]
 strict = true
 follow_imports = "silent"
 show_error_codes = true

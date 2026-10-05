@@ -3,6 +3,8 @@
 import hashlib
 import hmac
 import io
+import socket
+import threading
 
 import pytest
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -74,6 +76,119 @@ def test_valid_finished_keeps_application_data_unread(gcm, chunk):
     assert tls._server_seq_num == 1
     assert tls._handshake_messages == TRANSCRIPT + message
     assert wire.data.read() == b"application-record"
+
+
+@pytest.mark.parametrize("gcm", [False, True])
+@pytest.mark.parametrize(
+    "outcome,handshake_timeout",
+    [
+        ("fragmented", None),
+        ("fragmented", 10.0),
+        ("timeout", 0.05),
+        ("eof", None),
+        ("eof", 10.0),
+    ],
+)
+def test_full_handshake_finished_receive_boundary(
+    monkeypatch, gcm, outcome, handshake_timeout
+):
+    message = finished()
+    first_flight = CCS + encrypted_record(message[:5], gcm)
+    remainder = encrypted_record(message[5:], gcm, seq=1)
+    recv_entered = threading.Event()
+    allow_recv = threading.Event()
+    remainder_requested = threading.Event()
+    timed_out = threading.Event()
+    done = threading.Event()
+    read_timeouts = []
+    timeout_changes = []
+    results = []
+    errors = []
+    conn, peer = socket.socketpair()
+
+    class ObservedSocket:
+        received = 0
+
+        def settimeout(self, timeout):
+            timeout_changes.append(timeout)
+            conn.settimeout(timeout)
+
+        def recv(self, size):
+            read_timeouts.append(conn.gettimeout())
+            if len(read_timeouts) == 1:
+                recv_entered.set()
+                if not allow_recv.wait(3):
+                    raise RuntimeError("Test did not release the first receive")
+            if self.received == len(first_flight):
+                remainder_requested.set()
+            try:
+                data = conn.recv(min(size, 3))
+            except socket.timeout:
+                timed_out.set()
+                raise
+            self.received += len(data)
+            return data
+
+    tls = client(ObservedSocket(), gcm)
+    tls._handshake_timeout = handshake_timeout
+    tls._verify_cert = True
+    tls._cert_verified = True
+    # The fixture transcript and keys represent the completed client flight.
+    # Keep the actual record reader, decryption and Finished verification.
+    monkeypatch.setattr(tls, "_parse_server_handshake_messages", lambda data: None)
+    monkeypatch.setattr(tls, "_send_client_finishing_messages", lambda: None)
+
+    def handshake():
+        try:
+            results.append(tls._handshake_tls12())
+        except Exception as error:
+            errors.append(error)
+        finally:
+            done.set()
+
+    worker = threading.Thread(target=handshake, daemon=True)
+    try:
+        peer.settimeout(3)
+        worker.start()
+        assert recv_entered.wait(3), "Full handshake never requested server Finished"
+        assert not done.is_set()
+        expected_timeout = handshake_timeout if handshake_timeout is not None else 5.0
+        assert read_timeouts == [expected_timeout]
+        assert tls._handshake_messages == TRANSCRIPT
+        assert tls._resumed_session is None
+
+        if outcome != "timeout":
+            peer.sendall(first_flight)
+        if outcome == "eof":
+            peer.shutdown(socket.SHUT_WR)
+        allow_recv.set()
+        if outcome == "fragmented":
+            assert remainder_requested.wait(3), "Fragmented Finished was not read"
+            assert not done.is_set()
+            assert tls._handshake_messages == TRANSCRIPT
+            peer.sendall(remainder)
+
+        # These waits bound a failed test; they are not latency assertions.
+        assert done.wait(3), "Full handshake did not finish after peer completion"
+        assert errors == []
+        assert results == [outcome == "fragmented"]
+        assert timed_out.is_set() is (outcome == "timeout")
+        assert all(value == expected_timeout for value in read_timeouts)
+        assert timeout_changes[0] == expected_timeout
+        assert timeout_changes[-1] is None
+        assert conn.gettimeout() is None
+        assert tls._handshake_messages == (
+            TRANSCRIPT + message if outcome == "fragmented" else TRANSCRIPT
+        )
+        if outcome == "fragmented":
+            assert tls._server_seq_num == 2
+    finally:
+        allow_recv.set()
+        peer.close()
+        if worker.ident is not None:
+            worker.join(3)
+        conn.close()
+        assert not worker.is_alive(), "Full-handshake worker did not terminate"
 
 
 @pytest.mark.parametrize("gcm", [False, True])

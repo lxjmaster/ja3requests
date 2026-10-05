@@ -1,14 +1,34 @@
 # Next Development Plan
 
-## Release selection (2026-10-05)
+## Published baseline and next plan (2026-10-05)
 
-The user selected commit, push and publication of the completed client work as
-2.1.0. This includes native async, incremental response streaming, public typing,
+The selected commit, push and publication are complete: `master` and `v2.1.0`
+resolve to `2175105016f83dfe24fcb340e986719bd05ed04d`. This includes native async,
+incremental response streaming, public typing,
 local documentation and performance tooling, plus the reviewed correctness fixes.
 See [release notes](../CHANGELOG.md), [GitHub v2.1.0](https://github.com/lxjmaster/ja3requests/releases/tag/v2.1.0)
 and [PyPI 2.1.0](https://pypi.org/project/ja3requests/2.1.0/) for the versioned
-delivery. Public documentation hosting and feature/performance follow-ups remain
-unselected. This does not authorize closing remote issues or another capability
+delivery. Final installed acceptance passed 2135 tests and 112 subtests with
+91.06% coverage; all 11 configured CI jobs passed on this exact revision,
+including Python 3.7-3.13. Published artifacts and official-index installation
+were verified. Read-only inspection found five open Issues and zero open PRs.
+
+The [post-2.1.0 plan](post_2_1_0_plan.md) maps all 17 remaining candidates and
+four deferred async convenience categories to proposed batches, dependencies
+and acceptance. Its subsequently selected P1-P4 sequence is **complete locally**:
+minimal packaging maintenance, frozen performance baselines, removal of the
+full-TLS1.2 fixed wait, bounded async read-ahead and three shared-value typing
+modules. Final acceptance passes 2151 tests / 91.06% coverage, independent
+sdist-to-wheel installation, all 39 typing negative markers and strict docs.
+Six modules are now in the strict gate; the internal backlog is 1786 diagnostics
+in 53 files, so full internal typing is not claimed complete. See the
+[execution record](post_2_1_0_execution.md) and
+[performance report](../bench/POST_2_1_0_RESULTS.md) for evidence and tradeoffs.
+The maintenance measurements used source snapshots retaining version 2.1.0.
+A subsequent release request selects this work for the 2.1.1 patch release;
+see [release notes](../CHANGELOG.md). Historical measurements below are unchanged.
+Public documentation hosting and optional feature branches
+remain unselected. This does not authorize closing remote issues or another capability
 batch. The 2026-10-04 local acceptance below remains historical evidence, not
 the final 2.1.0 release test count.
 
@@ -138,8 +158,8 @@ are independent; listing them does not select or authorize their implementation.
 
 | Candidate | Entry condition | Work and acceptance |
 | --- | --- | --- |
-| Remote source delivery | Selected on 2026-10-05: commit and push the accepted batch | Review final diff, use configured identity, required CI on the submitted revision, remote readback; preserve unrelated local changes |
-| Next package release | Selected on 2026-10-05: 2.1.0 on PyPI and GitHub | Final changelog/metadata, sdist-to-wheel checks, upload/tag/release only in selected scope, verify installation from selected index |
+| Remote source delivery | Completed on 2026-10-05 at `2175105` | Scoped source committed/pushed; exact-revision CI passed and remote commit read back; unrelated local changes preserved |
+| Next package release | Completed on 2026-10-05: 2.1.0 on PyPI and GitHub | sdist-to-wheel and independent installed acceptance passed; tag, both published files and official-index installation verified |
 | Public documentation deployment (#42 optional) | Select hosting and deployment target | Build the accepted source, publish, verify public routes/assets and version labeling |
 | Performance automation (#40 optional) | Reproducible baseline and useful comparison policy established | Isolated optional CI run, retained samples and variability; no arbitrary speed threshold |
 | Measured TLS1.2 handshake latency | Select a performance follow-up backed by the new baseline | Investigate the existing 300 ms sleep in `TLS._handshake_tls12`; remove or replace it only with independent full/resumed/fragmented-handshake evidence, preserving authentication and wire behavior |
@@ -159,8 +179,10 @@ are independent; listing them does not select or authorize their implementation.
 | Session-default merging parity | A selected compatibility need with requests | Existing headers/auth/params/proxies are not all automatically merged by Session.request; specify precedence and add targeted behavior tests before changing it |
 
 The native async batch is complete at its local boundary. Of the 19 candidates,
-source delivery and the 2.1.0 package release were subsequently selected; the
-other 17 remain unselected. Capability or performance work should follow a
+source delivery and the 2.1.0 package release were subsequently completed; the
+other 17 form the proposal inventory. The P1-P4 follow-up selected packaging,
+performance investigation and incremental typing; other candidates remain
+unselected. Capability or performance work should follow a
 concrete need and its acceptance criteria. Package publication does not select
 public documentation-site deployment.
 
