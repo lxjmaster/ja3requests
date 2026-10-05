@@ -3,59 +3,21 @@
 import threading
 import time
 
-from ja3requests.protocol.h2.connection import H2Connection
 from ja3requests.protocol.h2.frame import (
-    FRAME_CONTINUATION,
-    FRAME_DATA,
-    FRAME_GOAWAY,
-    FRAME_HEADERS,
-    FRAME_PING,
-    FRAME_PRIORITY,
-    FRAME_RST_STREAM,
-    FRAME_SETTINGS,
-    FRAME_WINDOW_UPDATE,
-    FLAG_ACK,
-    FLAG_END_HEADERS,
-    FLAG_END_STREAM,
     build_data_frame,
-    build_headers_frame,
-    build_ping_frame,
     build_rst_stream_frame,
-    build_settings_frame,
-    build_window_update_frame,
-    data_payload,
-    header_block_fragment,
-    parse_settings_payload,
-    SETTINGS_ENABLE_PUSH,
 )
+from ja3requests.protocol.h2.stream_state import H2StreamError, H2StreamState, _Stream
+from ja3requests.protocol.h2.connection import H2GoAwayError
+from ja3requests.protocol.h2.hpack import HeaderLimitError
 
 
-class H2StreamError(ConnectionError):
-    """A single stream failed while the underlying connection may remain usable."""
-
-
-class _Stream:
-    def __init__(self, send_window, receive_window):
-        self.send_window = send_window
-        self.receive_window = receive_window
-        self.headers = None
-        self.header_block = b""
-        self.header_open = False
-        self.header_end_stream = False
-        self.body = bytearray()
-        self.done = False
-        self.error = None
-
-
-class H2MultiplexConnection(H2Connection):
+class H2MultiplexConnection(H2StreamState):
     """Serialize framing and demultiplex responses in one reader thread."""
 
     def __init__(self, send_func, recv_func, settings=None):
         super().__init__(send_func, recv_func, settings=settings)
         self._condition = threading.Condition(threading.RLock())
-        self._streams = {}
-        self._failed = None
-        self._pooled_connection = None
         self._reader = None
         self._transport_send = send_func
         self._send = self._send_checked
@@ -99,6 +61,11 @@ class H2MultiplexConnection(H2Connection):
                 if self._failed is None:
                     self._failed = error
                 self._condition.notify_all()
+            if (
+                isinstance(error, (HeaderLimitError, H2GoAwayError))
+                and self._pooled_connection is not None
+            ):
+                self._pooled_connection.close()
 
     def _wait_for(self, predicate, timeout):
         deadline = time.monotonic() + (15.0 if timeout is None else timeout)
@@ -158,11 +125,9 @@ class H2MultiplexConnection(H2Connection):
                 )
             try:
                 block = self._encoder.encode_headers(h2_headers)
-                self._send(
-                    build_headers_frame(
-                        stream_id, block, end_stream=not body
-                    ).serialize()
-                )
+                for frame in self._header_frames(stream_id, block, end_stream=not body):
+                    self._send(frame.serialize())
+                stream.send_done = not body
             except Exception:
                 self._streams.pop(stream_id, None)
                 self._condition.notify_all()
@@ -175,6 +140,8 @@ class H2MultiplexConnection(H2Connection):
                     error = stream.error
                     if error is not None:
                         raise error
+                    if stream.send_done:
+                        break
                     size = min(
                         len(body) - offset,
                         self._peer_settings[5],
@@ -191,9 +158,11 @@ class H2MultiplexConnection(H2Connection):
                         self._connection_send_window -= size
                         stream.send_window -= size
                         offset = end
+                        stream.send_done = end == len(body)
                 if size <= 0:
                     self._wait_for(
                         lambda: stream.error
+                        or stream.send_done
                         or (
                             self._connection_send_window > 0 and stream.send_window > 0
                         ),
@@ -204,21 +173,70 @@ class H2MultiplexConnection(H2Connection):
             self.cancel_stream(stream_id)
             raise
 
-    def receive_response(self, stream_id, timeout=None):
-        with self._condition:
-            stream = self._streams[stream_id]
+    def receive_headers(self, stream_id, timeout=None):
+        """Wait for final response headers without waiting for its DATA or EOF."""
         try:
-            self._wait_for(lambda: stream.done or stream.error, timeout)
-            if stream.error:
-                raise stream.error
-            return stream.headers, bytes(stream.body)
+            with self._condition:
+                stream = self._response_stream(stream_id)
+                self._wait_for(
+                    lambda: stream.headers is not None or stream.error, timeout
+                )
+                self._check_response_error(stream)
+                return stream.headers
         except Exception:
             self.cancel_stream(stream_id)
             raise
-        finally:
+
+    def read_stream(self, stream_id, size, timeout=None):
+        """Return up to size available bytes; release stream state on empty EOF.
+
+        The caller owns the stream until EOF or cancel_stream(). Reading zero
+        bytes does not consume or finish the stream. After EOF the caller must
+        cache that state instead of reading the removed stream again.
+        """
+        if not isinstance(size, int) or size < 0:
+            raise ValueError("HTTP/2 read size must be a non-negative integer")
+        if size == 0:
+            return b""
+        try:
             with self._condition:
-                self._streams.pop(stream_id, None)
+                stream = self._response_stream(stream_id)
+                self._wait_for(
+                    lambda: stream.body or stream.done or stream.error, timeout
+                )
+                self._check_response_error(stream)
+                if not stream.body:
+                    self._streams.pop(stream_id, None)
+                    self._condition.notify_all()
+                    return b""
+                data = bytes(memoryview(stream.body)[:size])
+                del stream.body[: len(data)]
+                self._buffered_bytes -= len(data)
+                self._replenish_connection_window()
+                self._replenish_stream_window(stream_id, stream)
                 self._condition.notify_all()
+                return data
+        except Exception:
+            self.cancel_stream(stream_id)
+            raise
+
+    def receive_response(self, stream_id, timeout=None):
+        """Compatibility collector over incremental reads, with one deadline."""
+        deadline = time.monotonic() + (15.0 if timeout is None else timeout)
+        chunks = []
+        try:
+            headers = self.receive_headers(
+                stream_id, timeout=max(0, deadline - time.monotonic())
+            )
+            while True:
+                chunk = self.read_stream(
+                    stream_id, 65536, timeout=max(0, deadline - time.monotonic())
+                )
+                if not chunk:
+                    return headers, b"".join(chunks)
+                chunks.append(chunk)
+        finally:
+            self.cancel_stream(stream_id)
 
     def cancel_stream(self, stream_id):
         with self._condition:
@@ -227,7 +245,7 @@ class H2MultiplexConnection(H2Connection):
                 self._ignored_header_block = stream.header_block
             if (
                 stream is not None
-                and not stream.done
+                and not (stream.done and stream.send_done)
                 and stream.error is None
                 and self._failed is None
             ):
@@ -235,140 +253,10 @@ class H2MultiplexConnection(H2Connection):
                     self._send(build_rst_stream_frame(stream_id, 8).serialize())
                 except OSError:
                     pass
+            if stream is not None:
+                if not (stream.done and stream.send_done) and stream.error is None:
+                    stream.error = H2StreamError(
+                        f"HTTP/2 stream {stream_id} was cancelled"
+                    )
+                self._discard_body(stream)
             self._condition.notify_all()
-
-    def _dispatch_frame(self, frame):
-        if frame.stream_id == 0:
-            self._handle_connection_frame(frame)
-            return
-        if frame.type == FRAME_PRIORITY:
-            if not self._handle_priority_frame(frame):
-                stream = self._streams.get(frame.stream_id)
-                if stream is not None:
-                    stream.error = H2StreamError(
-                        f"Invalid HTTP/2 PRIORITY on stream {frame.stream_id}"
-                    )
-            return
-        stream = self._streams.get(frame.stream_id)
-        if stream is None:
-            if frame.type == FRAME_DATA:
-                self._account_connection_data(frame.length)
-            elif frame.type in (FRAME_HEADERS, FRAME_CONTINUATION):
-                self._discard_header_fragment(frame)
-            return
-        if stream.done:
-            if frame.type in (FRAME_DATA, FRAME_HEADERS, FRAME_CONTINUATION):
-                error = ValueError("HTTP/2 response frame after END_STREAM")
-                stream.error = H2StreamError(str(error))
-                self._failed = error
-                raise error
-            return
-        if frame.type == FRAME_WINDOW_UPDATE:
-            stream.send_window += self._window_increment(frame)
-            if stream.send_window > 0x7FFFFFFF:
-                raise ValueError("HTTP/2 stream send window overflow")
-        elif frame.type in (FRAME_HEADERS, FRAME_CONTINUATION):
-            if frame.type == FRAME_HEADERS:
-                if stream.header_open:
-                    raise ValueError("HTTP/2 HEADERS before CONTINUATION")
-                stream.header_open = True
-                stream.header_end_stream = bool(frame.flags & FLAG_END_STREAM)
-            elif not stream.header_open:
-                raise ValueError("HTTP/2 CONTINUATION without HEADERS")
-            stream.header_block += (
-                header_block_fragment(frame)
-                if frame.type == FRAME_HEADERS
-                else frame.payload
-            )
-            if frame.flags & FLAG_END_HEADERS:
-                decoded = self._decoder.decode_headers(stream.header_block)
-                if stream.headers is None:
-                    status = self._response_status(decoded)
-                    if status < 200:
-                        if stream.header_end_stream:
-                            raise ValueError("HTTP/2 interim response ended stream")
-                    else:
-                        stream.headers = decoded
-                elif not stream.header_end_stream or any(
-                    name.startswith(":") for name, _ in decoded
-                ):
-                    raise ValueError("Invalid HTTP/2 response trailers")
-                stream.header_block = b""
-                stream.header_open = False
-                if stream.header_end_stream:
-                    stream.done = True
-        elif frame.type == FRAME_DATA:
-            if stream.header_open:
-                raise ValueError("HTTP/2 DATA before complete response headers")
-            if stream.headers is None:
-                raise ValueError("HTTP/2 DATA before response headers")
-            self._account_connection_data(frame.length)
-            stream.receive_window -= frame.length
-            if stream.receive_window < 0:
-                raise ValueError("HTTP/2 stream receive window exceeded")
-            stream.body.extend(data_payload(frame))
-            target = self._local_settings[4]
-            if (
-                not frame.flags & FLAG_END_STREAM
-                and stream.receive_window < target // 2
-            ):
-                increment = target - stream.receive_window
-                self._send(
-                    build_window_update_frame(frame.stream_id, increment).serialize()
-                )
-                stream.receive_window += increment
-            if frame.flags & FLAG_END_STREAM:
-                stream.done = True
-        elif frame.type == FRAME_RST_STREAM:
-            stream.error = H2StreamError(
-                f"HTTP/2 stream {frame.stream_id} reset by peer"
-            )
-
-    def _handle_connection_frame(self, frame):
-        if frame.type == FRAME_SETTINGS:
-            if frame.flags & FLAG_ACK:
-                if frame.length:
-                    raise ValueError("Invalid HTTP/2 SETTINGS ACK")
-                return
-            if frame.length % 6:
-                raise ValueError("Invalid HTTP/2 SETTINGS frame")
-            settings = parse_settings_payload(frame.payload)
-            if settings.get(SETTINGS_ENABLE_PUSH, 0) != 0:
-                raise ValueError("Invalid server HTTP/2 ENABLE_PUSH setting")
-            if 4 in settings and settings[4] > 0x7FFFFFFF:
-                raise ValueError("Invalid HTTP/2 initial stream window")
-            if 5 in settings and not 16384 <= settings[5] <= 16777215:
-                raise ValueError("Invalid HTTP/2 maximum frame size")
-            if 4 in settings:
-                delta = settings[4] - self._peer_settings[4]
-                for stream in self._streams.values():
-                    stream.send_window += delta
-                    if stream.send_window > 0x7FFFFFFF:
-                        raise ValueError("HTTP/2 stream send window overflow")
-            self._peer_settings.update(settings)
-            self._peer_settings_received = True
-            if 1 in settings:
-                self._encoder.set_table_size(settings[1])
-            if 3 in settings and self._pooled_connection is not None:
-                self._pooled_connection.set_max_concurrent_streams(settings[3])
-            self._send(build_settings_frame(ack=True).serialize())
-        elif frame.type == FRAME_WINDOW_UPDATE:
-            self._connection_send_window += self._window_increment(frame)
-            if self._connection_send_window > 0x7FFFFFFF:
-                raise ValueError("HTTP/2 connection send window overflow")
-        elif frame.type == FRAME_PING and not frame.flags & FLAG_ACK:
-            self._send(build_ping_frame(frame.payload, ack=True).serialize())
-        elif frame.type == FRAME_GOAWAY:
-            if frame.length < 8:
-                raise ValueError("Invalid HTTP/2 GOAWAY frame")
-            self._goaway_received = True
-            self._goaway_last_stream_id = (
-                int.from_bytes(frame.payload[:4], "big") & 0x7FFFFFFF
-            )
-            if self._pooled_connection is not None:
-                self._pooled_connection.mark_goaway()
-            for stream_id, stream in self._streams.items():
-                if stream_id > self._goaway_last_stream_id:
-                    stream.error = H2StreamError(
-                        f"HTTP/2 stream {stream_id} rejected by GOAWAY"
-                    )

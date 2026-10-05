@@ -5,10 +5,25 @@ Ja3Requests.cookies
 This module contains Request or Response Cookies.
 """
 
-from http.cookiejar import CookieJar, Cookie
+from __future__ import annotations
+
+from http.cookiejar import CookieJar, Cookie, CookiePolicy
 from http import cookies
 from email.message import Message
-from typing import MutableMapping
+from typing import (
+    Any,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Mapping,
+    MutableMapping,
+    Optional,
+    Tuple,
+    TypeVar,
+    Union,
+    overload,
+)
 from urllib.parse import urlparse
 import threading
 import calendar
@@ -16,9 +31,13 @@ import copy
 import time
 
 from ja3requests._cookie_file import load_cookie_file, save_cookie_file
+from ja3requests._typing import Cookies, PathInput
+
+_Default = TypeVar('_Default')
+_Jar = TypeVar('_Jar', bound=CookieJar)
 
 
-def to_native_string(string, encoding="ascii"):
+def to_native_string(string: Union[str, bytes], encoding: str = "ascii") -> str:
     """Given a string object, regardless of type, returns a representation of
     that string in the native string type, encoding and decoding where
     necessary. This assumes ASCII unless told otherwise.
@@ -215,7 +234,27 @@ def get_cookie_header(jar, request):
     return r.get_new_headers().get("Cookie")
 
 
-def remove_cookie_by_name(cookiejar, name, domain=None, path=None):
+def _refresh_cookie_header(jar, request):
+    """Refresh a generated header without replacing explicit hook/header choices."""
+    headers = request.headers
+    if headers.get("Cookie") != request._cookie_from_jar:
+        request._cookie_header_managed = False
+    if not request._cookie_header_managed:
+        request._cookie_from_jar = None
+        return
+    headers.pop("Cookie", None)
+    cookie = get_cookie_header(jar, request)
+    if cookie:
+        headers["Cookie"] = cookie
+    request._cookie_from_jar = cookie
+
+
+def remove_cookie_by_name(
+    cookiejar: CookieJar,
+    name: str,
+    domain: Optional[str] = None,
+    path: Optional[str] = None,
+) -> None:
     """Unsets a cookie by name, by default over all domains and paths.
 
     Wraps CookieJar.clear(), is O(n).
@@ -256,7 +295,31 @@ class Ja3RequestsCookieJar(CookieJar, MutableMapping):
     Unlike a regular CookieJar, this class is pickleable.
     """
 
-    def get(self, key, default=None, domain=None, path=None):
+    @overload
+    def get(
+        self,
+        key: str,
+        default: None = None,
+        domain: Optional[str] = None,
+        path: Optional[str] = None,
+    ) -> Optional[str]: ...
+
+    @overload
+    def get(
+        self,
+        key: str,
+        default: _Default,
+        domain: Optional[str] = None,
+        path: Optional[str] = None,
+    ) -> Union[str, _Default]: ...
+
+    def get(
+        self,
+        key: str,
+        default: Optional[_Default] = None,
+        domain: Optional[str] = None,
+        path: Optional[str] = None,
+    ) -> Union[str, _Default, None]:
         """Dict-like get() that also supports optional domain and path args in
         order to resolve naming collisions from using one cookie jar over
         multiple domains.
@@ -268,7 +331,9 @@ class Ja3RequestsCookieJar(CookieJar, MutableMapping):
         except KeyError:
             return default
 
-    def set(self, name, value, **kwargs):
+    def set(
+        self, name: str, value: Union[str, cookies.Morsel[str], None], **kwargs: Any
+    ) -> Optional[Cookie]:
         """Dict-like set() that also supports optional domain and path args in
         order to resolve naming collisions from using one cookie jar over
         multiple domains.
@@ -289,7 +354,7 @@ class Ja3RequestsCookieJar(CookieJar, MutableMapping):
 
         return c
 
-    def iterkeys(self):
+    def iterkeys(self) -> Iterator[str]:
         """Dict-like iterkeys() that returns an iterator of names of cookies
         from the jar.
 
@@ -298,7 +363,7 @@ class Ja3RequestsCookieJar(CookieJar, MutableMapping):
         for cookie in iter(self):
             yield cookie.name
 
-    def keys(self):
+    def keys(self) -> List[str]:
         """Dict-like keys() that returns a list of names of cookies from the
         jar.
 
@@ -306,7 +371,7 @@ class Ja3RequestsCookieJar(CookieJar, MutableMapping):
         """
         return list(self.iterkeys())
 
-    def itervalues(self):
+    def itervalues(self) -> Iterator[Optional[str]]:
         """Dict-like itervalues() that returns an iterator of values of cookies
         from the jar.
 
@@ -315,7 +380,7 @@ class Ja3RequestsCookieJar(CookieJar, MutableMapping):
         for cookie in iter(self):
             yield cookie.value
 
-    def values(self):
+    def values(self) -> List[Optional[str]]:
         """Dict-like values() that returns a list of values of cookies from the
         jar.
 
@@ -323,7 +388,7 @@ class Ja3RequestsCookieJar(CookieJar, MutableMapping):
         """
         return list(self.itervalues())
 
-    def iteritems(self):
+    def iteritems(self) -> Iterator[Tuple[str, Optional[str]]]:
         """Dict-like iteritems() that returns an iterator of name-value tuples
         from the jar.
 
@@ -332,7 +397,7 @@ class Ja3RequestsCookieJar(CookieJar, MutableMapping):
         for cookie in iter(self):
             yield cookie.name, cookie.value
 
-    def items(self):
+    def items(self) -> List[Tuple[str, Optional[str]]]:
         """Dict-like items() that returns a list of name-value tuples from the
         jar. Allows client-code to call ``dict(Ja3RequestsCookieJar)`` and get a
         vanilla python dict of key value pairs.
@@ -341,7 +406,7 @@ class Ja3RequestsCookieJar(CookieJar, MutableMapping):
         """
         return list(self.iteritems())
 
-    def list_domains(self):
+    def list_domains(self) -> List[str]:
         """Utility method to list all the domains in the jar."""
         domains = []
         for cookie in iter(self):
@@ -349,7 +414,7 @@ class Ja3RequestsCookieJar(CookieJar, MutableMapping):
                 domains.append(cookie.domain)
         return domains
 
-    def list_paths(self):
+    def list_paths(self) -> List[str]:
         """Utility method to list all the paths in the jar."""
         paths = []
         for cookie in iter(self):
@@ -357,7 +422,7 @@ class Ja3RequestsCookieJar(CookieJar, MutableMapping):
                 paths.append(cookie.path)
         return paths
 
-    def multiple_domains(self):
+    def multiple_domains(self) -> bool:
         """Returns True if there are multiple domains in the jar.
         Returns False otherwise.
 
@@ -370,7 +435,9 @@ class Ja3RequestsCookieJar(CookieJar, MutableMapping):
             domains.append(cookie.domain)
         return False  # there is only one domain in jar
 
-    def get_dict(self, domain=None, path=None):
+    def get_dict(
+        self, domain: Optional[str] = None, path: Optional[str] = None
+    ) -> Dict[str, Optional[str]]:
         """Takes as an argument an optional domain and path and returns a plain
         old Python dict of name-value pairs of cookies that meet the
         requirements.
@@ -385,7 +452,7 @@ class Ja3RequestsCookieJar(CookieJar, MutableMapping):
                 dictionary[cookie.name] = cookie.value
         return dictionary
 
-    def __contains__(self, name):
+    def __contains__(self, name: object) -> bool:
         """
         Class builtin method
         :param name:
@@ -396,7 +463,7 @@ class Ja3RequestsCookieJar(CookieJar, MutableMapping):
         except CookieConflictError:
             return True
 
-    def __getitem__(self, name):
+    def __getitem__(self, name: str) -> str:
         """Dict-like __getitem__() for compatibility with client code. Throws
         exception if there are more than one cookie with name. In that case,
         use the more explicit get() method instead.
@@ -405,20 +472,20 @@ class Ja3RequestsCookieJar(CookieJar, MutableMapping):
         """
         return self._find_no_duplicates(name)
 
-    def __setitem__(self, name, value):
+    def __setitem__(self, name: str, value: Optional[str]) -> None:
         """Dict-like __setitem__ for compatibility with client code. Throws
         exception if there is already a cookie of that name in the jar. In that
         case, use the more explicit set() method instead.
         """
         self.set(name, value)
 
-    def __delitem__(self, name):
+    def __delitem__(self, name: str) -> None:
         """Deletes a cookie given a name. Wraps ``CookieJar``'s
         ``remove_cookie_by_name()``.
         """
         remove_cookie_by_name(self, name)
 
-    def set_cookie(self, cookie):
+    def set_cookie(self, cookie: Cookie) -> None:
         """
         Set cookie
         :param cookie:
@@ -432,7 +499,9 @@ class Ja3RequestsCookieJar(CookieJar, MutableMapping):
             cookie.value = cookie.value.replace('\\"', "")
         return super().set_cookie(cookie)
 
-    def update(self, other):
+    def update(
+        self, other: Union[CookieJar, Mapping[str, str], Iterable[Tuple[str, str]]]
+    ) -> None:
         """Updates this jar with cookies from another CookieJar or dict-like"""
         if isinstance(other, CookieJar):
             for cookie in other:
@@ -440,7 +509,9 @@ class Ja3RequestsCookieJar(CookieJar, MutableMapping):
         else:
             super().update(other)
 
-    def _find(self, name, domain=None, path=None):
+    def _find(
+        self, name: str, domain: Optional[str] = None, path: Optional[str] = None
+    ) -> Optional[str]:
         """Requests uses this method internally to get cookie values.
 
         If there are conflicting cookies, _find arbitrarily chooses one.
@@ -460,7 +531,9 @@ class Ja3RequestsCookieJar(CookieJar, MutableMapping):
 
         raise KeyError(f"name={name!r}, domain={domain!r}, path={path!r}")
 
-    def _find_no_duplicates(self, name, domain=None, path=None):
+    def _find_no_duplicates(
+        self, name: str, domain: Optional[str] = None, path: Optional[str] = None
+    ) -> str:
         """Both ``__get_item__`` and ``get`` call this function: it's never
         used elsewhere in Requests.
 
@@ -502,18 +575,18 @@ class Ja3RequestsCookieJar(CookieJar, MutableMapping):
         if "_cookies_lock" not in self.__dict__:
             self._cookies_lock = threading.RLock()
 
-    def copy(self):
+    def copy(self) -> Ja3RequestsCookieJar:
         """Return a copy of this RequestsCookieJar."""
         new_cj = Ja3RequestsCookieJar()
         new_cj.set_policy(self.get_policy())
         new_cj.update(self)
         return new_cj
 
-    def get_policy(self):
+    def get_policy(self) -> CookiePolicy:
         """Return the CookiePolicy instance used."""
         return self._policy
 
-    def save(self, path, *, include_session=False):
+    def save(self, path: PathInput, *, include_session: bool = False) -> int:
         """Atomically save non-expired Cookies to a private JSON file.
 
         Session/discard Cookies require include_session=True. Return the saved
@@ -521,7 +594,9 @@ class Ja3RequestsCookieJar(CookieJar, MutableMapping):
         """
         return save_cookie_file(self, path, include_session=include_session)
 
-    def load(self, path, *, merge=False, include_session=False):
+    def load(
+        self, path: PathInput, *, merge: bool = False, include_session: bool = False
+    ) -> int:
         """Load validated JSON Cookies, replacing this jar unless merge=True.
 
         Session/discard Cookies require include_session=True. Expired Cookies
@@ -552,7 +627,7 @@ def _copy_cookie_jar(jar):
     return new_jar
 
 
-def create_cookie(name, value, **kwargs):
+def create_cookie(name: str, value: Optional[str], **kwargs: Any) -> Cookie:
     """Make a cookie from underspecified parameters.
 
     By default, the pair of `name` and `value` will be set for the domain ''
@@ -589,7 +664,7 @@ def create_cookie(name, value, **kwargs):
     return Cookie(**result)
 
 
-def morsel_to_cookie(morsel):
+def morsel_to_cookie(morsel: cookies.Morsel[str]) -> Cookie:
     """Convert a Morsel object into a Cookie containing the one k/v pair."""
 
     expires = None
@@ -619,7 +694,11 @@ def morsel_to_cookie(morsel):
     )
 
 
-def cookiejar_from_dict(cookie_dict, cookiejar=None, overwrite=True):
+def cookiejar_from_dict(
+    cookie_dict: Optional[Mapping[str, str]],
+    cookiejar: Optional[CookieJar] = None,
+    overwrite: bool = True,
+) -> CookieJar:
     """Returns a CookieJar from a key/value dictionary.
 
     :param cookie_dict: Dict of key/values to insert into CookieJar.
@@ -640,15 +719,21 @@ def cookiejar_from_dict(cookie_dict, cookiejar=None, overwrite=True):
     return cookiejar
 
 
-def merge_cookies(cookiejar, _cookies):
+def merge_cookies(cookiejar: _Jar, _cookies: Optional[Cookies]) -> _Jar:
     """Add cookies to cookiejar and returns a merged CookieJar.
 
     :param cookiejar: CookieJar object to add the cookies to.
-    :param _cookies: Dictionary or CookieJar object to be added.
+    :param _cookies: Dictionary, CookieJar, or str/bytes Cookie header to be added.
     :rtype: CookieJar
     """
     if not isinstance(cookiejar, CookieJar):
         raise ValueError("You can only merge into CookieJar")
+
+    if isinstance(_cookies, (str, bytes)):
+        # utils imports cookiejar_from_dict, so reuse its parser lazily.
+        from ja3requests.utils import dict_from_cookie_string
+
+        _cookies = dict_from_cookie_string(_cookies)
 
     if isinstance(_cookies, dict):
         cookiejar = cookiejar_from_dict(_cookies, cookiejar=cookiejar, overwrite=False)

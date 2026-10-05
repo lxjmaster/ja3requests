@@ -317,7 +317,11 @@ def huffman_encode(data):
     return bytes(result)
 
 
-def huffman_decode(data):
+class HuffmanLimitError(ValueError):
+    """A literal would exceed its caller's decoded output budget."""
+
+
+def huffman_decode(data, max_size=None):
     """
     Decode Huffman-encoded bytes.
 
@@ -338,6 +342,8 @@ def huffman_decode(data):
             padding = (padding << 1) | bit
             padding_bits += 1
             if 'value' in node:
+                if max_size is not None and len(result) >= max_size:
+                    raise HuffmanLimitError("HPACK Huffman output limit exceeded")
                 result.append(node['value'])
                 node = _DECODE_TREE
                 padding = 0

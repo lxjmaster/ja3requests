@@ -12,6 +12,9 @@ primitives use `cryptography`. See the [wire-control contract](docs/tls_wire_con
 for exact extension ordering, actual ClientHello inspection, opt-in P-384 and
 capture-backed browser-profile limitations. Browser-inspired presets are not
 a guarantee of complete browser impersonation.
+The explicit `TlsConfig.from_browser("chrome", 154)` profile is a supported
+subset with a different JA3 from the captured browser; ECH and post-quantum
+groups are not implemented. Implicit Chrome selection remains at version 124.
 
 [中文文档](README-zh.md)
 
@@ -31,6 +34,8 @@ a guarantee of complete browser impersonation.
 
 Ja3Requests supports HTTP/1.1 over HTTP and HTTPS. HTTPS connections can also
 negotiate HTTP/2 with ALPN. Version 2.0 defaults to verified TLS 1.3 with TLS 1.2 ECDHE/GCM fallback.
+Version 2.1.0 is available on [PyPI](https://pypi.org/project/ja3requests/2.1.0/)
+and [GitHub](https://github.com/lxjmaster/ja3requests/releases/tag/v2.1.0).
 
 ## Installing Ja3Requests and Supported Versions
 
@@ -60,8 +65,10 @@ The secure profile verifies certificates, offers only TLS 1.3 suites and TLS 1.2
 ECDHE/AES-128/256-GCM suites, and uses HTTP/1.1 ALPN. It does not impersonate a browser.
 Its TLS 1.3 ClientHello includes X25519 and P-256 key shares by default. To send
 only X25519 initially while allowing a P-256 HelloRetryRequest, set
-`config.key_share_groups = [29]` before creating the Session. Other groups are
-not implemented.
+`config.key_share_groups = [29]` before creating the Session. Version 2.0.1 also
+supports P-384 through explicit `supported_groups`/`key_share_groups`
+configuration, including HelloRetryRequest. The secure defaults remain
+`[29, 23]` (X25519/P-256); see the [P-384 configuration example](docs/tls_wire_control.md).
 TLS 1.3 connections also process server KeyUpdate messages, including requests
 to update the client sending key.
 Session caches can resume TLS 1.3 connections with in-memory tickets and
@@ -80,6 +87,12 @@ windows. HTTP/1.1 connections remain serial.
 Server push is disabled because pushed responses are not supported; an
 explicit `SETTINGS_ENABLE_PUSH=1` configuration is rejected.
 Legacy HTTP/2 PRIORITY signals are accepted but do not affect request scheduling.
+Version 2.1.0 reads HTTP/1.1 and HTTP/2 response bodies
+incrementally with `stream=True`, including project TLS record decryption and
+gzip/deflate/Brotli decoding. Version 2.0.1 buffered the full body.
+Close responses when stopping early; iteration does not retain a replay cache.
+See [streaming and memory limits](docs/streaming.md) for ownership, decoding
+errors, read timeouts and the distinction between chunk size and total memory.
 
 An explicit `verify=True` or `verify=False` overrides the session setting for
 that request, including redirects. `TlsConfig.legacy()` explicitly restores
@@ -103,6 +116,53 @@ key settings; with no client certificate, it sends an empty Certificate message.
 This extension changes the ClientHello fingerprint.
 
 ## How To Use
+
+The [user guide and generated API reference](docs/index.md) cover configuration,
+fingerprints, TLS, proxies, retries, hooks, cookies and connection pooling.
+The [documentation build guide](docs/contributing_docs.md) explains how to build
+and check the site locally. Version 2.1.0 also includes
+[public type annotations](typecheck/README.md) and a packaged `py.typed` marker, a
+[synchronous performance suite](bench/PERFORMANCE.md), and a
+[task roadmap](issues/next_development_plan.md).
+
+Version 2.1.0 provides native `AsyncSession`, `AsyncResponse` and
+`AsyncConnectionPool`, retaining project-owned TLS/H2 with asyncio socket waits.
+See the [async guide](docs/async.md) and
+[runnable local async example](docs/examples/async_client.py).
+
+```python
+import asyncio
+from ja3requests import AsyncSession
+
+async def main():
+    async with AsyncSession() as session:
+        async with await session.get("https://example.com/data", stream=True) as response:
+            response.raise_for_status()
+            async for chunk in response.aiter_content(65536):
+                print(len(chunk))
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+For async full-body access use `await response.read()`, `await response.text()`
+or `await response.json()`; `.content` reads only a completed cache. Both async
+body modes reject invalid compression. Explicit async pools are borrowed and
+must be closed by their owner after all sessions finish.
+
+For an incrementally consumed response, keep its lifetime explicit:
+
+```python
+from ja3requests import Session
+from ja3requests.pool import ConnectionPool
+
+with Session(pool=ConnectionPool()) as session:
+    with session.get("https://example.com/data", stream=True, timeout=(3, 10)) as response:
+        response.raise_for_status()
+        for chunk in response.iter_content(chunk_size=65536):
+            print(len(chunk))
+```
+
 ### Unreasonable Request Method
 Ja3Requests supports multiple request methods such as Get, Post, Put, Delete, etc.
 ```python

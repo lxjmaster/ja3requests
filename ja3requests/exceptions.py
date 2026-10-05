@@ -95,6 +95,14 @@ class Timeout(RequestException):
     """The request timed out."""
 
 
+class StreamConsumedError(RequestException, RuntimeError):
+    """A streaming body cannot be replayed after iteration has started."""
+
+
+class ContentDecodingError(RequestException, ValueError):
+    """A streamed compressed response is invalid or incomplete."""
+
+
 class TLSError(RequestException):
     """Base exception for all TLS-related errors."""
 

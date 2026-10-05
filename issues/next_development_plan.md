@@ -1,5 +1,175 @@
 # Next Development Plan
 
+## Release selection (2026-10-05)
+
+The user selected commit, push and publication of the completed client work as
+2.1.0. This includes native async, incremental response streaming, public typing,
+local documentation and performance tooling, plus the reviewed correctness fixes.
+See [release notes](../CHANGELOG.md), [GitHub v2.1.0](https://github.com/lxjmaster/ja3requests/releases/tag/v2.1.0)
+and [PyPI 2.1.0](https://pypi.org/project/ja3requests/2.1.0/) for the versioned
+delivery. Public documentation hosting and feature/performance follow-ups remain
+unselected. This does not authorize closing remote issues or another capability
+batch. The 2026-10-04 local acceptance below remains historical evidence, not
+the final 2.1.0 release test count.
+
+## Completed local roadmap (2026-10-04 snapshot)
+
+The latest selected outcome, **#37 native async A1-A5, is complete locally**.
+It exports `AsyncSession`, `AsyncResponse` and `AsyncConnectionPool`, retaining
+the project's TLS and HTTP/2 engines. Final acceptance and runtime limits are in
+[async execution](async_execution.md): 1847 tests and 112 subtests passed against
+the installed wheel, with 90.45% statement coverage; all 223 async tests also
+passed on Python 3.11. The APIs were not yet released at that inspection.
+
+The preceding [client roadmap execution](client_roadmap_execution.md) completed
+incremental responses (#41), synchronous performance measurements (#40), public
+typing (#36), a buildable documentation site (#42), and #37's design stage.
+The project must continue to own TLS handshake/record state and wire/fingerprint
+control. No OpenSSL client wrapper or replacement TLS backend is part of this plan.
+Keep Python >=3.7; use modern tooling in a separate development environment.
+
+The preceding [maintenance batch](post_2_0_1_maintenance.md) is complete locally:
+19 retry regressions, 1536 passing selected tests, 89.57% coverage, documentation
+alignment and the preserved [pre-streaming baseline](../bench/RESULTS.md). These
+are historical results, not acceptance for the new streaming implementation.
+
+Read-only GitHub issue inspection on 2026-10-04 found exactly five open issues:
+[#36](https://github.com/lxjmaster/ja3requests/issues/36),
+[#37](https://github.com/lxjmaster/ja3requests/issues/37),
+[#40](https://github.com/lxjmaster/ja3requests/issues/40),
+[#41](https://github.com/lxjmaster/ja3requests/issues/41), and
+[#42](https://github.com/lxjmaster/ja3requests/issues/42).
+Local completion does not close these issues, commit/push changes, merge a PR,
+deploy a website, or publish a package.
+
+### Published baseline
+
+- `master` and `v2.0.1` resolve to
+  `a291ef30bb6ae53cf38b3d79604c8f34e1865547` at the 2026-10-04 readback.
+- R01 release preparation merged in [PR #55](https://github.com/lxjmaster/ja3requests/pull/55).
+  Both [2.0.0](https://github.com/lxjmaster/ja3requests/releases/tag/v2.0.0)
+  and [2.0.1](https://github.com/lxjmaster/ja3requests/releases/tag/v2.0.1)
+  are published. The latest version at this inspection is
+  [PyPI 2.0.1](https://pypi.org/project/ja3requests/2.0.1/).
+- TLS wire-control A-E, including explicit P-384 (the former T06), merged in
+  [PR #56](https://github.com/lxjmaster/ja3requests/pull/56). Ten checks passed
+  on the merged source. This work does not need another implementation or merge.
+- The 2.0.1 installed-wheel baseline passed 1517 tests and 112 subtests with
+  89.09% statement coverage. Reports and artifact hashes are retained in
+  `dist/release-2.0.1/verification.json` and `publication.json`. Ubuntu CI covers
+  Python 3.7-3.13; Python 3.7-3.10 each skip 18 older-peer cases. Manual
+  `test/test_session.py` scenarios are excluded. Neither skips nor package
+  metadata establish support in untested environments.
+- Secure defaults, authenticated TLS 1.2/1.3, in-memory session resumption,
+  HTTP/2 multiplexing and Cookie file persistence are delivered. The
+  [wire-control contract](../docs/tls_wire_control.md) distinguishes supported
+  handshakes from encoded fields and capture-backed browser subsets.
+
+### Completed prerequisite batch: sync client and async design
+
+All eight steps below are complete at their local-delivery boundary. This table
+preserves the prerequisite batch; the subsequent async implementation is recorded
+below. Remote delivery and publication were separate, unselected actions at
+that inspection; the subsequent release selection is recorded above.
+
+| Order | Completed work and acceptance scope | Dependency satisfied |
+| --- | --- | --- |
+| 1 | #41: incremental HTTP/1 framing and project TLS1.2/1.3 record reading; gzip/deflate/Brotli decoding; content/replay/error semantics; ownership through EOF, failure and early close | Existing pre-streaming baseline and protocol gates |
+| 2 | #41: bounded H2 DATA queues, consumption-driven flow control, slow/fast stream isolation, cancellation, timeout, reset, GOAWAY and HPACK/trailer handling | Stable response ownership; preserve configured initial fingerprint values |
+| 3 | #41: real event-controlled HTTP/TLS/H2 tests, retry/redirect/hook/proxy integration, large-response first-chunk and memory evidence | Items 1-2; do not claim total memory is bounded by `chunk_size` alone |
+| 4 | #40: measure full/resumed TLS, pool reuse, HTTP1/H2 sequential/concurrent workloads, HPACK, cookies, pools and JA3; compare requests only on shared H1 scenarios | Frozen production source; verify payload and observed protocol/connection paths; retain raw samples and hashes |
+| 5 | #36: public API annotations, `py.typed` in both package formats, mypy configuration/CI, strict valid/invalid installed consumers | Stable sync API; distinguish public consumer checks from remaining internal diagnostics |
+| 6 | #42: local MkDocs site, generated API, all feature/configuration/exception guides, requests migration, architecture and runnable examples | Final public signatures and streaming contract; strict build, links and actual examples |
+| 7 | #37 design: async API/ownership/cancellation/timeouts/hooks, native I/O adaptation map, implementation stages and failure matrix | Completed synchronous ownership and H2 backpressure; [design](async_api_design.md) only in this batch |
+| 8 | Local acceptance and handoff: selected complete suite, >=85% coverage, Black/error-level Pylint, installed artifacts, typing, docs and measurements | Reconcile all lanes; preserve prior evidence and clean only task-owned staging |
+
+Final installed-wheel acceptance: **1624 passed, zero failures/errors/skips,
+90.04% statement coverage**, excluding `test/test_session.py`. Final package
+source aggregate SHA-256 is
+`5963161b9673c2004d7c551501265f0cd2c5b151bbe64b512facf7dbe65ca3dd`.
+The [execution record](client_roadmap_execution.md#final-local-acceptance-2026-10-04)
+links package hashes, installed tests/coverage, typing, strict docs build and
+performance evidence under `dist/client-roadmap/final/`. Valid installed type
+consumers and all 23 negative cases passed. The performance suite passed 26
+tests with 76 measurement records; the [report](../bench/PERFORMANCE_RESULTS.md)
+retains successful large-body streaming evidence and observed limitations.
+
+This is local acceptance, not new remote CI or Python 3.7 runtime evidence.
+New behavior was unreleased at that inspection; published 2.0.1 keeps its previous buffering behavior.
+Do not repeat already delivered T01-T06, release preparation, or 2.0.1 publication
+as new tasks. All current local acceptance items are checked in the execution
+record; retained historical unchecked items below are not current obligations.
+
+### Completed latest batch: #37 native async implementation
+
+The follow-up implementation request selected and completed A1-A5 after the
+synchronous prerequisite batch. Use the [implemented design](async_api_design.md)
+for API differences, protocol scope, cancellation ownership and failure matrix;
+the [execution record](async_execution.md) provides actual evidence and limits.
+
+| Stage | Completed implementation | Verified boundaries |
+| --- | --- | --- |
+| A1 | Native TCP/proxy waits and shared TLS handshake/record state | Independent full/resumed TLS1.2/1.3, authentication, configured wire identity, fragmented input, native close wakeup and external cancellation |
+| A2 | AsyncResponse framing, incremental decoding and awaited body APIs | Prefix before EOF, strict decoding, one consumer/cache semantics, trailers, early close and timeouts |
+| A3 | AsyncSession, loop-bound pool admission and request policy | Borrowed-pool isolation, retained live responses, hook ownership/reentrancy, task isolation, retries/redirects/Cookies and no late-body replay |
+| A4 | Native H2 reader/writer with bounded queues and consumption-driven credit | Concurrent/paused streams, target-only reset, peer admission, committed-write ordering, GOAWAY and shutdown without peer EOF |
+| A5 | Installed typing, runnable docs, compatibility probes and fair measurements | 1847 tests +112 subtests / 90.45% coverage; 36 negative type markers; strict docs; 16 comparisons +4 large-body tests with 72 records |
+
+Final package source SHA-256 is
+`7c6ccaa85405c9f8e8444f2aa83dc190e394aade8669c64c2535c87ade17dca6`
+across 68 modules. The [async guide](../docs/async.md) and
+[performance report](../bench/ASYNC_PERFORMANCE.md) are usable locally.
+Python 3.11/3.13 have actual async acceptance; system Python 3.9's final transport
+tests pass but its LibreSSL TLS-peer/trust environment is not fully validated.
+Python 3.7 syntax passes, while its actual runtime and new remote CI were not run.
+Security-sensitive TLS transitions remain in project code.
+
+The first async scope defers file-object/path uploads, Cookie file helpers,
+public prepared-request APIs and module-level convenience functions. Add these
+only when a concrete async usage requires them, with cancellation, ownership,
+typing and documentation acceptance appropriate to that API. Streaming uploads
+remain the separately listed request-body candidate below. These deferred
+conveniences do not gate A1-A5; the design records the complete first-scope matrix.
+
+### Other future tasks: explicit entry conditions
+
+The list below is the complete set of currently identified follow-ups. Candidates
+are independent; listing them does not select or authorize their implementation.
+
+| Candidate | Entry condition | Work and acceptance |
+| --- | --- | --- |
+| Remote source delivery | Selected on 2026-10-05: commit and push the accepted batch | Review final diff, use configured identity, required CI on the submitted revision, remote readback; preserve unrelated local changes |
+| Next package release | Selected on 2026-10-05: 2.1.0 on PyPI and GitHub | Final changelog/metadata, sdist-to-wheel checks, upload/tag/release only in selected scope, verify installation from selected index |
+| Public documentation deployment (#42 optional) | Select hosting and deployment target | Build the accepted source, publish, verify public routes/assets and version labeling |
+| Performance automation (#40 optional) | Reproducible baseline and useful comparison policy established | Isolated optional CI run, retained samples and variability; no arbitrary speed threshold |
+| Measured TLS1.2 handshake latency | Select a performance follow-up backed by the new baseline | Investigate the existing 300 ms sleep in `TLS._handshake_tls12`; remove or replace it only with independent full/resumed/fragmented-handshake evidence, preserving authentication and wire behavior |
+| Measured request throughput investigation | Select a controlled follow-up to retained sync/async samples | Investigate the 1 KiB shared-H1 4503.21 to 2809.04 requests/s observation or the 17.5–46.7% async throughput decrease and 100 MiB duration increase observed between the pre-close-fix and final runs. Separate scheduler/runtime variation from implementation cost; preserve cancellation/ownership, payload and connection checks. The measurements do not authorize optimization in this completed batch |
+| Legacy packaging configuration | Select a small packaging maintenance batch | Replace deprecated `setuptools.command.test` / `tests_require` usage and recheck sdist-to-wheel installation; the current build succeeds with warnings |
+| Internal typing cleanup (#36 continuation) | Concrete checker diagnostics after public consumer support | Incrementally resolve real findings; do not suppress entire modules or alter runtime semantics merely to reduce counts |
+| T07: additional TLS1.2 SHA-384 suites | Exact CBC/static-RSA suite IDs and real target or reproducible peer | Verify negotiation, PRF, Finished and records; do not add unproven legacy suites to secure defaults |
+| T08: cross-process TLS session persistence | Restart-resumption requirement, storage and secret-protection choices | Design versioning, expiry, trust binding and concurrent writes before implementation; Cookie persistence is already delivered |
+| T09a: H2 priority scheduling | A concrete fairness/latency workload | Define scheduling API, starvation bounds and interaction with backpressure; received PRIORITY signals currently do not schedule requests |
+| T09b: H2 server push | An actual push consumer use case | Define consumer API, cancellation and resource bounds; do not enable push before support exists; select separately from scheduling |
+| T10: TLS1.3 0-RTT | Eligible operations, explicit opt-in and replay/retry policy | Design first; rejection cannot duplicate application effects; persisted tickets are needed only if cross-process use is selected |
+| Browser profile updates | Exact browser/version, retained fresh capture and supported wire fields | Reproduce and inspect actual ClientHello/H2 settings; report unsupported ECH/post-quantum fields and fingerprint differences |
+| ECH or post-quantum groups | Named peer/browser requirement and cryptographic primitive availability | Separate design and independent interoperability/security evidence; no algorithm rewrite or implicit scope expansion |
+| Request-body streaming | Concrete large upload need and retry/replay rules | Streaming upload framing and H2 send credit, cancellation and non-replayable-body policy; response streaming does not provide it |
+| HTTP/3 | Concrete QUIC/HTTP3 target and acceptable ownership/dependency boundary | Separate feasibility/design stage; not an H2 incremental extension and not required for the current delivery |
+| Additional support environments | Named Python/OS/architecture or external peer required by a user | Extend the actual installed-package/interop matrix; metadata or skipped tests alone are not proof |
+| Session-default merging parity | A selected compatibility need with requests | Existing headers/auth/params/proxies are not all automatically merged by Session.request; specify precedence and add targeted behavior tests before changing it |
+
+The native async batch is complete at its local boundary. Of the 19 candidates,
+source delivery and the 2.1.0 package release were subsequently selected; the
+other 17 remain unselected. Capability or performance work should follow a
+concrete need and its acceptance criteria. Package publication does not select
+public documentation-site deployment.
+
+## Historical roadmap snapshot (2026-10-03)
+
+The text below preserves the original R01/R02/T06 planning context. Its pending
+states and then-current release references are historical; use the current
+roadmap above for task selection and the linked release evidence for completion.
+
 Revised: 2026-10-03 after live state readback. R01 remains incomplete; later
 batches remain reference. This revision plans the remaining work; it does not
 report remote delivery or publication as completed.

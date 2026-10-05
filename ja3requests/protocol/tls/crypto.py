@@ -15,7 +15,11 @@ from cryptography.hazmat.primitives.asymmetric import ec, x25519, padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 
-from ja3requests.exceptions import TLSEncryptionError, TLSDecryptionError
+from ja3requests.exceptions import (
+    TLSEncryptionError,
+    TLSDecryptionError,
+    TLSMACVerificationError,
+)
 from ja3requests.protocol.tls.debug import debug
 
 # Common DH prime parameter (RFC 2409 / RFC 3526 MODP group)
@@ -664,6 +668,34 @@ class AESCipher:
             return plaintext
         except Exception as e:
             raise TLSDecryptionError(f"AES-GCM decryption failed: {e}") from e
+
+
+def _decrypt_tls12_cbc_record(encrypted, key, mac_key, prefix, hash_algo=hashlib.sha1):
+    """Authenticate CBC padding and MAC for any TLS 1.2 record content type.
+
+    ``prefix`` contains the sequence number, content type and record version.
+    The caller advances its receive sequence only after authentication succeeds.
+    """
+    if len(encrypted) < 32 or len(encrypted) % 16:
+        raise TLSDecryptionError("Invalid TLS CBC record length")
+    padded = AESCipher.decrypt_cbc(
+        encrypted[16:], key, encrypted[:16], remove_padding=False
+    )
+    padding_length = padded[-1] + 1
+    padding_valid = hmac.compare_digest(
+        padded[-padding_length:], bytes([padding_length - 1]) * padding_length
+    )
+    fragment = padded[:-padding_length]
+    mac_length = hash_algo().digest_size
+    plaintext, received_mac = fragment[:-mac_length], fragment[-mac_length:]
+    mac_data = prefix + len(plaintext).to_bytes(2, 'big') + plaintext
+    expected_mac = hmac.new(mac_key, mac_data, hash_algo).digest()
+    # Check the MAC even for invalid padding; do not expose a distinct padding
+    # failure or claim that Python-level processing is constant-time overall.
+    mac_valid = hmac.compare_digest(received_mac, expected_mac)
+    if not padding_valid or len(fragment) < mac_length or not mac_valid:
+        raise TLSMACVerificationError("Invalid TLS CBC padding or MAC")
+    return plaintext
 
 
 def get_cipher_info(cipher_suite: int) -> dict:

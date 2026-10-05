@@ -1,0 +1,68 @@
+site_name: ja3requests
+site_description: Project-owned TLS, verifiable ClientHello control, and sync/async HTTP.
+repo_url: https://github.com/lxjmaster/ja3requests
+repo_name: lxjmaster/ja3requests
+docs_dir: docs
+site_dir: dist/docs-site
+strict: true
+theme:
+  name: mkdocs
+  navigation_depth: 3
+nav:
+  - Home: index.md
+  - Getting started: getting_started.md
+  - Guides:
+      - Configuration and errors: configuration.md
+      - Sessions and pools: sessions.md
+      - Cookie files: cookie_persistence.md
+      - HTTP and SOCKS proxies: proxies.md
+      - Retry, timeout, and hooks: request_policy.md
+      - Streaming responses: streaming.md
+      - Native asynchronous requests: async.md
+      - TLS trust, mTLS, and resumption: tls.md
+      - Secure defaults migration: tls_defaults_migration.md
+      - JA3, browser presets, and HTTP/2: fingerprints.md
+      - Exact TLS wire control: tls_wire_control.md
+      - Migrating from Requests: requests_migration.md
+  - Examples: examples.md
+  - API reference:
+      - Requests and Session: api/client.md
+      - Async Session, response and pool: api/async.md
+      - Response and errors: api/response.md
+      - TLS and fingerprints: api/tls.md
+      - Pools, retry, and Cookies: api/state.md
+  - Architecture: architecture.md
+  - Building these docs: contributing_docs.md
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: ["."]
+          options:
+            docstring_style: sphinx
+            show_root_heading: true
+            show_root_full_path: true
+            show_source: true
+            show_signature_annotations: true
+            members_order: source
+            merge_init_into_class: true
+            heading_level: 2
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+exclude_docs: |
+  /requirements.txt
+  /verify.py
+validation:
+  nav:
+    omitted_files: warn
+    not_found: warn
+    absolute_links: warn
+  links:
+    not_found: warn
+    anchors: warn
+    absolute_links: warn
+    unrecognized_links: warn

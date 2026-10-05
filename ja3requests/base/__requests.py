@@ -5,19 +5,37 @@ Ja3Requests.base.__requests
 Basic of Request.
 """
 
+from __future__ import annotations
+
 import os
 from io import IOBase
 from abc import ABC, abstractmethod
 from http.cookiejar import CookieJar
 from urllib.parse import urlparse, urlencode
-from typing import Any, AnyStr, List, Dict, Tuple, Union, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from ja3requests._typing import (
+    Auth,
+    Cookies,
+    Data,
+    Files,
+    Headers,
+    HeaderValue,
+    JsonBody,
+    Params,
+    Proxies,
+    Timeout,
+)
 from ja3requests.const import DEFAULT_HTTP_SCHEME, DEFAULT_HTTP_PORT
 from ja3requests.exceptions import InvalidParams, InvalidData
 from ja3requests.utils import (
     default_headers,
     dict_from_cookie_string,
 )
-from ja3requests.cookies import get_cookie_header
+from ja3requests.cookies import _copy_cookie_jar, _refresh_cookie_header
+
+if TYPE_CHECKING:
+    from ja3requests.protocol.tls.config import TlsConfig
+    from ja3requests.response import HTTPResponse
 
 
 class BaseRequest(ABC):
@@ -25,7 +43,7 @@ class BaseRequest(ABC):
     Basic of Request
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._scheme = None
         self._schema = None
         self._port = None
@@ -36,6 +54,10 @@ class BaseRequest(ABC):
         self._files = None
         self._headers = None
         self._cookies = None
+        self._cookie_jar = None
+        self._cookie_view = None
+        self._cookie_from_jar = None
+        self._cookie_header_managed = True
         self._auth = None
         self._json = None
         self._proxy = None
@@ -43,7 +65,7 @@ class BaseRequest(ABC):
         self._tls_config = None
 
     @property
-    def schema(self) -> AnyStr:
+    def schema(self) -> Optional[str]:
         """
         Request property schema
         :return:
@@ -51,7 +73,7 @@ class BaseRequest(ABC):
         return self._schema
 
     @schema.setter
-    def schema(self, attr: AnyStr):
+    def schema(self, attr: Optional[str]) -> None:
         """
         Request property schema set
         :param attr:
@@ -60,7 +82,7 @@ class BaseRequest(ABC):
         self._schema = attr if attr else DEFAULT_HTTP_SCHEME
 
     @property
-    def port(self) -> int:
+    def port(self) -> Optional[int]:
         """
         Request property port
         :return:
@@ -68,7 +90,7 @@ class BaseRequest(ABC):
         return self._port
 
     @port.setter
-    def port(self, attr: int):
+    def port(self, attr: Optional[int]) -> None:
         """
         Request property port set
         :param attr:
@@ -77,7 +99,7 @@ class BaseRequest(ABC):
         self._port = attr if attr else DEFAULT_HTTP_PORT
 
     @property
-    def method(self) -> AnyStr:
+    def method(self) -> Optional[str]:
         """
         Request property method
         :return:
@@ -85,7 +107,7 @@ class BaseRequest(ABC):
         return self._method
 
     @method.setter
-    def method(self, attr: AnyStr):
+    def method(self, attr: str) -> None:
         """
         Request property method set
         :param attr:
@@ -94,7 +116,7 @@ class BaseRequest(ABC):
         self._method = attr.upper()
 
     @property
-    def url(self) -> AnyStr:
+    def url(self) -> Optional[str]:
         """
         Request property url
         :return:
@@ -102,7 +124,7 @@ class BaseRequest(ABC):
         return self._url
 
     @url.setter
-    def url(self, attr: AnyStr):
+    def url(self, attr: str) -> None:
         """ "
         Request property url set
         """
@@ -122,7 +144,7 @@ class BaseRequest(ABC):
                     self.port = 80
 
     @property
-    def params(self):
+    def params(self) -> Optional[Params]:
         """
         Request property params
         :return:
@@ -132,10 +154,8 @@ class BaseRequest(ABC):
     @params.setter
     def params(
         self,
-        attr: Union[
-            Dict[AnyStr, Any], List[Tuple[Any, Any]], Tuple[Tuple[Any, Any]], AnyStr
-        ],
-    ):
+        attr: Optional[Params],
+    ) -> None:
         """
         Request property params set
         :param attr:
@@ -164,7 +184,7 @@ class BaseRequest(ABC):
                 self.url += "?" + self._params
 
     @property
-    def data(self):
+    def data(self) -> Optional[Data]:
         """
         Request property data
         :return:
@@ -174,13 +194,8 @@ class BaseRequest(ABC):
     @data.setter
     def data(
         self,
-        attr: Union[
-            Dict[AnyStr, Any],
-            List[Tuple[AnyStr, Any]],
-            Tuple[Tuple[AnyStr, Any]],
-            AnyStr,
-        ],
-    ):
+        attr: Optional[Data],
+    ) -> None:
         """
         Request property data set
         :param attr:
@@ -208,7 +223,7 @@ class BaseRequest(ABC):
             self.headers["Content-Length"] = len(self._data)
 
     @property
-    def files(self):
+    def files(self) -> Optional[Dict[str, List[Dict[str, Any]]]]:
         """
         Request property files
         :return:
@@ -216,7 +231,7 @@ class BaseRequest(ABC):
         return self._files
 
     @files.setter
-    def files(self, attr):
+    def files(self, attr: Optional[Files]) -> None:
         """
         Request property files set
         :param attr:
@@ -255,7 +270,7 @@ class BaseRequest(ABC):
         self._files = new_files
 
     @property
-    def headers(self):
+    def headers(self) -> Dict[str, HeaderValue]:
         """
         Request property headers
         :return:
@@ -263,7 +278,7 @@ class BaseRequest(ABC):
         return self._headers if self._headers else default_headers()
 
     @headers.setter
-    def headers(self, attr: Dict[AnyStr, AnyStr]):
+    def headers(self, attr: Optional[Headers]) -> None:
         """
         Request property headers set
         :param attr:
@@ -281,34 +296,84 @@ class BaseRequest(ABC):
         self._headers = headers
 
     @property
-    def cookies(self) -> Optional[Dict]:
+    def cookies(self) -> Optional[Cookies]:
         """
         Request property cookies
         :return:
         """
+        # Hooks may introduce another casing of Cookie after preparation. Keep
+        # other header spelling/order, and any existing canonical Cookie position.
+        headers = self.headers
+        cookie_names = [name for name in headers if name.lower() == "cookie"]
+        if any(name != "Cookie" for name in cookie_names):
+            cookie = headers[cookie_names[-1]]
+            if "Cookie" in headers:
+                headers["Cookie"] = cookie
+                for name in cookie_names:
+                    if name != "Cookie":
+                        del headers[name]
+            else:
+                normalized = {
+                    ("Cookie" if name.lower() == "cookie" else name): value
+                    for name, value in headers.items()
+                }
+                headers.clear()
+                headers.update(normalized)
+        if self._cookie_header_managed:
+            if headers.get("Cookie") != self._cookie_from_jar:
+                # A header removal/replacement takes precedence over dict edits.
+                self._cookie_header_managed = False
+                self._cookie_from_jar = None
+                self._cookies = None
+            elif self._cookies != self._cookie_view:
+                # The compatibility dict remains mutable in before_request hooks.
+                # Let the context serialize that explicit choice, not the old jar.
+                headers.pop("Cookie", None)
+                self._cookie_header_managed = False
+                self._cookie_from_jar = None
         return self._cookies
 
     @cookies.setter
-    def cookies(self, attr: Union[Dict[AnyStr, AnyStr], CookieJar, AnyStr]):
+    def cookies(self, attr: Optional[Cookies]) -> None:
         """
         Request property cookies set
         :param attr:
         :return:
         """
-        cookies = attr
-        if cookies:
-            if isinstance(cookies, (bytes, str)):
-                cookies = dict_from_cookie_string(cookies)
-            elif isinstance(cookies, CookieJar):
-                cookie_header = get_cookie_header(cookies, self)
-                cookies = (
-                    dict_from_cookie_string(cookie_header) if cookie_header else None
-                )
+        if self._cookie_from_jar is not None:
+            if self.headers.get("Cookie") == self._cookie_from_jar:
+                self.headers.pop("Cookie", None)
+        self._cookie_from_jar = None
+        self._cookie_jar = None
+        self._cookie_header_managed = False
+        if isinstance(attr, CookieJar):
+            self._cookie_jar = _copy_cookie_jar(attr)
+            self._cookie_header_managed = "Cookie" not in self.headers
+            self._cookies = self._cookie_view = None
+            self._refresh_cookies()
+        else:
+            self._cookies = (
+                dict_from_cookie_string(attr)
+                if isinstance(attr, (bytes, str))
+                else attr
+            )
+            self._cookie_view = None
 
-        self._cookies = cookies
+    def _refresh_cookies(self) -> None:
+        """Keep the ordered jar header and the legacy dict view in sync."""
+        # Reading the view first honors changes made by a request hook.
+        self.cookies
+        if self._cookie_jar is None or not self._cookie_header_managed:
+            return
+        _refresh_cookie_header(self._cookie_jar, self)
+        cookie_header = self._cookie_from_jar
+        self._cookies = (
+            dict_from_cookie_string(cookie_header) if cookie_header else None
+        )
+        self._cookie_view = dict(self._cookies) if self._cookies is not None else None
 
     @property
-    def auth(self):
+    def auth(self) -> Optional[Auth]:
         """
         Request property auth
         :return:
@@ -316,7 +381,7 @@ class BaseRequest(ABC):
         return self._auth
 
     @auth.setter
-    def auth(self, attr: Tuple):
+    def auth(self, attr: Optional[Auth]) -> None:
         """
         Request property auth set
         :param attr:
@@ -325,7 +390,7 @@ class BaseRequest(ABC):
         self._auth = attr
 
     @property
-    def json(self):
+    def json(self) -> Optional[JsonBody]:
         """
         Request property json
         :return:
@@ -333,7 +398,7 @@ class BaseRequest(ABC):
         return self._json
 
     @json.setter
-    def json(self, attr: Dict[AnyStr, AnyStr]):
+    def json(self, attr: Optional[JsonBody]) -> None:
         """
         Request property json set
         :param attr:
@@ -342,7 +407,7 @@ class BaseRequest(ABC):
         self._json = attr
 
     @property
-    def proxy(self):
+    def proxy(self) -> Optional[str]:
         """
         Request property proxy
         :return:
@@ -350,7 +415,7 @@ class BaseRequest(ABC):
         return self._proxy
 
     @proxy.setter
-    def proxy(self, attr):
+    def proxy(self, attr: Optional[Proxies]) -> None:
         """
         Request property proxy set
         :param attr:
@@ -365,7 +430,7 @@ class BaseRequest(ABC):
         self._proxy = proxy
 
     @property
-    def timeout(self):
+    def timeout(self) -> Timeout:
         """
         Request property timeout
         :return:
@@ -373,7 +438,7 @@ class BaseRequest(ABC):
         return self._timeout
 
     @timeout.setter
-    def timeout(self, attr):
+    def timeout(self, attr: Timeout) -> None:
         """
         Request property timeout set
         :param attr:
@@ -382,7 +447,7 @@ class BaseRequest(ABC):
         self._timeout = attr
 
     @property
-    def tls_config(self):
+    def tls_config(self) -> Optional[TlsConfig]:
         """
         Request property tls_config
         :return:
@@ -390,7 +455,7 @@ class BaseRequest(ABC):
         return self._tls_config
 
     @tls_config.setter
-    def tls_config(self, attr):
+    def tls_config(self, attr: Optional[TlsConfig]) -> None:
         """
         Request property tls_config set
         :param attr:
@@ -398,7 +463,7 @@ class BaseRequest(ABC):
         """
         self._tls_config = attr
 
-    def set_payload(self, **kwargs):
+    def set_payload(self, **kwargs: Any) -> None:
         """
         Set request payload
         :param kwargs:
@@ -407,7 +472,7 @@ class BaseRequest(ABC):
         for k, v in kwargs.items():
             setattr(self, k, v)
 
-    def is_http(self):
+    def is_http(self) -> bool:
         """
         Is http
         :return:
@@ -417,7 +482,7 @@ class BaseRequest(ABC):
         )
         return self.schema.lower() == "http"
 
-    def is_https(self):
+    def is_https(self) -> bool:
         """
         Is https
         :return:
@@ -428,7 +493,7 @@ class BaseRequest(ABC):
         return self.schema.lower() == "https"
 
     @abstractmethod
-    def send(self, *args, **kwargs):
+    def send(self, *args: Any, **kwargs: Any) -> HTTPResponse:
         """
         Request send
         :return:

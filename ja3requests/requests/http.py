@@ -5,6 +5,9 @@ Ja3Requests.requests.http
 This module of HTTP Request.
 """
 
+from __future__ import annotations
+
+from typing import Any, Optional, Union
 from ja3requests.base import BaseRequest
 from ja3requests.contexts.context import HTTPContext
 from ja3requests.sockets.http import HttpSocket
@@ -12,6 +15,7 @@ from ja3requests.sockets.proxy import ProxySocket
 from ja3requests.sockets.socks import SocksProxySocket
 from ja3requests.const import DEFAULT_HTTP_SCHEME, DEFAULT_HTTP_PORT
 from ja3requests.response import HTTPResponse
+from ja3requests.pool import ConnectionPool
 
 
 class HttpRequest(BaseRequest):
@@ -19,13 +23,15 @@ class HttpRequest(BaseRequest):
     HTTP Request
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.scheme = DEFAULT_HTTP_SCHEME
         self.port = DEFAULT_HTTP_PORT
 
     @staticmethod
-    def create_connection(context: HTTPContext, pool=None):
+    def create_connection(
+        context: HTTPContext, pool: Optional[ConnectionPool] = None
+    ) -> Union[HttpSocket, ProxySocket, SocksProxySocket]:
         """
         create a new connection by context
         :param context:
@@ -44,7 +50,7 @@ class HttpRequest(BaseRequest):
 
         return sock.new_conn()
 
-    def send(self, **kwargs):
+    def send(self, **kwargs: Any) -> HTTPResponse:
         pool = kwargs.pop('pool', None)
 
         context = HTTPContext()
@@ -61,12 +67,14 @@ class HttpRequest(BaseRequest):
             cookies=self.cookies,
         )
         sock = self.create_connection(context, pool=pool)
-        sock.send()
-        response = HTTPResponse(sock.conn)
-        response.handle()
-
-        # Return connection to pool if available
-        if pool and hasattr(sock, 'return_to_pool'):
-            sock.return_to_pool()
+        try:
+            conn = sock.send()
+            response = HTTPResponse(
+                conn, method=self.method, release=sock.release_response
+            )
+            response.handle()
+        except Exception:
+            sock.close()
+            raise
 
         return response

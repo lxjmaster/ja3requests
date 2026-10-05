@@ -1,15 +1,16 @@
 # TLS Defaults Migration Guide
 
-This guide describes the 2.0.0 candidate's breaking defaults migration (T05 of
-[the development plan](../issues/next_development_plan.md)). `TlsConfig()` and
-implicit Session/module-level configurations now select the secure profile and
-verify server certificates. `TlsConfig.legacy()` pins the 1.x behavior. This
-candidate is not a claim that a package has been published.
+This guide describes the breaking defaults migration released in 2.0.0 (T05 of
+[the development plan](https://github.com/lxjmaster/ja3requests/blob/a291ef30bb6ae53cf38b3d79604c8f34e1865547/issues/next_development_plan.md)) and retained in the
+published [2.0.1 release](https://github.com/lxjmaster/ja3requests/releases/tag/v2.0.1).
+`TlsConfig()` and implicit Session/module-level configurations select the secure profile and
+verify server certificates. `TlsConfig.legacy()` pins the 1.x behavior.
 
-The [interoperability matrix](../test/secure_profile_matrix.md) records tested
-combinations and peer capability limits. The preceding delivery passed remote
-Python 3.7–3.13 CI; T05 requires verification of its own candidate. Installed
-older releases retain their own defaults and may not expose every API below.
+The [interoperability matrix](https://github.com/lxjmaster/ja3requests/blob/a291ef30bb6ae53cf38b3d79604c8f34e1865547/test/secure_profile_matrix.md) records tested
+combinations and peer capability limits, with dated historical evidence kept
+separate from the current release. The 2.0.1 release passed the configured
+Python 3.7–3.13 CI gates; older-peer skips remain explicit limitations. Installed
+1.x releases retain their own defaults and may not expose every API below.
 
 ## 1. Choose a profile
 
@@ -22,6 +23,11 @@ older releases retain their own defaults and may not expose every API below.
 | ALPN (application protocol negotiation) | No configured list | `http/1.1`; HTTP/2 can be selected explicitly |
 | GREASE | Disabled | Disabled |
 | TLS 1.2 extended master secret | No configured extension | Offered |
+
+Version 2.0.1 adds P-384 through explicit configuration, including
+HelloRetryRequest. It does not change the default groups or initial key shares
+shown above. See the [wire-control guide](tls_wire_control.md) for the opt-in
+configuration and independently verified paths.
 
 For a verified service:
 
@@ -212,9 +218,14 @@ with Session(tls_config=config, pool=ConnectionPool()) as session:
 
 HTTP/2 is used when the peer negotiates `h2`; otherwise the implementation uses
 HTTP/1.1. HTTP/2 responses can share a pooled connection concurrently. The
-[matrix](../test/secure_profile_matrix.md#explicit-http2-cases) records the
+[matrix](https://github.com/lxjmaster/ja3requests/blob/a291ef30bb6ae53cf38b3d79604c8f34e1865547/test/secure_profile_matrix.md#explicit-http2-cases) records the
 selected secure HTTP/2 combinations; it does not prove every possible cipher,
 certificate or group permutation. Server push remains disabled.
+In published 2.0.1, even `stream=True` buffered response bodies before
+`iter_content()` yielded chunks. Version 2.1.0 implements
+incremental network consumption, explicit response ownership and single-use
+uncached iteration. See the [streaming guide](streaming.md) for that
+behavior; this does not change the published 2.0.1 acceptance record below.
 
 Changing profiles changes the ClientHello cipher and extension lists and thus
 the JA3 fingerprint. ALPN, supported groups, SNI presence and additional
@@ -257,24 +268,31 @@ start from `TlsConfig.legacy()` and set `verify_cert` explicitly if the old
 extension offer is required. No builder claims exact browser behavior for all
 handshakes or broadens the interoperability evidence.
 
+The explicitly selected `from_browser("chrome", 154)` profile added in 2.0.1 is
+a capture-calibrated supported subset with a different JA3 from the captured
+browser. ECH and post-quantum groups are not implemented, and implicit Chrome
+selection remains version 124. The [wire-control guide](tls_wire_control.md)
+lists the exact differences and the API for inspecting sent ClientHello records.
+
 ## 7. Version 2.0 breaking-release policy and acceptance
 
-The 2.0.0 candidate switches implicit configuration to the secure profile.
+The published 2.0.0 release switched implicit configuration to the secure profile;
+2.0.1 retains that policy.
 `legacy()` remains the compatibility entry point, `secure()` stays explicit,
 and request verification overrides keep their scope. Authentication rejection
-never silently retries with verification disabled. Publication remains a separate
-authorized action. See [the release notes](../CHANGELOG.md).
+never silently retries with verification disabled. See
+[the release notes](https://github.com/lxjmaster/ja3requests/blob/a291ef30bb6ae53cf38b3d79604c8f34e1865547/CHANGELOG.md).
 
-The migration's acceptance criteria are:
+The completed migration's acceptance criteria remain regression requirements:
 
 - `TlsConfig()`, `Session()`, `ja3requests.session()` and all module-level request
   methods have consistent implicit verification, cipher, group and ALPN settings.
   Sessions created with an explicit config retain it; overrides retain their
   documented scope. Inspect direct protocol use without a config separately.
-- Refactor profile construction so `secure()` and `legacy()` do not recurse
-  through new constructor defaults or inherit unintended settings. Characterize
-  browser and custom builders that call the constructor; retain their explicit
-  wire settings and document the selected verification policy.
+- Profile construction keeps `secure()` and `legacy()` from recursing
+  through constructor defaults or inheriting unintended settings. Browser
+  and custom builders that call the constructor retain their explicit
+  wire settings, with their verification policy documented.
 - Verified TLS 1.3 and TLS 1.2 fallback work for the selected release matrix.
   Wrong identity, expired/untrusted chains and bad authentication fail before
   application requests, on HTTP/1.1 and the selected HTTP/2 connection paths.
@@ -283,7 +301,7 @@ The migration's acceptance criteria are:
   request cannot reuse a connection authenticated under incompatible settings.
 - Record results for the Python/OpenSSL environments selected for that release.
   Resolve or explicitly narrow unsupported environments before advertising a
-  broader support claim; current local results do not establish remote CI success.
+  broader support claim; local results alone do not establish remote CI success.
 - Update constructor/profile tests, installed-wheel checks, version/release notes,
   both READMEs and the migration guide together. Describe the certificate
   rejection, cipher compatibility, ALPN and fingerprint changes to callers.
@@ -294,13 +312,21 @@ fingerprint requirements against the recorded matrix. T03 provided the preparati
 
 ## Evidence and validation
 
-Behavior references: [profile and JA3 tests](../test/test_tls_config.py),
-[request/redirect policy tests](../test/test_verify_config.py),
-[certificate and proxy tests](../test/integration/test_certificate_verification.py),
-and the [T02 matrix](../test/secure_profile_matrix.md). The T01 full run and T02
-added cases provided the protocol baseline used during T03. Subsequent library
-changes require their own verification; see [T04 Cookie persistence](cookie_persistence.md)
-for the newer installed-wheel full-suite result.
+Behavior references: [profile and JA3 tests](https://github.com/lxjmaster/ja3requests/blob/a291ef30bb6ae53cf38b3d79604c8f34e1865547/test/test_tls_config.py),
+[request/redirect policy tests](https://github.com/lxjmaster/ja3requests/blob/a291ef30bb6ae53cf38b3d79604c8f34e1865547/test/test_verify_config.py),
+[certificate and proxy tests](https://github.com/lxjmaster/ja3requests/blob/a291ef30bb6ae53cf38b3d79604c8f34e1865547/test/integration/test_certificate_verification.py),
+and the [T02 matrix](https://github.com/lxjmaster/ja3requests/blob/a291ef30bb6ae53cf38b3d79604c8f34e1865547/test/secure_profile_matrix.md). The 2.0.1 release readback
+on 2026-10-04 confirmed merge/tag source `a291ef30bb6ae53cf38b3d79604c8f34e1865547`,
+ten successful CI checks, and matching published artifact hashes on
+[PyPI](https://pypi.org/project/ja3requests/2.0.1/) and
+[GitHub](https://github.com/lxjmaster/ja3requests/releases/tag/v2.0.1).
+Its installed-wheel selection passed 1517 tests and 112 subtests with 89.09%
+statement coverage; see [the test notes](https://github.com/lxjmaster/ja3requests/blob/a291ef30bb6ae53cf38b3d79604c8f34e1865547/test/README.md) for exclusions and
+historical evidence. This is release evidence, not a test result for later changes.
+
+The T01 full run and T02 added cases provided the earlier protocol baseline used
+during T03. [T04 Cookie persistence](cookie_persistence.md) retains its separate
+historical installed-wheel result. The following T03 record also remains historical.
 
 Recorded on 2026-10-01: all nine Python snippets passed syntax checks using the
 Python 3.7 grammar on the local Python 3.13 interpreter, and their configuration

@@ -66,11 +66,12 @@ setup(
         "ja3requests/protocol/tls/extensions",
         "ja3requests/protocol/tls/layers",
         "ja3requests/requests",
-        "ja3requests/sockets"
+        "ja3requests/sockets",
     ],
     package_dir={"ja3requests": "ja3requests"},
     zip_safe=False,
     include_package_data=True,
+    package_data={"ja3requests": ["py.typed"]},
     platforms="any",
     python_requires=">=3.7",
     install_requires=requires,

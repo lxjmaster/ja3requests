@@ -36,9 +36,21 @@ from ja3requests.protocol.h2.frame import (
     SETTINGS_HEADER_TABLE_SIZE,
     SETTINGS_ENABLE_PUSH,
     SETTINGS_MAX_FRAME_SIZE,
+    SETTINGS_MAX_HEADER_LIST_SIZE,
 )
-from ja3requests.protocol.h2.hpack import HPACKEncoder, HPACKDecoder
+from ja3requests.protocol.h2.hpack import HeaderLimitError, HPACKEncoder, HPACKDecoder
 from ja3requests.protocol.tls.debug import debug
+
+
+class H2GoAwayError(ConnectionError):
+    """A non-graceful connection error, retaining the peer's GOAWAY metadata."""
+
+    def __init__(self, error_code, last_stream_id):
+        self.error_code = error_code
+        self.last_stream_id = last_stream_id
+        super().__init__(
+            f"HTTP/2 GOAWAY error {error_code}; last stream {last_stream_id}"
+        )
 
 
 class H2Connection:
@@ -67,7 +79,16 @@ class H2Connection:
             self._local_settings.update(settings)
         if self._local_settings[SETTINGS_ENABLE_PUSH] != 0:
             raise ValueError("HTTP/2 server push is not supported")
-        self._decoder = HPACKDecoder(self._local_settings[SETTINGS_HEADER_TABLE_SIZE])
+        header_limit = self._local_settings[SETTINGS_MAX_HEADER_LIST_SIZE]
+        self._decoder = HPACKDecoder(
+            self._local_settings[SETTINGS_HEADER_TABLE_SIZE], header_limit
+        )
+        # A local allocation bound, not an additional wire SETTINGS value.
+        # Huffman representation can use almost four bytes per decoded octet;
+        # retain room for that representation and bounded table-size updates.
+        self._header_block_limit = max(65536, 4 * header_limit)
+        self._header_block_bytes = 0
+        self._failed = None
         self._peer_settings = dict(DEFAULT_SETTINGS)
         self._preface_sent = False
         self._server_preface_received = False
@@ -78,6 +99,7 @@ class H2Connection:
         self._pending_frames = []
         self._goaway_received = False
         self._goaway_last_stream_id = None
+        self._goaway_error_code = None
         self._connection_receive_target = 65535
         self._connection_receive_window = 65535
         self._connection_send_window = 65535
@@ -131,6 +153,8 @@ class H2Connection:
         """
         if body is not None and not isinstance(body, bytes):
             raise TypeError("HTTP/2 request body must be bytes")
+        if self._failed is not None:
+            raise self._failed
         if self._goaway_received:
             raise ConnectionError("HTTP/2 connection received GOAWAY")
         if body and self._preface_sent and not self._peer_settings_received:
@@ -163,12 +187,12 @@ class H2Connection:
         # Encode headers with HPACK
         header_block = self._encoder.encode_headers(h2_headers)
 
-        # Send HEADERS frame
+        # Send the complete header block before any DATA frames.
         end_stream = body is None or len(body) == 0
-        headers_frame = build_headers_frame(
+        for frame in self._header_frames(
             stream_id, header_block, end_stream=end_stream
-        )
-        self._send(headers_frame.serialize())
+        ):
+            self._send(frame.serialize())
         debug(f"H2: Sent HEADERS on stream {stream_id}")
 
         # Send DATA frame if body present
@@ -182,6 +206,27 @@ class H2Connection:
             debug(f"H2: Sent DATA on stream {stream_id}: {len(body)} bytes")
 
         return stream_id
+
+    def _header_frames(self, stream_id, block, end_stream):
+        """Split an encoded block; callers serialize the entire frame sequence."""
+        frame_size = self._peer_settings[SETTINGS_MAX_FRAME_SIZE]
+        for offset in range(0, max(1, len(block)), frame_size):
+            fragment = block[offset : offset + frame_size]
+            last = offset + frame_size >= len(block)
+            if offset == 0:
+                yield build_headers_frame(
+                    stream_id,
+                    fragment,
+                    end_stream=end_stream,
+                    end_headers=last,
+                )
+            else:
+                yield H2Frame(
+                    FRAME_CONTINUATION,
+                    FLAG_END_HEADERS if last else 0,
+                    stream_id,
+                    fragment,
+                )
 
     def _await_peer_settings(self):
         """Apply the server's initial stream window before sending request DATA."""
@@ -276,6 +321,8 @@ class H2Connection:
         :param stream_id: Stream ID to receive response for
         :return: (headers_list, body_bytes)
         """
+        if self._failed is not None:
+            raise self._failed
         response_headers = None
         response_body = b""
         header_block = b""
@@ -333,7 +380,7 @@ class H2Connection:
                     else:
                         header_block += frame.payload
                     if frame.flags & FLAG_END_HEADERS:
-                        decoded = self._decoder.decode_headers(header_block)
+                        decoded = self._decode_headers(header_block)
                         if response_headers is None:
                             status = self._response_status(decoded)
                             if status < 200:
@@ -400,7 +447,12 @@ class H2Connection:
 
     def _read_frames(self):
         """Read and parse frames from the connection."""
-        data = self._recv(65535)
+        return self._feed_frames(self._recv(65535))
+
+    def _feed_frames(self, data):
+        """Validate a byte block with the same state for sync and async I/O."""
+        if self._failed is not None:
+            raise self._failed
         if data:
             self._recv_buffer += data
 
@@ -450,6 +502,22 @@ class H2Connection:
                     raise ValueError("HTTP/2 field block interrupted")
             elif frame.type == FRAME_CONTINUATION:
                 raise ValueError("HTTP/2 CONTINUATION without HEADERS")
+            if frame.type in (FRAME_HEADERS, FRAME_CONTINUATION):
+                fragment = (
+                    header_block_fragment(frame)
+                    if frame.type == FRAME_HEADERS
+                    else frame.payload
+                )
+                size = (
+                    0 if frame.type == FRAME_HEADERS else self._header_block_bytes
+                ) + len(fragment)
+                if size > self._header_block_limit:
+                    self._header_limit_failed(
+                        HeaderLimitError(
+                            "HTTP/2 compressed header block limit exceeded"
+                        )
+                    )
+                self._header_block_bytes = 0 if frame.flags & FLAG_END_HEADERS else size
             if frame.type == FRAME_HEADERS and not frame.flags & FLAG_END_HEADERS:
                 self._continuation_stream = frame.stream_id
             elif frame.type == FRAME_CONTINUATION and frame.flags & FLAG_END_HEADERS:
@@ -484,8 +552,39 @@ class H2Connection:
         else:
             self._ignored_header_block += frame.payload
         if frame.flags & FLAG_END_HEADERS:
-            self._decoder.decode_headers(self._ignored_header_block)
+            self._decode_headers(self._ignored_header_block)
             self._ignored_header_block = b""
+
+    def _clear_header_buffers(self):
+        self._header_block_bytes = 0
+        self._ignored_header_block = b""
+        self._recv_buffer = b""
+        self._pending_frames.clear()
+
+    def _header_limit_failed(self, error):
+        self._failed = error
+        self._clear_header_buffers()
+        raise error
+
+    def _decode_headers(self, block):
+        try:
+            return self._decoder.decode_headers(block)
+        except HeaderLimitError as error:
+            self._header_limit_failed(error)
+
+    def _receive_goaway(self, frame):
+        if frame.length < 8:
+            raise ValueError("Invalid HTTP/2 GOAWAY frame")
+        self._goaway_received = True
+        self._goaway_last_stream_id = (
+            int.from_bytes(frame.payload[:4], "big") & 0x7FFFFFFF
+        )
+        self._goaway_error_code = int.from_bytes(frame.payload[4:8], "big")
+        if self._goaway_error_code:
+            error = H2GoAwayError(self._goaway_error_code, self._goaway_last_stream_id)
+            self._failed = error
+            self._clear_header_buffers()
+            raise error
 
     def _handle_connection_frame(self, frame):
         """Handle connection-level (stream 0) frames."""
@@ -523,12 +622,7 @@ class H2Connection:
                 self._send(pong.serialize())
 
         elif frame.type == FRAME_GOAWAY:
-            if len(frame.payload) < 8:
-                raise ValueError("Invalid HTTP/2 GOAWAY frame")
-            self._goaway_received = True
-            self._goaway_last_stream_id = (
-                int.from_bytes(frame.payload[:4], "big") & 0x7FFFFFFF
-            )
+            self._receive_goaway(frame)
             debug(f"H2: Received GOAWAY: {frame.payload.hex()}")
 
         elif frame.type == FRAME_WINDOW_UPDATE:

@@ -5,8 +5,11 @@ ja3requests.protocol.tls.config
 This module provides TLS configuration for customizing TLS handshake parameters.
 """
 
+from __future__ import annotations
+
 import struct
-from typing import List, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional, Union
+from ja3requests.protocol.tls.cipher_suites import CipherSuite
 
 from ja3requests.protocol.tls.cipher_suites.suites import (
     EcdheEcdsaWithAes128GcmSha256,
@@ -19,7 +22,13 @@ from ja3requests.protocol.tls.cipher_suites.suites import (
     RsaWithAes128CbcSha,
     RsaWithAes256CbcSha,
 )
-from ja3requests.protocol.tls.extensions import ExtendedMasterSecretExtension
+from ja3requests.protocol.tls.extensions import Extension, ExtendedMasterSecretExtension
+
+if TYPE_CHECKING:
+    from ja3requests.protocol.tls.session_cache import TLSSessionCache
+
+CipherSpec = Union[int, CipherSuite]
+CertificateInput = Union[str, bytes]
 
 
 class TlsConfig:
@@ -30,12 +39,12 @@ class TlsConfig:
     custom JA3 fingerprints during the TLS handshake process.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         # TLS Version
         self._tls_version = 0x0304  # TLS 1.3 with TLS 1.2 fallback
 
         # Authenticated ephemeral key exchange and AEAD cipher suites.
-        self._cipher_suites = [
+        self._cipher_suites: List[CipherSpec] = [
             0x1301,
             0x1302,
             0x1303,
@@ -46,12 +55,16 @@ class TlsConfig:
         ]
 
         # Extensions
-        self._extensions = [ExtendedMasterSecretExtension()]
+        self._extensions: List[Extension] = [ExtendedMasterSecretExtension()]
 
         # Implemented TLS 1.3 key exchange groups.
         self._supported_groups = [29, 23]
-        self._key_share_groups = None  # None offers all implemented groups
-        self.extension_order = None  # None preserves automatic completion/order
+        self._key_share_groups: Optional[List[int]] = (
+            None  # None offers all implemented groups
+        )
+        self.extension_order: Optional[List[int]] = (
+            None  # None preserves automatic completion/order
+        )
         self.client_hello_record_version = 0x0301
 
         # Signature Algorithms - minimal for compatibility
@@ -61,8 +74,8 @@ class TlsConfig:
         self._compression_methods = [0]  # null compression
 
         # Random values
-        self._client_random = None
-        self._server_random = None
+        self._client_random: Optional[bytes] = None
+        self._server_random: Optional[bytes] = None
 
         # Session ID
         self._session_id = b""
@@ -72,33 +85,33 @@ class TlsConfig:
         self._alpn_protocols = ["http/1.1"]
 
         # SNI (Server Name Indication)
-        self._server_name = None
+        self._server_name: Optional[str] = None
 
         # Other configurations
         self._use_grease = False  # Disable GREASE for compatibility
-        self._max_fragment_length = None
+        self._max_fragment_length: Optional[int] = None
 
         # Certificate verification
         self._verify_cert = True
 
         # Session cache for TLS session resumption
-        self._session_cache = None
+        self._session_cache: Optional[TLSSessionCache] = None
 
         # HTTP/2 fingerprint settings
-        self._h2_settings = None
-        self._h2_window_update = None
+        self._h2_settings: Optional[Dict[int, int]] = None
+        self._h2_window_update: Optional[int] = None
 
         # Client certificate for mutual TLS
-        self._client_cert = None  # PEM-encoded certificate bytes or file path
-        self._client_key = None  # PEM-encoded private key bytes or file path
+        self._client_cert: Optional[CertificateInput] = None  # PEM bytes or file path
+        self._client_key: Optional[CertificateInput] = None  # PEM bytes or file path
 
     @classmethod
-    def secure(cls):
+    def secure(cls) -> TlsConfig:
         """Create a verified TLS 1.3 profile with authenticated TLS 1.2 fallback."""
         return cls()
 
     @classmethod
-    def legacy(cls):
+    def legacy(cls) -> TlsConfig:
         """Pin the pre-migration TLS defaults for explicit compatibility use."""
         config = cls()
         config._tls_version = 0x0303
@@ -117,41 +130,41 @@ class TlsConfig:
         return self._tls_version
 
     @tls_version.setter
-    def tls_version(self, version: int):
+    def tls_version(self, version: int) -> None:
         """Set TLS version (e.g., 0x0303 for TLS 1.2, 0x0304 for TLS 1.3)"""
         self._tls_version = version
 
     @property
-    def cipher_suites(self) -> List:
+    def cipher_suites(self) -> List[CipherSpec]:
         """Get cipher suites list"""
         return self._cipher_suites
 
     @cipher_suites.setter
-    def cipher_suites(self, suites: List):
+    def cipher_suites(self, suites: List[CipherSpec]) -> None:
         """Set cipher suites list"""
         self._cipher_suites = suites
 
-    def add_cipher_suite(self, suite):
+    def add_cipher_suite(self, suite: CipherSpec) -> None:
         """Add a cipher suite to the list"""
         if suite not in self._cipher_suites:
             self._cipher_suites.append(suite)
 
-    def remove_cipher_suite(self, suite):
+    def remove_cipher_suite(self, suite: CipherSpec) -> None:
         """Remove a cipher suite from the list"""
         if suite in self._cipher_suites:
             self._cipher_suites.remove(suite)
 
     @property
-    def extensions(self) -> List:
+    def extensions(self) -> List[Extension]:
         """Get extensions list"""
         return self._extensions
 
     @extensions.setter
-    def extensions(self, extensions: List):
+    def extensions(self, extensions: List[Extension]) -> None:
         """Set extensions list"""
         self._extensions = extensions
 
-    def add_extension(self, extension):
+    def add_extension(self, extension: Extension) -> None:
         """Add an extension"""
         self._extensions.append(extension)
 
@@ -161,7 +174,7 @@ class TlsConfig:
         return self._supported_groups
 
     @supported_groups.setter
-    def supported_groups(self, groups: List[int]):
+    def supported_groups(self, groups: List[int]) -> None:
         """Set supported groups"""
         self._supported_groups = groups
 
@@ -171,7 +184,7 @@ class TlsConfig:
         return self._key_share_groups
 
     @key_share_groups.setter
-    def key_share_groups(self, groups: Optional[List[int]]):
+    def key_share_groups(self, groups: Optional[List[int]]) -> None:
         self._key_share_groups = groups
 
     @property
@@ -180,7 +193,7 @@ class TlsConfig:
         return self._signature_algorithms
 
     @signature_algorithms.setter
-    def signature_algorithms(self, sig_algorithms: List[int]):
+    def signature_algorithms(self, sig_algorithms: List[int]) -> None:
         """Set signature algorithms"""
         self._signature_algorithms = sig_algorithms
 
@@ -190,7 +203,7 @@ class TlsConfig:
         return self._compression_methods
 
     @compression_methods.setter
-    def compression_methods(self, methods: List[int]):
+    def compression_methods(self, methods: List[int]) -> None:
         """Set compression methods"""
         self._compression_methods = methods
 
@@ -200,7 +213,7 @@ class TlsConfig:
         return self._client_random
 
     @client_random.setter
-    def client_random(self, random_bytes: bytes):
+    def client_random(self, random_bytes: bytes) -> None:
         """Set client random (32 bytes)"""
         if len(random_bytes) != 32:
             raise ValueError("Client random must be 32 bytes")
@@ -212,7 +225,7 @@ class TlsConfig:
         return self._server_random
 
     @server_random.setter
-    def server_random(self, random_bytes: bytes):
+    def server_random(self, random_bytes: bytes) -> None:
         """Set server random (32 bytes)"""
         if len(random_bytes) != 32:
             raise ValueError("Server random must be 32 bytes")
@@ -224,7 +237,7 @@ class TlsConfig:
         return self._session_id
 
     @session_id.setter
-    def session_id(self, session_id: bytes):
+    def session_id(self, session_id: bytes) -> None:
         """Set session ID"""
         self._session_id = session_id
         self._session_id_configured = True
@@ -235,7 +248,7 @@ class TlsConfig:
         return self._alpn_protocols
 
     @alpn_protocols.setter
-    def alpn_protocols(self, protocols: List[str]):
+    def alpn_protocols(self, protocols: List[str]) -> None:
         """Set ALPN protocols (e.g., ['h2', 'http/1.1'])"""
         self._alpn_protocols = protocols
 
@@ -245,7 +258,7 @@ class TlsConfig:
         return self._server_name
 
     @server_name.setter
-    def server_name(self, name: str):
+    def server_name(self, name: Optional[str]) -> None:
         """Set SNI server name"""
         self._server_name = name
 
@@ -255,7 +268,7 @@ class TlsConfig:
         return self._use_grease
 
     @use_grease.setter
-    def use_grease(self, use: bool):
+    def use_grease(self, use: bool) -> None:
         """Set GREASE usage flag"""
         self._use_grease = use
 
@@ -265,7 +278,7 @@ class TlsConfig:
         return self._max_fragment_length
 
     @max_fragment_length.setter
-    def max_fragment_length(self, length: int):
+    def max_fragment_length(self, length: Optional[int]) -> None:
         """Set max fragment length"""
         self._max_fragment_length = length
 
@@ -275,57 +288,57 @@ class TlsConfig:
         return self._verify_cert
 
     @verify_cert.setter
-    def verify_cert(self, verify: bool):
+    def verify_cert(self, verify: bool) -> None:
         """Set certificate verification flag"""
         self._verify_cert = verify
 
     @property
-    def session_cache(self):
+    def session_cache(self) -> Optional[TLSSessionCache]:
         """Get session cache for TLS session resumption."""
         return self._session_cache
 
     @session_cache.setter
-    def session_cache(self, cache):
+    def session_cache(self, cache: Optional[TLSSessionCache]) -> None:
         """Set session cache for TLS session resumption."""
         self._session_cache = cache
 
     @property
-    def h2_settings(self):
+    def h2_settings(self) -> Optional[Dict[int, int]]:
         """Get HTTP/2 SETTINGS for H2 fingerprint."""
         return self._h2_settings
 
     @h2_settings.setter
-    def h2_settings(self, settings):
+    def h2_settings(self, settings: Optional[Dict[int, int]]) -> None:
         """Set HTTP/2 SETTINGS dict (e.g., {0x01: 65535, 0x03: 1000})."""
         self._h2_settings = settings
 
     @property
-    def h2_window_update(self):
+    def h2_window_update(self) -> Optional[int]:
         """Get HTTP/2 initial WINDOW_UPDATE increment."""
         return self._h2_window_update
 
     @h2_window_update.setter
-    def h2_window_update(self, value):
+    def h2_window_update(self, value: Optional[int]) -> None:
         """Set HTTP/2 initial WINDOW_UPDATE increment."""
         self._h2_window_update = value
 
     @property
-    def client_cert(self):
+    def client_cert(self) -> Optional[CertificateInput]:
         """Get client certificate path or PEM data."""
         return self._client_cert
 
     @client_cert.setter
-    def client_cert(self, value):
+    def client_cert(self, value: Optional[CertificateInput]) -> None:
         """Set client certificate (file path or PEM bytes)."""
         self._client_cert = value
 
     @property
-    def client_key(self):
+    def client_key(self) -> Optional[CertificateInput]:
         """Get client private key path or PEM data."""
         return self._client_key
 
     @client_key.setter
-    def client_key(self, value):
+    def client_key(self, value: Optional[CertificateInput]) -> None:
         """Set client private key (file path or PEM bytes)."""
         self._client_key = value
 
@@ -340,7 +353,7 @@ class TlsConfig:
 
         return values
 
-    def get_ja3_string(self, server_name=None) -> str:
+    def get_ja3_string(self, server_name: Optional[str] = None) -> str:
         """
         Generate JA3 fingerprint string from the prepared ClientHello.
         Format: TLSVersion,CipherSuites,Extensions,EllipticCurves,EllipticCurvePointFormats
@@ -359,7 +372,7 @@ class TlsConfig:
         tls.set_payload(self)
         return inspect_client_hello(tls.body.message)['ja3']
 
-    def create_firefox_config(self):
+    def create_firefox_config(self) -> TlsConfig:
         """Create a TLS config that mimics Firefox"""
         self._tls_version = 0x0303  # TLS 1.2
         self._cipher_suites = [
@@ -376,7 +389,7 @@ class TlsConfig:
         self._alpn_protocols = ['h2', 'http/1.1']
         return self
 
-    def create_chrome_config(self):
+    def create_chrome_config(self) -> TlsConfig:
         """Create a TLS config that mimics Chrome"""
         self._tls_version = 0x0303  # TLS 1.2
         self._cipher_suites = [
@@ -396,12 +409,12 @@ class TlsConfig:
     def create_custom_config(
         self,
         *,
-        tls_version: int = None,
-        cipher_suites: List = None,
-        supported_groups: List[int] = None,
-        alpn_protocols: List[str] = None,
-        server_name: str = None,
-    ):
+        tls_version: Optional[int] = None,
+        cipher_suites: Optional[List[CipherSpec]] = None,
+        supported_groups: Optional[List[int]] = None,
+        alpn_protocols: Optional[List[str]] = None,
+        server_name: Optional[str] = None,
+    ) -> TlsConfig:
         """Create a custom TLS config with specified parameters"""
         if tls_version is not None:
             self._tls_version = tls_version
@@ -458,7 +471,7 @@ class TlsConfig:
 
     VALID_TLS_VERSIONS = frozenset({0x0301, 0x0302, 0x0303, 0x0304})
 
-    def validate(self, strict=False):
+    def validate(self, strict: bool = False) -> List[str]:
         """
         Validate the TLS configuration for correctness.
 
@@ -598,12 +611,18 @@ class TlsConfig:
         return issues
 
     @classmethod
-    def from_browser(cls, browser, version=None, server_name=None):
+    def from_browser(
+        cls,
+        browser: str,
+        version: Optional[int] = None,
+        server_name: Optional[str] = None,
+    ) -> TlsConfig:
         """
         Create a TlsConfig that mimics a specific browser version.
 
         :param browser: Browser name ("chrome", "firefox", "safari", "edge")
-        :param version: Browser version number (e.g., 120). Defaults to latest.
+        :param version: Browser version number (e.g., 120). Omission uses the
+                        repository's default preset (Chrome 124 for Chrome).
         :param server_name: Optional SNI server name.
         :return: Configured TlsConfig instance
 

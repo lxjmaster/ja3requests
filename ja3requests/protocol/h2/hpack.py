@@ -155,7 +155,11 @@ def encode_string(s):
     return encode_integer(len(s), 7, 0) + s
 
 
-def decode_string(data, offset):
+class HeaderLimitError(ValueError):
+    """The peer exceeded the local compressed or decoded header budget."""
+
+
+def decode_string(data, offset, max_size=None):
     """
     Decode an HPACK string literal (with Huffman support).
 
@@ -167,15 +171,23 @@ def decode_string(data, offset):
     length, offset = decode_integer(data, offset, 7)
     if length > len(data) - offset:
         raise ValueError("Truncated HPACK string")
+    if max_size is not None and (max_size < 0 or (not huffman and length > max_size)):
+        raise HeaderLimitError("HTTP/2 decoded header list limit exceeded")
     string_bytes = data[offset : offset + length]
     offset += length
 
     if huffman:
         from ja3requests.protocol.h2.huffman import (
+            HuffmanLimitError,
             huffman_decode,
         )  # pylint: disable=import-outside-toplevel
 
-        string_bytes = huffman_decode(string_bytes)
+        try:
+            string_bytes = huffman_decode(string_bytes, max_size=max_size)
+        except HuffmanLimitError as error:
+            raise HeaderLimitError(
+                "HTTP/2 decoded header list limit exceeded"
+            ) from error
 
     return string_bytes, offset
 
@@ -310,11 +322,12 @@ class HPACKDecoder:
     HPACK decoder with a bounded dynamic table.
     """
 
-    def __init__(self, max_table_size=4096):
+    def __init__(self, max_table_size=4096, max_header_list_size=None):
         self.dynamic_table = []
         self._dynamic_table_size = 0
         self._max_table_size = max_table_size
         self._table_size = min(max_table_size, 4096)
+        self._max_header_list_size = max_header_list_size
 
     def _lookup(self, index):
         if 1 <= index < len(STATIC_TABLE):
@@ -351,6 +364,7 @@ class HPACKDecoder:
         headers = []
         offset = 0
         saw_header = False
+        header_size = 0
 
         while offset < len(data):
             byte = data[offset]
@@ -358,24 +372,10 @@ class HPACKDecoder:
             if byte & 0x80:
                 # Indexed header field (Section 6.1)
                 index, offset = decode_integer(data, offset, 7)
-                headers.append(self._lookup(index))
-                saw_header = True
+                name, value = self._lookup(index)
+                field_size = len(name.encode("utf-8")) + len(value.encode("utf-8")) + 32
 
-            elif byte & 0x40:
-                # Literal with incremental indexing (Section 6.2.1)
-                index, offset = decode_integer(data, offset, 6)
-                if index == 0:
-                    name, offset = decode_string(data, offset)
-                    name = name.decode("utf-8") if isinstance(name, bytes) else name
-                else:
-                    name = self._lookup(index)[0]
-                value, offset = decode_string(data, offset)
-                value = value.decode("utf-8") if isinstance(value, bytes) else value
-                headers.append((name, value))
-                self._add_to_dynamic_table(name, value)
-                saw_header = True
-
-            elif byte & 0x20:
+            elif byte & 0x20 and not byte & 0x40:
                 # Dynamic table size update (Section 6.3)
                 if saw_header:
                     raise ValueError("HPACK table size update after header field")
@@ -384,19 +384,41 @@ class HPACKDecoder:
                     raise ValueError("HPACK table size update exceeds advertised limit")
                 self._table_size = size
                 self._evict_to_fit()
+                continue
 
             else:
-                # Literal without indexing (Section 6.2.2) or never indexed (6.2.3)
-                prefix = 4 if (byte & 0xF0) == 0x00 else 4
+                # Budget literals before allocating either raw or Huffman output.
+                remaining = (
+                    None
+                    if self._max_header_list_size is None
+                    else self._max_header_list_size - header_size - 32
+                )
+                if remaining is not None and remaining < 0:
+                    raise HeaderLimitError("HTTP/2 decoded header list limit exceeded")
+                prefix = 6 if byte & 0x40 else 4
                 index, offset = decode_integer(data, offset, prefix)
                 if index == 0:
-                    name, offset = decode_string(data, offset)
-                    name = name.decode("utf-8") if isinstance(name, bytes) else name
+                    raw_name, offset = decode_string(data, offset, max_size=remaining)
+                    name_size = len(raw_name)
+                    name = raw_name.decode("utf-8")
                 else:
                     name = self._lookup(index)[0]
-                value, offset = decode_string(data, offset)
-                value = value.decode("utf-8") if isinstance(value, bytes) else value
-                headers.append((name, value))
-                saw_header = True
+                    name_size = len(name.encode("utf-8"))
+                if remaining is not None:
+                    remaining -= name_size
+                raw_value, offset = decode_string(data, offset, max_size=remaining)
+                value = raw_value.decode("utf-8")
+                field_size = name_size + len(raw_value) + 32
+
+            header_size += field_size
+            if (
+                self._max_header_list_size is not None
+                and header_size > self._max_header_list_size
+            ):
+                raise HeaderLimitError("HTTP/2 decoded header list limit exceeded")
+            headers.append((name, value))
+            if not byte & 0x80 and byte & 0x40:
+                self._add_to_dynamic_table(name, value)
+            saw_header = True
 
         return headers

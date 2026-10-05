@@ -90,16 +90,23 @@ class CertificateVerifier:
     - Signature verification
     """
 
-    def __init__(self, verify: bool = True, ca_certs: Optional[str] = None):
+    def __init__(
+        self,
+        verify: bool = True,
+        ca_certs: Optional[str] = None,
+        trust_roots: Optional[Tuple[bytes, ...]] = None,
+    ):
         """
         Initialize certificate verifier.
 
         Args:
             verify: Whether to verify certificates (default True)
             ca_certs: Path to CA certificates bundle (uses system default if None)
+            trust_roots: Preloaded DER trust roots for non-blocking callers.
         """
         self.verify = verify
         self.ca_certs = ca_certs
+        self._trust_roots = trust_roots
         self._certificates = []
 
     def parse_certificate_chain(self, certificate_data: bytes) -> List[bytes]:
@@ -326,7 +333,9 @@ class CertificateVerifier:
         if not certificates:
             raise CertificateChainError("Empty certificate chain")
         loaded = [x509.load_der_x509_certificate(cert) for cert in certificates]
-        if self.ca_certs is not None:
+        if self._trust_roots is not None:
+            roots = [x509.load_der_x509_certificate(cert) for cert in self._trust_roots]
+        elif self.ca_certs is not None:
             with open(self.ca_certs, 'rb') as bundle:
                 roots = x509.load_pem_x509_certificates(bundle.read())
         else:

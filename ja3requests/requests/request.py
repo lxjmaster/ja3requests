@@ -5,12 +5,25 @@ Ja3Requests.requests.request
 This module of Request.
 """
 
+from __future__ import annotations
+
 import os
 import warnings
 from io import IOBase
 from http.cookiejar import CookieJar
 from urllib.parse import urlparse, parse_qs
-from typing import Any, AnyStr, List, Dict, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Tuple, Union
+from ja3requests._typing import (
+    Auth,
+    Cookies,
+    Data,
+    Files,
+    Headers,
+    JsonBody,
+    Params,
+    Proxies,
+    Timeout,
+)
 from ja3requests.requests.https import HttpsRequest
 from ja3requests.requests.http import HttpRequest
 from ja3requests.exceptions import (
@@ -21,6 +34,9 @@ from ja3requests.exceptions import (
     InvalidData,
 )
 
+if TYPE_CHECKING:
+    from ja3requests.protocol.tls.config import TlsConfig
+
 
 class Request:
     """
@@ -29,25 +45,20 @@ class Request:
 
     def __init__(
         self,
-        method: AnyStr,
-        url: AnyStr,
+        method: str,
+        url: str,
         *,
-        params: Union[
-            Dict[AnyStr, Any],
-            List[Tuple[Any, Any]],
-            Tuple[Tuple[Any, Any]],
-            AnyStr,
-        ] = None,
-        data: Union[Dict[AnyStr, Any], List, Tuple, AnyStr] = None,
-        headers: Dict[AnyStr, AnyStr] = None,
-        cookies: Union[Dict[AnyStr, AnyStr], CookieJar, AnyStr] = None,
-        files: Dict[AnyStr, Union[List[Union[AnyStr, IOBase]], IOBase, AnyStr]] = None,
-        auth: Tuple = None,
-        json: Dict[AnyStr, AnyStr] = None,
-        proxies: Dict[AnyStr, AnyStr] = None,
-        timeout: float = None,
-        tls_config=None,
-    ):
+        params: Optional[Params] = None,
+        data: Optional[Data] = None,
+        headers: Optional[Headers] = None,
+        cookies: Optional[Cookies] = None,
+        files: Optional[Files] = None,
+        auth: Optional[Auth] = None,
+        json: Optional[JsonBody] = None,
+        proxies: Optional[Proxies] = None,
+        timeout: Timeout = None,
+        tls_config: Optional[TlsConfig] = None,
+    ) -> None:
         self.method = method
         self.url = url
         self.params = params
@@ -61,10 +72,10 @@ class Request:
         self.timeout = timeout
         self.tls_config = tls_config
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<Request [{self.method}]>"
 
-    def request(self):
+    def request(self) -> Union[HttpRequest, HttpsRequest]:
         """
         Make a ready request to send.
         :return:
@@ -117,7 +128,7 @@ class Request:
 
         raise NotAllowedScheme(f"Schema: {schema} not allowed.")
 
-    def __ready_method(self):
+    def __ready_method(self) -> str:
         """
         Ready request method and check request method whether allow used.
         :return:
@@ -137,7 +148,7 @@ class Request:
 
         return method
 
-    def __ready_url(self):
+    def __ready_url(self) -> Tuple[str, str]:
         """
         Ready http url and check url whether valid.
         :return:
@@ -165,7 +176,7 @@ class Request:
 
         return parse.scheme, url
 
-    def __ready_params(self):
+    def __ready_params(self) -> Optional[Params]:
         """
         Ready params.
         :return:
@@ -180,7 +191,7 @@ class Request:
 
         return params
 
-    def __ready_headers(self):
+    def __ready_headers(self) -> Optional[Headers]:
         """
         Ready http headers.
         :return:
@@ -205,7 +216,7 @@ class Request:
 
         return headers
 
-    def __ready_data(self):
+    def __ready_data(self) -> Optional[Data]:
         """
         Ready form data.
         :return:
@@ -248,7 +259,7 @@ class Request:
 
         return data
 
-    def __ready_cookies(self):
+    def __ready_cookies(self) -> Optional[Cookies]:
         """
         :return:
         """
@@ -269,7 +280,7 @@ class Request:
 
         return cookies
 
-    def __ready_auth(self, headers):
+    def __ready_auth(self, headers: Optional[Headers]) -> Optional[Headers]:
         """
         Ready HTTP authentication. Supports Basic Auth tuple (username, password).
         Returns headers dict with Authorization header added if auth is set.
@@ -296,7 +307,7 @@ class Request:
 
         return headers
 
-    def __ready_json(self):
+    def __ready_json(self) -> Optional[JsonBody]:
         """
         Ready post json.
         :return:
@@ -332,7 +343,7 @@ class Request:
 
         return _json
 
-    def __ready_files(self):
+    def __ready_files(self) -> Optional[Files]:
         """
         Ready post file
         :return:
@@ -371,7 +382,7 @@ class Request:
 
         return files
 
-    def __read_proxies(self):
+    def __read_proxies(self) -> Optional[Proxies]:
         """
         Read proxies.
         Supports http, https, socks4, socks5 schemes.

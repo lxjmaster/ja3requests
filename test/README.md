@@ -5,6 +5,15 @@ TLS/H2` architecture without changing its public interfaces. Independent peers i
 `mock_servers/` implement only the wire exchanges needed by these tests; they do
 not import the library's protocol encoders or decoders.
 
+Release baseline, verified on 2026-10-04: [2.0.1](https://github.com/lxjmaster/ja3requests/releases/tag/v2.0.1)
+at `a291ef30bb6ae53cf38b3d79604c8f34e1865547` passed all ten configured CI checks.
+The installed-wheel selection passed 1517 tests and 112 subtests, zero failures,
+errors or skips, with 89.09% statement coverage and one existing `TestContext`
+collection warning. The manual file excluded below remains excluded. Published
+PyPI/GitHub artifact hashes matched the verified files; evidence is retained in
+`dist/release-2.0.1/`. These numbers describe that release, not later changes or
+every Python/OpenSSL environment. Older-peer skips in CI remain explicit limits.
+
 ## Run
 
 Install the project and its development dependencies in your virtual environment,
@@ -18,14 +27,15 @@ python -m pytest test --ignore=test/test_session.py --cov=ja3requests --cov-repo
 `test_session.py` contains legacy manual scenarios that depend on external sites,
 fixed local services/proxies and machine-specific files. It is explicitly excluded
 from the second command, not silently skipped by test configuration. An unfiltered
-baseline run on this development machine had 850 passing tests and three failures
-in that file before this change.
+historical baseline run on the development machine had 850 passing tests and
+three failures in that file before the integration work.
 
 ## Continuous integration
 
 GitHub Actions runs the same explicit test selection on Python 3.7–3.13 using
 Ubuntu 22.04 (which supplies the Python 3.7 runtime). A separate job installs
-the built wheel and checks HTTP/2 request framing outside the source directory.
+the wheel built through the source distribution and checks HTTP/2 request framing
+outside the source directory.
 Coverage runs on Python 3.12 and fails below 85%. The coverage table is available
 in the job summary and a 14-day artifact; same-repository PRs also receive an
 updated coverage comment.
@@ -100,7 +110,7 @@ deploy the repository.
 - TLS 1.2 ECDHE-RSA and ECDHE-ECDSA AES-256-GCM/SHA-384 with and without
   extended master secret, seven-byte reads, and rejection of a tampered Finished
   before HTTP or pool insertion.
-- The opt-in secure profile with certificate verification enabled by default:
+- The secure profile, also the implicit default since 2.0.0, with verified
   TLS 1.3 and TLS 1.2 ECDHE/AES-GCM against RSA and ECDSA certificate peers,
   including seven-byte reads and rejection of incorrect host identities. The
   [secure-profile matrix](secure_profile_matrix.md) records explicit cipher/group,
@@ -112,6 +122,15 @@ deploy the repository.
   ClientHello offers only X25519; verified AES-128-GCM and AES-256-GCM handshakes
   pass with normal and seven-byte reads. Invalid groups, suites, versions and
   repeated retry requests are rejected.
+- Explicit P-384 configuration against an independent OpenSSL peer, with direct
+  and HelloRetryRequest handshakes, normal/seven-byte reads, AES-128/256-GCM and
+  certificate verification. Invalid points and unadvertised retry groups fail.
+  Default X25519/P-256 groups and historical preset initial shares stay unchanged.
+- Actual ClientHello bytes, configured Session IDs, exact extension ordering,
+  retry/resumption constraints and early rejection of unsupported configurations.
+  The captured Chrome 154 supported subset interoperates with TLS 1.2/1.3 peers;
+  it has a different JA3 from the browser and implements neither ECH nor
+  post-quantum groups. See [the wire-control contract](../docs/tls_wire_control.md).
 - Verified TLS 1.2 RSA/AES-CBC, TLS 1.2 ECDHE-RSA/AES-GCM and TLS 1.3 requests
   and connection reuse, using an ephemeral CA trusted only by the test process.
 - Rejection of incorrect DNS/IP identities, expired certificates, invalid chain
@@ -188,8 +207,9 @@ joins are bounded. TLS certificates and private keys are generated in pytest's
 temporary directory and deleted at fixture teardown. Tests use dedicated
 `ConnectionPool` instances to avoid modifying or retaining the global pool.
 
-The TLS 1.2 fixture enables a legacy cipher only on the test server to exercise
-the library's current default. It does not change application security settings.
+The TLS 1.2 legacy fixture enables a legacy cipher on its test server and selects
+`TlsConfig.legacy()` on its client. It exercises the explicit compatibility path,
+not the secure default introduced in 2.0.0, and does not change host security settings.
 The separate trusted-certificate fixtures exercise the verification paths without
 installing a CA on the host or contacting an external service.
 
@@ -201,13 +221,15 @@ The integration tests explicitly configure the existing API:
 config = TlsConfig()
 config.tls_version = 0x0304
 config.cipher_suites = [0x1301]  # Or 0x1302 / 0x1303.
-config.supported_groups = [29]  # X25519, matching the existing generated key share.
+config.supported_groups = [29]  # X25519-only offer for this example.
 config.signature_algorithms = [0x0804]
 config.alpn_protocols = ["h2", "http/1.1"]
 ```
 
-The normal defaults are unchanged; pass `verify=True` to the request to enable
-certificate validation. Both TLS versions now route through `CertificateVerifier`,
+Since 2.0.0, `TlsConfig()` and implicit requests enable certificate validation
+and select TLS 1.3 with TLS 1.2 ECDHE/GCM fallback. `TlsConfig.legacy()` explicitly
+restores the old offer and disabled verification; a request-level `verify=True`
+can enable verification for that profile. Both TLS versions use `CertificateVerifier`,
 which uses the existing `cryptography>=42` dependency's certificate-path verifier.
 It checks the destination DNS/IP identity, validity, signatures and CA constraints
 against independently trusted roots. TLS 1.3 also verifies the server's
@@ -229,7 +251,10 @@ Transcript and application-key boundaries follow
 Session tickets are consumed without breaking response reads and can resume
 TLS 1.3 connections in the same process. This does not claim 0-RTT support.
 
-## Issue #34 progress
+## Historical Issue #34 and T01–T04 evidence
+
+The results below belong to their original development snapshots. They are kept
+for provenance; the current published release baseline appears at the top.
 
 T04 added [opt-in Cookie file persistence](../docs/cookie_persistence.md) and
 63 [file tests](test_cookie_files.py). The installed-wheel selected full run
