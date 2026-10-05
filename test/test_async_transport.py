@@ -154,6 +154,69 @@ def test_close_and_caller_cancel_observe_both_io_and_waiter_errors(monkeypatch):
     asyncio.run(scenario())
 
 
+@pytest.mark.parametrize('operation', ['read', 'write'])
+def test_close_unregisters_cancelled_legacy_socket_io(monkeypatch, operation):
+    async def scenario():
+        loop = asyncio.get_running_loop()
+        left, right = socket.socketpair()
+        transport = AsyncTransport(left)
+        descriptor = left.fileno()
+        started = asyncio.Event()
+        add = loop.add_reader if operation == 'read' else loop.add_writer
+        remove = loop.remove_reader if operation == 'read' else loop.remove_writer
+
+        async def legacy_io(*_args):
+            # Python 3.7 removes these registrations on readiness, not when
+            # cancellation completes. Closing the fd first leaves stale state.
+            pending = loop.create_future()
+            add(descriptor, lambda: None)
+            started.set()
+            return await pending
+
+        monkeypatch.setattr(
+            loop, 'sock_recv' if operation == 'read' else 'sock_sendall', legacy_io
+        )
+        task = asyncio.create_task(
+            transport.read(1) if operation == 'read' else transport.write(b'pending')
+        )
+        try:
+            await asyncio.wait_for(started.wait(), 1)
+            transport.close()
+            # Check synchronously: the descriptor must be unregistered before
+            # another connection can reuse its number in this same loop turn.
+            assert not remove(descriptor)
+            with pytest.raises(ConnectionError):
+                await task
+        finally:
+            remove(descriptor)
+            await transport.aclose()
+            await asyncio.gather(task, return_exceptions=True)
+            right.close()
+
+    asyncio.run(scenario())
+
+
+def test_close_supports_loops_without_reader_registration(monkeypatch):
+    async def scenario():
+        left, right = socket.socketpair()
+        transport = AsyncTransport(left)
+
+        def unsupported(_descriptor):
+            raise NotImplementedError
+
+        try:
+            with monkeypatch.context() as patch:
+                patch.setattr(asyncio.get_running_loop(), 'remove_reader', unsupported)
+                transport.close()
+            assert left.fileno() == -1
+            await transport.aclose()
+        finally:
+            left.close()
+            right.close()
+
+    asyncio.run(scenario())
+
+
 def test_repeated_cancelled_aclose_still_joins_native_io(monkeypatch):
     async def scenario():
         left, right = socket.socketpair()

@@ -1,6 +1,7 @@
 """Wire regressions for cookie identity, deletion and retry/header ownership."""
 
 import asyncio
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 import threading
 
@@ -277,12 +278,15 @@ def test_request_string_cookies_merge_without_persisting(api, as_bytes, initial)
     with LocalServer(serve, connections=2) as server:
         _, stored, _ = _run(api, server, jar=jar, cookies=cookies, followup='/later')
     retained = ['sid=old', 'existing=persisted'] if initial else []
-    assert _pairs(observed[0]) == (retained or ['sid=argument']) + [
+    expected = (retained or ['sid=argument']) + [
         'temporary=token==',
         'empty=',
         'repeated=last',
     ]
-    assert _pairs(observed[1]) == retained
+    # CookieJar's order for distinct names differs between Python versions.
+    # Preserve value/multiplicity checks; path precedence is tested separately.
+    assert Counter(_pairs(observed[0])) == Counter(expected)
+    assert Counter(_pairs(observed[1])) == Counter(retained)
     assert stored.get_dict() == (
         {'sid': 'old', 'existing': 'persisted'} if initial else {}
     )
@@ -424,8 +428,8 @@ def test_concurrent_request_does_not_contaminate_retry_cookie_snapshot(api):
                         return session.cookies.copy()
 
                 stored = asyncio.run(run())
-    assert _pairs(observed[0]) == ['sid=old', 'temporary=once']
-    assert _pairs(observed[1]) == ['sid=retry', 'temporary=once']
+    assert Counter(_pairs(observed[0])) == Counter(['sid=old', 'temporary=once'])
+    assert Counter(_pairs(observed[1])) == Counter(['sid=retry', 'temporary=once'])
     assert stored.get('sid') == 'retry'
     assert stored.get('concurrent') == 'other'
     assert stored.get('temporary') is None
@@ -488,8 +492,8 @@ def test_sync_concurrent_deletion_does_not_resurface_from_request_snapshot():
                 assert session.cookies.get('temporary') == 'once'
                 assert session._cookies.get('temporary') is None
     # B's in-flight snapshot is still its own, even after A deletes the session cookie.
-    assert [_pairs(request) for request in pending_requests] == [
-        ['sid=old', 'temporary=once']
+    assert [Counter(_pairs(request)) for request in pending_requests] == [
+        Counter(['sid=old', 'temporary=once'])
     ] * 2
 
 
