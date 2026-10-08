@@ -93,6 +93,8 @@ def check_html(site):
         "api/async/index.html": {
             "ja3requests.async_sessions.AsyncSession",
             "ja3requests.async_sessions.AsyncSession.request",
+            "ja3requests.async_sessions.AsyncSession.save_cookies",
+            "ja3requests.async_sessions.AsyncSession.load_cookies",
             "ja3requests.async_response.AsyncResponse",
             "ja3requests.async_response.AsyncResponse.read",
             "ja3requests.async_response.AsyncResponse.aiter_content",
@@ -139,7 +141,7 @@ def main():
     args = parser.parse_args()
     pages, links, objects = check_html(args.site_dir.resolve())
     snippets, sources = check_markdown(root)
-    for example in ("loopback.py", "async_client.py"):
+    for example in ("loopback.py", "async_client.py", "uploads.py"):
         subprocess.run(
             [sys.executable, str(root / "docs" / "examples" / example)],
             cwd=root,

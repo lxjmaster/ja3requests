@@ -58,6 +58,8 @@ class HttpsRequest(BaseRequest):
         else:
             context = HTTPSContext()
 
+        context._upload_register = kwargs.pop('_upload_register', None)
+
         context.set_payload(
             method=self.method,
             start_line=self.url,
@@ -85,11 +87,18 @@ class HttpsRequest(BaseRequest):
             response = HTTPSResponse(
                 conn, method=self.method, release=sock.release_response
             )
+            response._upload_owner = (
+                conn
+                if hasattr(conn, 'finalize_source')
+                else getattr(conn, 'upload_owner', None)
+            )
             response.handle()
+            if hasattr(conn, 'upload_headers_received'):
+                conn.upload_headers_received()
         except Exception:
             # The response adapter owns an individual H2 stream. Its error
             # cleanup must not close another stream's shared TLS connection.
-            if response is None:
+            if response is None or hasattr(conn, 'upload_headers_received'):
                 release = getattr(conn, 'release_response', sock.release_response)
                 release(False)
             raise

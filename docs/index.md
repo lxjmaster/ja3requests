@@ -9,9 +9,9 @@ support; Python `ssl` supplies the default CA roots. See the
 
 ## Which version does this site describe?
 
-This site describes [2.1.1](https://github.com/lxjmaster/ja3requests/releases/tag/v2.1.1),
-including incremental response streaming, native async, public typing and the
-subsequent transport/typing maintenance.
+This site describes [2.2.0](https://github.com/lxjmaster/ja3requests/releases/tag/v2.2.0),
+including incremental response streaming, native async, streaming request bodies,
+async multipart/files, async Cookie files, public typing and transport maintenance.
 The generated API reference reads the checkout's source and docstrings.
 Dated acceptance records in the existing guides remain historical. Building
 these docs locally does not deploy a public documentation site.
@@ -20,7 +20,8 @@ The current client supports HTTP/1.1, explicitly negotiated HTTP/2, TLS 1.2 and
 TLS 1.3, connection reuse, HTTP/SOCKS proxies, Cookies, hooks and configurable
 HTTP retries. Native `AsyncSession`, `AsyncResponse` and `AsyncConnectionPool`
 are available starting with 2.1.0. HTTP/3, QUIC, ECH, post-quantum key exchange,
-TLS 0-RTT, and request-body streaming are outside the implemented scope.
+TLS 0-RTT remains outside the implemented scope; streaming request bodies are
+available for the supported HTTP/1.1 and HTTP/2 paths.
 
 ## Start here
 

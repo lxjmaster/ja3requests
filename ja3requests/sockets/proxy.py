@@ -6,6 +6,8 @@ This module of Proxy Socket.
 """
 
 from base64 import b64encode
+from ja3requests._upload import UploadSource
+from ja3requests.sockets._upload import UploadExchange, upload_headers
 from ja3requests.base import BaseSocket
 from ja3requests.protocol.exceptions import (
     SocketException,
@@ -103,6 +105,14 @@ class ProxySocket(BaseSocket):
             # For HTTPS through proxy, we need to do TLS handshake through the tunnel
             return self._send_https_through_proxy()
         # For HTTP through proxy, send directly
+        if isinstance(self.context.data, UploadSource):
+            return UploadExchange(
+                self.context,
+                self.conn,
+                self.conn,
+                self.conn.sendall,
+                self.release_response,
+            ).start(upload_headers(self.context))
         self.conn.sendall(self.context.message)
         return self.conn
 
@@ -136,10 +146,11 @@ class ProxySocket(BaseSocket):
             def __init__(self, original_context, tunnel_conn):
                 self.original_context = original_context
                 self.tunnel_conn = tunnel_conn
-                # Copy all attributes from original context
-                for attr in dir(original_context):
-                    if not attr.startswith('_'):
-                        setattr(self, attr, getattr(original_context, attr))
+
+            def __getattr__(self, name):
+                # Delegate lazily: enumerating properties eagerly evaluates
+                # message/body and can consume a streaming upload.
+                return getattr(self.original_context, name)
 
         tunnel_context = TunnelContext(self.context, self.conn)
 

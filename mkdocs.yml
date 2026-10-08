@@ -17,7 +17,7 @@ nav:
       - Cookie files: cookie_persistence.md
       - HTTP and SOCKS proxies: proxies.md
       - Retry, timeout, and hooks: request_policy.md
-      - Streaming responses: streaming.md
+      - Streaming responses and uploads: streaming.md
       - Native asynchronous requests: async.md
       - TLS trust, mTLS, and resumption: tls.md
       - Secure defaults migration: tls_defaults_migration.md

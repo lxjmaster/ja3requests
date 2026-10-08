@@ -86,6 +86,7 @@ class AsyncResponse:
         self._pending_read: Optional[asyncio.Task] = None
         self._cleanup_task: Optional[asyncio.Task] = None
         self._session_owner: Optional[Callable[[], Any]] = None
+        self._upload_sources: list = []
 
     @classmethod
     async def from_http1(
@@ -207,6 +208,14 @@ class AsyncResponse:
         except asyncio.CancelledError:
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
+            raise
+        except Timeout as error:
+            # Upload exchanges coordinate read deadlines with request progress.
+            # Preserve the response/request metadata of ordinary read timeouts.
+            if getattr(error, 'phase', None) == 'read' and error.response is None:
+                error.response = self
+                if error.request is None:
+                    error.request = self.request
             raise
         finally:
             if self._pending_read is task:
@@ -387,6 +396,9 @@ class AsyncResponse:
 
     async def _finish(self, reusable: bool, cancel: bool = False) -> None:
         if self._cleanup_task is None:
+            upload_finished = getattr(self._transport, '_response_finished', None)
+            if upload_finished is not None:
+                upload_finished()
             # No pipelined request owns bytes beyond this response's framing.
             if self._h2 is None and self._buffer:
                 reusable = False
@@ -412,14 +424,19 @@ class AsyncResponse:
                         elif transport is not None:
                             await transport.aclose()
                     finally:
-                        owner = self._session_owner
-                        self._session_owner = None
-                        # Session assigns a weakref; inference sees only None here.
-                        session = None
-                        if owner is not None:
-                            session = owner()  # pylint: disable=not-callable
-                        if session is not None:
-                            session._responses.discard(self)
+                        try:
+                            for source in self._upload_sources:
+                                await source.aclose_owned()
+                        finally:
+                            self._upload_sources.clear()
+                            owner = self._session_owner
+                            self._session_owner = None
+                            # Session assigns a weakref; inference sees only None here.
+                            session = None
+                            if owner is not None:
+                                session = owner()  # pylint: disable=not-callable
+                            if session is not None:
+                                session._responses.discard(self)
 
             self._cleanup_task = owner_task(cleanup())
         cancelled = None

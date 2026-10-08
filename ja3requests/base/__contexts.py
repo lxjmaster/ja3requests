@@ -6,6 +6,8 @@ Basic of Context.
 """
 
 from __future__ import annotations
+from ja3requests._upload import UploadSource
+from ja3requests.exceptions import InvalidData
 
 from urllib.parse import urlparse, urlencode, parse_qsl
 from abc import ABC, abstractmethod
@@ -180,6 +182,9 @@ class BaseContext(ABC):
                     headers.update({"Host": self.destination_address})
 
             if self.method in ["POST", "PUT"]:
+                if isinstance(self.data, UploadSource):
+                    self._headers = headers
+                    return
                 if not headers.get("Content-Type", None):
                     if self.data:
                         headers.update(
@@ -329,6 +334,8 @@ class BaseContext(ABC):
         Message
         :return:
         """
+        if isinstance(self.data, UploadSource):
+            raise InvalidData('A streaming upload cannot be assembled as a message')
         if self.data:
             data = self.data
             if isinstance(data, str):

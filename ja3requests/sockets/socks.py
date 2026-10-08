@@ -6,6 +6,8 @@ SOCKS4/SOCKS5 proxy socket implementation.
 """
 
 import struct
+from ja3requests._upload import UploadSource
+from ja3requests.sockets._upload import UploadExchange, upload_headers
 import socket
 from ja3requests.base import BaseSocket
 from ja3requests.protocol.exceptions import (
@@ -224,6 +226,14 @@ class SocksProxySocket(BaseSocket):
             return self._send_https_through_socks()
 
         # For HTTP through SOCKS, send directly
+        if isinstance(getattr(self.context, 'data', None), UploadSource):
+            return UploadExchange(
+                self.context,
+                self.conn,
+                self.conn,
+                self.conn.sendall,
+                self.release_response,
+            ).start(upload_headers(self.context))
         self.conn.sendall(self.context.message)
         return self.conn
 

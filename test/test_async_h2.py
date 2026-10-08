@@ -145,6 +145,42 @@ def headers(stream, end=False, block=b"\x88"):
 
 
 @async_test
+async def test_invalid_utf8_request_preserves_existing_and_future_streams():
+    async with connected() as (conn, wire):
+        first = await request(conn)
+        sent = list(wire.sent)
+        next_stream = conn._next_stream_id
+        for invalid in (
+            {"headers": [("x-test", b"\xff")]},
+            {"headers": [(b"\xff", "value")]},
+            {"headers": [("x-test", "\ud800")]},
+            {"path": "/\ud800"},
+        ):
+            arguments = dict(method="GET", authority="example.test", path="/")
+            arguments.update(invalid)
+            with pytest.raises(ValueError, match="valid UTF-8"):
+                await conn.send_request(**arguments)
+            assert not conn.failed
+            assert conn._next_stream_id == next_stream
+            assert set(conn._streams) == {first}
+            assert not conn._outbound
+            assert wire.sent == sent
+        second = await request(conn)
+        wire.feed(
+            headers(first),
+            h2_frame(0, 1, first, b"first"),
+            headers(second),
+            h2_frame(0, 1, second, b"second"),
+        )
+        for stream, body in ((first, b"first"), (second, b"second")):
+            assert await conn.receive_headers(stream) == [(":status", "200")]
+            assert await conn.read_stream(stream, 8) == body
+            assert await conn.read_stream(stream, 8) == b""
+        assert not conn.failed
+        assert not conn._streams
+
+
+@async_test
 async def test_headers_and_prefix_are_available_before_end_stream():
     async with connected() as (conn, wire):
         stream = await request(conn)

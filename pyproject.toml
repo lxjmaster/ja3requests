@@ -12,6 +12,7 @@ files = [
     "ja3requests/retry.py",
     "ja3requests/protocol/h2/frame.py",
     "ja3requests/protocol/h2/huffman.py",
+    "ja3requests/protocol/h2/hpack.py",
     "ja3requests/protocol/tls/client_hello_info.py",
 ]
 strict = true

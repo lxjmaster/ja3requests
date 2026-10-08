@@ -98,8 +98,28 @@ def request(method: str, url: str, **kwargs: Unpack[RequestOptions]) -> Response
     :param kwargs: Arguments passed to Session.request().
     :return: Response
     """
-    with Session() as s:
-        return s.request(method, url, **kwargs)
+    s = Session()
+    try:
+        response = s.request(method, url, **kwargs)
+    except BaseException:
+        s.close()
+        raise
+
+    raw = response.response
+    if kwargs.get('stream', False) and raw is not None and not raw._finished:
+        release = raw._release
+
+        def release_session(reusable: bool) -> None:
+            try:
+                if release is not None:
+                    release(reusable)
+            finally:
+                s.close()
+
+        raw._release = release_session
+    else:
+        s.close()
+    return response
 
 
 def get(

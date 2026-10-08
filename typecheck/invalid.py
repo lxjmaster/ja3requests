@@ -1,14 +1,31 @@
 """Every E marker must produce the listed mypy diagnostic; never execute."""
 
-from io import BytesIO
+from io import BytesIO, StringIO
+from typing import AsyncIterator
 
 import ja3requests
 from ja3requests import HTTPRetry, Response, Session, TlsConfig
 from ja3requests.cookies import Ja3RequestsCookieJar
 from ja3requests.pool import ConnectionPool
 from ja3requests.protocol.h2.frame import H2Frame
+from ja3requests.protocol.h2.hpack import (
+    HPACKDecoder,
+    HPACKEncoder,
+    decode_integer,
+    decode_string,
+    encode_integer,
+    encode_string,
+)
 from ja3requests.protocol.h2.huffman import huffman_decode
 from ja3requests.protocol.tls.client_hello_info import inspect_client_hello
+
+
+async def async_bytes() -> AsyncIterator[bytes]:
+    yield b'body'
+
+
+async def async_text() -> AsyncIterator[str]:
+    yield 'invalid'
 
 
 def rejects(url: str, response: Response, session: Session) -> None:
@@ -23,6 +40,10 @@ def rejects(url: str, response: Response, session: Session) -> None:
     session.request('GET', url, verify='false')  # E: arg-type
     session.post(url, auth=('one', 'two', 'three'))  # E: arg-type
     session.get(url, unknown_option=True)  # E: call-arg
+    session.post(url, data=StringIO('text'))  # E: arg-type
+    session.put(url, data=iter((1, 2)))  # E: arg-type
+    session.post(url, data=async_bytes())  # E: arg-type
+    ja3requests.post(url, data=async_bytes())  # E: arg-type
     response.iter_content('1024')  # E: arg-type
     response.iter_lines(delimiter='\n')  # E: arg-type
     value: int = response.content  # E: assignment
@@ -43,6 +64,14 @@ def rejects_protocol_values(record: bytes) -> None:
     H2Frame.parse('not bytes')  # E: arg-type
     huffman_decode(record, max_size='unbounded')  # E: arg-type
     value: int = inspect_client_hello(record)['ja3']  # E: assignment
+    encode_integer('large', 5)  # E: arg-type
+    decode_integer(record, 'start', 5)  # E: arg-type
+    encode_string(42)  # E: arg-type
+    decode_string(record, 0, max_size='unbounded')  # E: arg-type
+    HPACKEncoder().encode_headers([('x-header', 42)])  # E: list-item
+    HPACKEncoder().set_table_size('large')  # E: arg-type
+    HPACKDecoder(max_header_list_size='unbounded')  # E: arg-type
+    HPACKDecoder().decode_headers('not bytes')  # E: arg-type
 
 
 async def async_rejects(
@@ -54,8 +83,16 @@ async def async_rejects(
     await session.post(url, timeout='slow')  # E: arg-type
     await session.get(url, timeout=(1, 2, 3))  # E: arg-type
     await session.get(url, stream='yes')  # E: arg-type
-    await session.post(url, files={'file': BytesIO()})  # E: call-arg
+    await session.post(url, files={'file': ('name', BytesIO())})  # E: dict-item
+    await session.post(url, files={'file': StringIO()})  # E: dict-item
+    await session.post(url, data=StringIO('text'))  # E: arg-type
+    await session.put(url, data=iter((1, 2)))  # E: arg-type
+    await session.post(url, data=async_text())  # E: arg-type
     await session.get(url, unknown_option=True)  # E: call-arg
+    await session.save_cookies(42)  # E: arg-type
+    await session.save_cookies('cookies.json', include_session='yes')  # E: arg-type
+    await session.load_cookies('cookies.json', merge='yes')  # E: arg-type
+    saved: str = await session.save_cookies('cookies.json')  # E: assignment
     response.aiter_content('1024')  # E: arg-type
     response.aiter_lines(delimiter='\n')  # E: arg-type
     value: int = await response.read()  # E: assignment

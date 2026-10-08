@@ -1,36 +1,101 @@
 # Next Development Plan
 
+## Latest local delivery and client completion (2026-10-08)
+
+Follow-up: the user selected fixes for the second review's source-cancellation
+and early-generator-cleanup findings. That local work is complete in
+`dist/delivery-client-2026-10-08/review-fixes-2/`; the execution record contains
+the installed acceptance and cleanup evidence.
+
+The selected [delivery and client capability plan](next_delivery_and_client_plan.md)
+is **complete locally**: source readiness, async Cookie files, Session-default
+design, streaming upload design, sync/async HTTP1/H2 streaming bodies and async
+multipart/files. Session-default merging remains design-only. The review removed
+artificial prerequisites and each upload surface received typing/docs/integration
+acceptance; see the [execution record](delivery_and_client_execution.md).
+
+The subsequent review's five confirmed findings are fixed: response-header
+timeouts no longer cap progressing uploads, async generators keep a stable
+request context and finalize started native generators there, source cancellation
+wakes H2 response waiters without retry, and wrapped binary streams use their
+output-length contract. The final uncommitted snapshot passed **2,527 installed
+tests + 118 subtests**, **91.54% coverage**, 59 installed typing negatives and all
+documentation checks, including three real local examples. Reports, artifact
+hashes and the 295-file manifest are retained under
+`dist/delivery-client-2026-10-08/review-fixes-2/`; source identity and actual
+temporary-directory cleanup were read back independently.
+Python 3.7 grammar passed; no new local 3.7 runtime or remote CI result is claimed.
+
+Commit/push, publication, hosting, Issue writes and the remaining optional lanes
+remain unselected. The package version is unchanged; historical completed work
+and older evidence below are retained with their original boundaries.
+
+## Latest local follow-up (2026-10-06)
+
+The subsequent review fixes and local integrated acceptance are complete.
+HPACK encoder table sizes now count wire bytes; invalid UTF-8 text-header inputs
+are rejected before table mutation, and async H2 validates before reserving or
+queuing a stream so a local input error cannot fail unrelated requests.
+The text-header UTF-8 restriction is a compatibility change, not an HPACK wire
+requirement; raw string codecs still preserve arbitrary bytes.
+
+The latest uncommitted snapshot passed **2,158 installed tests + 118 subtests**,
+**91.08% coverage**, 47 installed typing negatives, seven strict modules, 72
+verifier tests, formatting/lint and full docs checks. Reports and artifact hashes
+are retained under `dist/post-2.1.1/final-review-2026-10-06/`; see the current
+[execution record](post_2_1_1_execution.md). Earlier candidate results below are
+historical. Current package/test bytes were read back against the accepted
+snapshot; only completion records changed afterward.
+
+No commit, push, remote CI, release, site deployment or Issue mutation was
+selected or performed in this follow-up. The 14 candidate categories and four
+async conveniences remain deferred with their existing entry conditions.
+
 ## Published baseline and next plan (2026-10-05)
 
-The selected commit, push and publication are complete: `master` and `v2.1.0`
-resolve to `2175105016f83dfe24fcb340e986719bd05ed04d`. This includes native async,
-incremental response streaming, public typing,
-local documentation and performance tooling, plus the reviewed correctness fixes.
-See [release notes](../CHANGELOG.md), [GitHub v2.1.0](https://github.com/lxjmaster/ja3requests/releases/tag/v2.1.0)
-and [PyPI 2.1.0](https://pypi.org/project/ja3requests/2.1.0/) for the versioned
-delivery. Final installed acceptance passed 2135 tests and 112 subtests with
-91.06% coverage; all 11 configured CI jobs passed on this exact revision,
-including Python 3.7-3.13. Published artifacts and official-index installation
-were verified. Read-only inspection found five open Issues and zero open PRs.
+The latest selected commit, push and publication are complete: `master` and
+`v2.1.1` resolve to `07c70955fc35c981867eed029c897e7ba6f8cf1c`. See the
+[release notes](../CHANGELOG.md),
+[GitHub v2.1.1](https://github.com/lxjmaster/ja3requests/releases/tag/v2.1.1) and
+[PyPI 2.1.1](https://pypi.org/project/ja3requests/2.1.1/). Independent installed
+acceptance passed 2151 tests and 112 subtests with 91.06% coverage. All 11
+configured CI jobs passed for that exact revision, including Python 3.7-3.13;
+both channels' artifact bytes and a fresh official-index installation matched
+the accepted source. These are retained release results, not new checks run
+during the subsequent planning task.
 
-The [post-2.1.0 plan](post_2_1_0_plan.md) maps all 17 remaining candidates and
-four deferred async convenience categories to proposed batches, dependencies
-and acceptance. Its subsequently selected P1-P4 sequence is **complete locally**:
-minimal packaging maintenance, frozen performance baselines, removal of the
-full-TLS1.2 fixed wait, bounded async read-ahead and three shared-value typing
-modules. Final acceptance passes 2151 tests / 91.06% coverage, independent
-sdist-to-wheel installation, all 39 typing negative markers and strict docs.
-Six modules are now in the strict gate; the internal backlog is 1786 diagnostics
-in 53 files, so full internal typing is not claimed complete. See the
+The selected P1-P4 sequence from the [post-2.1.0 plan](post_2_1_0_plan.md) is
+**complete and released in 2.1.1**: minimal packaging maintenance, frozen
+performance baselines, removal of the full-TLS1.2 fixed wait, bounded async
+read-ahead and three shared-value typing modules. See the historical
 [execution record](post_2_1_0_execution.md) and
-[performance report](../bench/POST_2_1_0_RESULTS.md) for evidence and tradeoffs.
-The maintenance measurements used source snapshots retaining version 2.1.0.
-A subsequent release request selects this work for the 2.1.1 patch release;
-see [release notes](../CHANGELOG.md). Historical measurements below are unchanged.
-Public documentation hosting and optional feature branches
-remain unselected. This does not authorize closing remote issues or another capability
-batch. The 2026-10-04 local acceptance below remains historical evidence, not
-the final 2.1.0 release test count.
+[measurement report](../bench/POST_2_1_0_RESULTS.md); their source snapshots kept
+version 2.1.0 and are not relabeled as release measurements. At that release, six
+modules were in the strict gate and 39 installed typing negative markers passed. The retained
+internal backlog is 1786 diagnostics in 53 files, not a count of runtime defects
+or a claim that the whole library is type-clean.
+
+The new [post-2.1.1 engineering plan](post_2_1_1_plan.md) selects N1-N3:
+state/documentation alignment, reusable local artifact verification plus an
+independent docs CI gate, and an HPACK-only typing slice. The user subsequently
+authorized that complete local implementation and integrated acceptance, now
+**complete locally**. The candidate passed 2,153 installed tests plus 112 subtests
+at 91.06% coverage after the three verifier review fixes, 47 installed typing
+negative markers, the 7-module strict gate, 72 verifier tests and the full docs
+gate. Internal typing backlog is now 1,735
+diagnostics in 52 files. See the [execution record](post_2_1_1_execution.md) for
+source identities, review, evidence and remaining verification boundaries.
+No new release/version or remote CI run is claimed. Current baseline
+and local Issue dispositions are recorded. The existing 14 candidate categories
+(including partial internal typing) and four async conveniences remain explicit;
+listing them does not select all of them for implementation.
+
+The preceding read-only inspection on 2026-10-05 found five open Issues and zero
+open PRs. Their state does not make already delivered features missing. Remote
+Issue edits/closure, public documentation hosting, another release and optional
+features remain unselected. Everything below is retained historical roadmap
+context: use the new plan for current tasks, rather than treating older unchecked
+items, obsolete version labels or then-current release boundaries as new work.
 
 ## Completed local roadmap (2026-10-04 snapshot)
 

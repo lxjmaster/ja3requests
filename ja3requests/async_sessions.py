@@ -10,11 +10,40 @@ import json as json_module
 import math
 import weakref
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
+from functools import partial
+from http.cookiejar import CookieJar
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    AsyncIterator,
+    BinaryIO,
+    Dict,
+    Iterator,
+    Optional,
+    Tuple,
+    Union,
+)
 from urllib.parse import urldefrag, urlencode, urljoin, urlsplit, urlunsplit
 
 from ja3requests._async_utils import owner_task, phase_wait, timeout_pair
-from ja3requests._typing import Auth, Cookies, Data, Headers, JsonBody, Params, Proxies
+from ja3requests._async_upload import HTTP1Upload
+from ja3requests._multipart import MultipartSource
+from ja3requests._upload import UploadSource, is_upload
+from ja3requests._cookie_file import (
+    _check_jar,
+    load_cookie_file,
+    save_cookie_file,
+)
+from ja3requests._typing import (
+    Auth,
+    AsyncData,
+    Cookies,
+    Headers,
+    JsonBody,
+    Params,
+    PathInput,
+    Proxies,
+)
 from ja3requests._typing import Timeout as TimeoutInput
 from ja3requests.async_pool import AsyncConnectionPool, _Entry
 from ja3requests.async_response import AsyncResponse
@@ -29,11 +58,13 @@ from ja3requests.cookies import (
 from ja3requests.exceptions import (
     ContentDecodingError,
     InvalidHost,
+    InvalidData,
     MaxRetriedException,
     MissingScheme,
     NotAllowedRequestMethod,
     NotAllowedScheme,
     RequestException,
+    StreamConsumedError,
     TLSError,
     Timeout,
 )
@@ -47,7 +78,12 @@ from ja3requests.utils import default_headers
 
 if TYPE_CHECKING:
     from typing_extensions import Unpack
-    from ja3requests._typing import AsyncHooks, AsyncRequestOptions
+    from ja3requests._typing import AsyncFiles, AsyncHooks, AsyncRequestOptions
+
+
+_UploadBody = Union[
+    bytes, BinaryIO, Iterator[bytes], AsyncIterator[bytes], UploadSource
+]
 
 
 @dataclass
@@ -57,9 +93,10 @@ class _RequestMetadata:
     method: str
     url: str
     headers: Dict[str, str]
-    body: bytes
+    body: _UploadBody
     _cookie_from_jar: Optional[str] = None
     _cookie_header_managed: bool = True
+    _auto_length: Optional[str] = None
 
 
 def _origin(url: str) -> Tuple[str, str, int]:
@@ -90,6 +127,25 @@ def _headers(headers: Optional[Headers]) -> Dict[str, str]:
     return result
 
 
+def _upload_length(headers):
+    lengths = []
+    for name, value in headers.items():
+        if not isinstance(name, str):
+            continue
+        if name.lower() == 'transfer-encoding':
+            raise InvalidData(
+                'Streaming Transfer-Encoding is selected by the transport'
+            )
+        if name.lower() == 'content-length':
+            value = value.decode('latin1') if isinstance(value, bytes) else str(value)
+            if not value or any(char not in '0123456789' for char in value):
+                raise InvalidData('Invalid streaming Content-Length')
+            lengths.append(int(value))
+    if len(lengths) > 1:
+        raise InvalidData('Duplicate streaming Content-Length headers')
+    return lengths[0] if lengths else None
+
+
 def _freeze(request: _RequestMetadata) -> _RequestMetadata:
     if not isinstance(request, _RequestMetadata):
         raise TypeError('before_request hooks must return request metadata or None')
@@ -100,8 +156,13 @@ def _freeze(request: _RequestMetadata) -> _RequestMetadata:
     url = urldefrag(request.url)[0]
     if any(c in url for c in '\r\n\t '):
         raise ValueError('URL must not contain whitespace')
-    if not isinstance(request.body, bytes):
-        raise TypeError('Request body must be replayable bytes')
+    streaming = isinstance(request.body, UploadSource) or is_upload(
+        request.body, allow_async=True
+    )
+    if not streaming and not isinstance(request.body, bytes):
+        raise TypeError('Request body must be bytes or a binary upload source')
+    if streaming:
+        _upload_length(request.headers)
     headers = _headers(request.headers)
     authority = '[' + host + ']' if ':' in host else host.encode('idna').decode('ascii')
     if port != (443 if scheme == 'https' else 80):
@@ -109,10 +170,13 @@ def _freeze(request: _RequestMetadata) -> _RequestMetadata:
     headers.setdefault('Host', authority)
     if 'Transfer-Encoding' in headers:
         raise ValueError('Streaming/chunked request uploads are not supported')
-    if request.body or method in ('POST', 'PUT', 'PATCH'):
+    auto_length = request._auto_length
+    if not streaming and (request.body or method in ('POST', 'PUT', 'PATCH')):
         headers['Content-Length'] = str(len(request.body))
-    elif 'Content-Length' in headers:
+        auto_length = headers['Content-Length']
+    elif not streaming and 'Content-Length' in headers:
         headers['Content-Length'] = '0'
+        auto_length = '0'
     generated_cookie = request._cookie_from_jar
     managed_cookie = request._cookie_header_managed
     if headers.get('Cookie') != generated_cookie:
@@ -120,7 +184,13 @@ def _freeze(request: _RequestMetadata) -> _RequestMetadata:
         generated_cookie = None
         managed_cookie = False
     return _RequestMetadata(
-        method, url, headers, request.body, generated_cookie, managed_cookie
+        method,
+        url,
+        headers,
+        request.body,
+        generated_cookie,
+        managed_cookie,
+        auto_length,
     )
 
 
@@ -128,13 +198,20 @@ def _prepare(
     method: str,
     url: str,
     params: Optional[Params],
-    data: Optional[Data],
+    data: Optional[AsyncData],
     json: Optional[JsonBody],
     headers: Optional[Headers],
     auth: Optional[Auth],
     cookies: Ja3RequestsCookieJar,
+    files: Optional[AsyncFiles] = None,
 ) -> _RequestMetadata:
     _origin(url)
+    if (
+        files is not None
+        or is_upload(data, allow_async=True)
+        or isinstance(data, UploadSource)
+    ):
+        _upload_length(headers or {})
     values = _headers(headers)
     if params:
         query = params.decode() if isinstance(params, bytes) else params
@@ -146,10 +223,20 @@ def _prepare(
                 query='&'.join(filter(None, (parsed.query, query.lstrip('?'))))
             )
         )
+    if json is not None and files is not None:
+        raise InvalidData('json and files cannot be combined')
     if json is not None and data is not None:
         raise ValueError('Only one of data and json may be supplied')
-    body = b''
-    if json is not None:
+    body: _UploadBody = b''
+    if files is not None:
+        body = MultipartSource(
+            data,
+            files,
+            content_type=values.get('Content-Type'),
+            length=_upload_length(values),
+        )
+        values['Content-Type'] = body.content_type
+    elif json is not None:
         body = (
             json
             if isinstance(json, bytes)
@@ -168,6 +255,8 @@ def _prepare(
         elif isinstance(data, (dict, list, tuple)):
             body = urlencode(data, doseq=True).encode()
             values.setdefault('Content-Type', 'application/x-www-form-urlencoded')
+        elif isinstance(data, UploadSource) or is_upload(data, allow_async=True):
+            body = data
         else:
             raise TypeError('data must be in-memory bytes, text or form fields')
     if auth is not None:
@@ -215,6 +304,8 @@ class AsyncSession:
         self._requests: set = set()
         self._hook_tasks: set = set()
         self._responses: set = set()
+        self._cookie_tasks: set = set()
+        self._cookie_file_lock = None
         self._close_task = None
 
     @property
@@ -286,13 +377,122 @@ class AsyncSession:
         if not task.cancelled():
             task.exception()
 
+    async def save_cookies(
+        self, path: PathInput, *, include_session: bool = False
+    ) -> int:
+        """Save a detached Cookie snapshot without blocking the event loop.
+
+        Operations on this Session run in order. Once file I/O starts,
+        cancellation waits for its cleanup; an atomic replacement may finish.
+        """
+        return await self._cookie_file(
+            path, save=True, merge=False, include_session=include_session
+        )
+
+    async def load_cookies(
+        self, path: PathInput, *, merge: bool = False, include_session: bool = False
+    ) -> int:
+        """Validate off-loop, then replace or merge the current Cookie jar.
+
+        A cancelled load never commits later. The destination jar and its
+        policy are retained, including when merge=True uses newer live Cookies.
+        """
+        return await self._cookie_file(
+            path, save=False, merge=merge, include_session=include_session
+        )
+
+    async def _cookie_file(self, path, *, save, merge, include_session):
+        self._bind()
+        if self._closed:
+            raise RuntimeError('AsyncSession is closed')
+        _check_jar(self.cookies, include_session)
+        if type(merge) is not bool:
+            raise TypeError('merge must be a bool')
+        if self._cookie_file_lock is None:
+            # Construct on the bound loop, including on Python 3.7.
+            self._cookie_file_lock = asyncio.Lock()
+        task = owner_task(
+            self._run_cookie_file(
+                path, save=save, merge=merge, include_session=include_session
+            )
+        )
+        self._cookie_tasks.add(task)
+        task.add_done_callback(self._cookie_file_done)
+        # Forward cancellation to the owner immediately, including when its
+        # worker result is ready but a load has not yet committed. The owner
+        # shields and joins the worker before propagating cancellation.
+        return await task
+
+    def _cookie_file_done(self, task):
+        self._cookie_tasks.discard(task)
+        if not task.cancelled():
+            task.exception()
+
+    @staticmethod
+    async def _drain_cookie_work(work):
+        # Both the worker and its library-owned task outlive cancellation of
+        # a public waiter. Repeated cancellation cannot detach either cleanup.
+        while not work.done():
+            try:
+                await asyncio.shield(work)
+            except BaseException:
+                pass
+        if not work.cancelled():
+            work.exception()
+
+    async def _run_cookie_file(self, path, *, save, merge, include_session):
+        async with self._cookie_file_lock:
+            if self._closed:
+                raise RuntimeError('AsyncSession is closed')
+            _check_jar(self.cookies, include_session)
+            detached = CookieJar()
+            if save:
+                # No await or blocking live-jar lock: Session Cookies belong
+                # to this loop. CookieJar.copy() shares extension dictionaries.
+                for cookie in self.cookies:
+                    snapshot = copy.copy(cookie)
+                    # The file schema accepts only scalar extension values.
+                    # Leave validation and filtering to the shared writer;
+                    # unrelated application attributes need no recursive copy.
+                    snapshot._rest = dict(cookie._rest)
+                    detached.set_cookie(snapshot)
+            operation = save_cookie_file if save else load_cookie_file
+            worker = self._loop.run_in_executor(
+                None,
+                partial(operation, detached, path, include_session=include_session),
+            )
+            try:
+                count = await asyncio.shield(worker)
+            except asyncio.CancelledError:
+                await self._drain_cookie_work(worker)
+                raise
+            if not save:
+                target = self.cookies
+                _check_jar(target, include_session)
+                staged = (
+                    {
+                        domain: {path: values.copy() for path, values in paths.items()}
+                        for domain, paths in target._cookies.items()
+                    }
+                    if merge
+                    else {}
+                )
+                for cookie in detached:
+                    staged.setdefault(cookie.domain, {}).setdefault(cookie.path, {})[
+                        cookie.name
+                    ] = cookie
+                # Publish once on the loop, preserving jar/policy identity.
+                target._cookies = staged
+            return count
+
     async def request(
         self,
         method: str,
         url: str,
         *,
         params: Optional[Params] = None,
-        data: Optional[Data] = None,
+        data: Optional[AsyncData] = None,
+        files: Optional[AsyncFiles] = None,
         headers: Optional[Headers] = None,
         cookies: Optional[Cookies] = None,
         auth: Optional[Auth] = None,
@@ -323,7 +523,9 @@ class AsyncSession:
         jar = session_jar.copy()
         if cookies is not None:
             merge_cookies(jar, cookies)
-        request = _prepare(method, url, params, data, json, headers, auth, jar)
+        request = _prepare(
+            method, url, params, data, json, headers, auth, jar, files=files
+        )
         callbacks = {
             name: list(self.hooks.get(name, [])) + list((hooks or {}).get(name, []))
             for name in ('before_request', 'after_request')
@@ -373,14 +575,51 @@ class AsyncSession:
         session_jar,
     ):
         response = None
+        sources = set()
+        source_responses = {}
+        redirect_body = redirect_response = None
         try:
             for hop in range(DEFAULT_REDIRECT_LIMIT + 1):
                 for callback in callbacks['before_request']:
+                    previous_body = request.body
+                    previous_length = request._auto_length
                     result = await self._run_hook(callback, request)
                     if result is not None:
                         request = result
+                    if (
+                        isinstance(request, _RequestMetadata)
+                        and request.body is not previous_body
+                    ):
+                        if request.headers.get('Content-Length') == previous_length:
+                            request.headers.pop('Content-Length', None)
+                        request._auto_length = None
+                        if isinstance(previous_body, UploadSource):
+                            await previous_body.aclose_owned()
                     request = _freeze(request)
                 request = _freeze(request)
+                if not isinstance(request.body, bytes):
+                    length = _upload_length(request.headers)
+                    if not isinstance(request.body, UploadSource):
+                        request.body = UploadSource(request.body, length=length)
+                    sources.add(request.body)
+                    if isinstance(request.body, MultipartSource) and (
+                        request.headers.get('Content-Type') != request.body.content_type
+                    ):
+                        raise InvalidData(
+                            'Multipart Content-Type conflicts with its boundary'
+                        )
+                    await phase_wait(request.body.aprepare(), budgets[1], 'write')
+                    if length is not None and request.body.length != length:
+                        raise InvalidData('Content-Length changed during upload replay')
+                    if request.body.length is not None:
+                        request.headers['Content-Length'] = str(request.body.length)
+                        if length is None:
+                            request._auto_length = request.headers['Content-Length']
+                if request.body is redirect_body:
+                    await self._rewind_upload(
+                        request.body, budgets[1], response=redirect_response
+                    )
+                redirect_body = redirect_response = None
                 _refresh_cookie_header(jar, request)
                 attempts = 1 + (
                     retry.total
@@ -403,9 +642,16 @@ class AsyncSession:
                             raise
                         if attempt + 1 == attempts:
                             raise
+                        await self._rewind_upload(request.body, budgets[1], cause=error)
                         await self._backoff(retry, None, attempt + 1)
                         continue
                     self._adopt_response(response)
+                    if (
+                        isinstance(request.body, UploadSource)
+                        and not response._released
+                    ):
+                        response._upload_sources.append(request.body)
+                        source_responses[request.body] = response
                     extract_cookies_to_jar(self.cookies, request, response)
                     extract_cookies_to_jar(session_jar, request, response)
                     extract_cookies_to_jar(jar, request, response)
@@ -415,7 +661,14 @@ class AsyncSession:
                         and retry.is_retryable_status(response.status_code)
                     )
                     if retryable and attempt + 1 < attempts:
+                        if isinstance(request.body, UploadSource):
+                            if request.body in response._upload_sources:
+                                response._upload_sources.remove(request.body)
+                            source_responses.pop(request.body, None)
                         await self._close_owned_response(response)
+                        await self._rewind_upload(
+                            request.body, budgets[1], response=response
+                        )
                         await self._backoff(retry, response, attempt + 1)
                         _refresh_cookie_header(jar, request)
                         response = None
@@ -452,7 +705,17 @@ class AsyncSession:
                             'Transfer-Encoding',
                         ):
                             values.pop(name, None)
+                    if body is request.body and isinstance(body, UploadSource):
+                        if body in response._upload_sources:
+                            response._upload_sources.remove(body)
+                        source_responses.pop(body, None)
                     await self._close_owned_response(response)
+                    if body is request.body and isinstance(body, UploadSource):
+                        # Hooks run on every redirect hop and may choose a new
+                        # body. Rewind only the source that survives those hooks.
+                        redirect_body, redirect_response = body, response
+                    elif isinstance(request.body, UploadSource):
+                        await request.body.aclose_owned()
                     response = None
                     request = _freeze(
                         _RequestMetadata(
@@ -461,6 +724,9 @@ class AsyncSession:
                             values,
                             body,
                             _cookie_header_managed=managed_cookie,
+                            _auto_length=(
+                                request._auto_length if body is request.body else None
+                            ),
                         )
                     )
                     _refresh_cookie_header(jar, request)
@@ -504,6 +770,21 @@ class AsyncSession:
             if response is not None:
                 await self._close_owned_response(response)
             raise
+        finally:
+            for source in sources:
+                owner = source_responses.get(source)
+                if owner is None or source not in owner._upload_sources:
+                    await source.aclose_owned()
+
+    @staticmethod
+    async def _rewind_upload(body, timeout, response=None, cause=None):
+        if isinstance(body, UploadSource):
+            try:
+                await phase_wait(body.arewind(), timeout, 'write')
+            except StreamConsumedError as error:
+                if response is not None:
+                    error.response = response
+                raise error from cause
 
     @staticmethod
     async def _backoff(retry, response, number):
@@ -576,7 +857,12 @@ class AsyncSession:
         path = urlunsplit(('', '', parsed.path or '/', parsed.query, ''))
         try:
             if entry.h2 is not None:
-                stream_id = await entry.h2.send_request(
+                send = (
+                    entry.h2.begin_upload
+                    if isinstance(request.body, UploadSource)
+                    else entry.h2.send_request
+                )
+                stream_id = await send(
                     request.method,
                     request.headers['Host'],
                     path,
@@ -588,6 +874,17 @@ class AsyncSession:
                 headers = await entry.h2.receive_headers(
                     stream_id, timeout=read_timeout
                 )
+                release = lease.release
+                if isinstance(request.body, UploadSource):
+
+                    async def release_upload(reusable):
+                        try:
+                            await entry.h2.cancel_stream(stream_id)
+                        finally:
+                            await lease.release(reusable)
+
+                    release = release_upload
+
                 response = await AsyncResponse.from_http2(
                     entry.h2,
                     stream_id,
@@ -595,16 +892,25 @@ class AsyncSession:
                     method=request.method,
                     url=request.url,
                     request=request,
-                    release=lease.release,
+                    release=release,
                     timeout=read_timeout,
                 )
                 if not response._released:
                     response._pool_lease = lease
                 return response
             wire = ('%s %s HTTP/1.1\r\n' % (request.method, path)).encode('ascii')
-            wire += ''.join(
-                '%s: %s\r\n' % item for item in request.headers.items()
-            ).encode('latin1')
+            headers = dict(request.headers)
+            if isinstance(request.body, UploadSource) and request.body.length is None:
+                headers['Transfer-Encoding'] = 'chunked'
+            wire += ''.join('%s: %s\r\n' % item for item in headers.items()).encode(
+                'latin1'
+            )
+            if isinstance(request.body, UploadSource):
+                exchange = HTTP1Upload(lease, request.body, read_timeout)
+                response = await exchange.response(wire + b'\r\n', request)
+                if not response._released:
+                    response._pool_lease = lease
+                return response
             await phase_wait(
                 entry.transport.write(wire + b'\r\n' + request.body),
                 read_timeout,
@@ -628,19 +934,20 @@ class AsyncSession:
             raise
 
     async def aclose(self) -> None:
-        """Stop this session's requests and leases; borrowed pools stay open."""
+        """Stop requests, leases and Cookie file work; borrowed pools stay open."""
         self._bind()
         if self._close_task is None:
             self._closed = True
             current = asyncio.current_task()
             requests = [task for task in self._requests if task is not current]
-            for task in requests:
+            cookie_tasks = list(self._cookie_tasks)
+            for task in requests + cookie_tasks:
                 task.cancel()
-            self._close_task = owner_task(self._finish_close(requests))
+            self._close_task = owner_task(self._finish_close(requests, cookie_tasks))
         await asyncio.shield(self._close_task)
 
-    async def _finish_close(self, requests):
-        await asyncio.gather(*requests, return_exceptions=True)
+    async def _finish_close(self, requests, cookie_tasks):
+        await asyncio.gather(*requests, *cookie_tasks, return_exceptions=True)
         await asyncio.gather(
             *(self._close_owned_response(r) for r in tuple(self._responses)),
             return_exceptions=True,

@@ -31,6 +31,9 @@ from ja3requests.cookies import (
 from ja3requests.protocol.tls.session_cache import TLSSessionCache
 from ja3requests.retry import HTTPRetry
 from ja3requests._cookie_file import load_cookie_file, save_cookie_file
+from ja3requests._upload import UploadSource, is_upload
+from ja3requests.sockets._upload import upload_length
+from ja3requests.exceptions import InvalidData, StreamConsumedError
 from ja3requests._typing import (
     Auth,
     Cookies,
@@ -81,6 +84,7 @@ class Session(BaseSession):
         self._request_local = threading.local()
         self._cookie_lock = threading.RLock()
         self._cookie_view = None
+        self._uploads = set()
         self._tls_config = tls_config or TlsConfig()
         # Enable session resumption by default
         if self._tls_config.session_cache is None:
@@ -144,8 +148,28 @@ class Session(BaseSession):
 
     def close(self) -> None:
         """Close an explicitly supplied pool; preserve the shared default pool."""
+        with self._cookie_lock:
+            uploads = tuple(self._uploads)
+        error = None
+        for upload in uploads:
+            try:
+                upload.close()
+            except Exception as failure:
+                error = failure
         if self._pool and self._pool is not get_default_pool():
             self._pool.close_all()
+        if error is not None:
+            raise error
+
+    def _register_upload(self, upload):
+        with self._cookie_lock:
+            self._uploads.add(upload)
+
+        def unregister():
+            with self._cookie_lock:
+                self._uploads.discard(upload)
+
+        return unregister
 
     def save_cookies(self, path: PathInput, *, include_session: bool = False) -> int:
         """Save the stored Session Cookies; return the count written.
@@ -430,6 +454,24 @@ class Session(BaseSession):
         # Dispatch before_request hooks
         request = self._dispatch_hooks("before_request", request, per_request_hooks)
         request._refresh_cookies()
+        source = request.data
+        if is_upload(source) or isinstance(source, UploadSource):
+            if request.json is not None or request.files:
+                raise InvalidData(
+                    'Streaming data cannot be combined with json or files'
+                )
+            length = upload_length(request.headers)
+            if not isinstance(source, UploadSource):
+                source = UploadSource(source, length=length)
+            try:
+                source.prepare()
+            except BaseException:
+                source.close_owned()
+                raise
+            request.data = source
+            kwargs['_upload_register'] = self._register_upload
+        else:
+            source = None
 
         # Pass connection pool to request
         kwargs['pool'] = self._pool
@@ -447,9 +489,20 @@ class Session(BaseSession):
 
         for attempt in range(max_attempts):
             response = None
+            upload_owner = None
+            retrying = False
             dispatching_hooks = False
             try:
+                if attempt and source is not None:
+                    try:
+                        source.rewind()
+                    except StreamConsumedError as error:
+                        error.response = last_response
+                        if last_error is not None:
+                            raise error from last_error
+                        raise
                 rep = request.send(**kwargs)
+                upload_owner = getattr(rep, '_upload_owner', None)
                 response = Response(request, rep, stream=stream)
 
                 # Apply Set-Cookie to existing jars so expiry/deletion is retained.
@@ -475,6 +528,7 @@ class Session(BaseSession):
                         response.close()
                         retry.sleep_for_retry(response, attempt + 1)
                         request._refresh_cookies()
+                        retrying = True
                         continue
                     break
 
@@ -496,6 +550,8 @@ class Session(BaseSession):
                     response.close()
                 if dispatching_hooks:
                     raise
+                if isinstance(err, (InvalidData, StreamConsumedError)):
+                    raise
                 last_error = err
                 if (
                     retry
@@ -503,12 +559,21 @@ class Session(BaseSession):
                     and retry.is_retryable_method(method)
                 ):
                     retry.sleep_for_retry(None, attempt + 1)
+                    retrying = True
                     continue
                 raise
             except BaseException:
                 if response is not None:
                     response.close()
                 raise
+            finally:
+                # Intermediate attempts keep replay state. A final streaming
+                # response owns cleanup until its upload worker has stopped.
+                if source is not None and not retrying:
+                    if upload_owner is not None:
+                        upload_owner.finalize_source()
+                    else:
+                        source.close_owned()
 
         # All retries exhausted
         if last_response is not None:

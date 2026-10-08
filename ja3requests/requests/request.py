@@ -26,6 +26,8 @@ from ja3requests._typing import (
 )
 from ja3requests.requests.https import HttpsRequest
 from ja3requests.requests.http import HttpRequest
+from ja3requests._upload import is_upload
+from ja3requests.sockets._upload import upload_length
 from ja3requests.exceptions import (
     NotAllowedRequestMethod,
     MissingScheme,
@@ -198,6 +200,8 @@ class Request:
         """
 
         headers = self.headers
+        if is_upload(self.data):
+            upload_length(headers)
         if headers is None:
             return None
         headers = dict(headers)
@@ -222,6 +226,14 @@ class Request:
         :return:
         """
         data = self.data
+        if is_upload(data):
+            if self.json is not None or self.files:
+                raise InvalidData(
+                    'Streaming data cannot be combined with json or files'
+                )
+            return data
+        if is_upload(data, allow_async=True):
+            raise InvalidData('Synchronous requests do not accept async sources')
         if not data:
             return data
 

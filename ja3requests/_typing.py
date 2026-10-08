@@ -11,6 +11,8 @@ from typing import (
     Awaitable,
     Dict,
     BinaryIO,
+    Iterator,
+    AsyncIterator,
     List,
     Mapping,
     Optional,
@@ -29,7 +31,8 @@ Params = Union[
     List[Tuple[str, Any]],
     Tuple[Tuple[str, Any], ...],
 ]
-Data = Params
+Data = Union[Params, BinaryIO, Iterator[bytes]]
+AsyncData = Union[Data, AsyncIterator[bytes]]
 JsonBody = Union[Dict[str, Any], str, bytes]
 HeaderValue = Union[str, bytes, int, float]
 Headers = Mapping[str, HeaderValue]
@@ -38,6 +41,8 @@ Auth = Tuple[str, str]
 Proxies = Dict[str, str]
 FileValue = Union[str, bytes, BinaryIO]
 Files = Dict[str, Union[FileValue, List[FileValue]]]
+AsyncFileValue = Union[FileValue, "os.PathLike[str]"]
+AsyncFiles = Mapping[str, Union[AsyncFileValue, List[AsyncFileValue]]]
 PathInput = Union[str, "os.PathLike[str]"]
 RequestHook = Callable[["BaseRequest"], Optional["BaseRequest"]]
 ResponseHook = Callable[["Response"], Optional["Response"]]
@@ -69,7 +74,8 @@ if TYPE_CHECKING:
 
     class AsyncRequestOptions(TypedDict, total=False):
         params: Optional[Params]
-        data: Optional[Data]
+        data: Optional[AsyncData]
+        files: Optional[AsyncFiles]
         json: Optional[JsonBody]
         headers: Optional[Headers]
         cookies: Optional[Cookies]

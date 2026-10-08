@@ -305,6 +305,9 @@ class TestHPACKString(unittest.TestCase):
         self.assertEqual(result[0], 5)  # length without Huffman
         self.assertEqual(result[1:], b"hello")
 
+    def test_encode_bytes_preserves_literal(self):
+        self.assertEqual(encode_string(b"\x00\xff"), b"\x02\x00\xff")
+
     def test_truncated_string_is_rejected(self):
         for data in (b"", b"\x05ab", b"\x7f", b"\x7f\x80"):
             with self.subTest(data=data):
@@ -330,6 +333,91 @@ class TestHPACKEncoder(unittest.TestCase):
         enc = HPACKEncoder()
         result = enc.encode_headers([("x-custom", "value")])
         self.assertTrue(len(result) > 0)
+
+    def test_iterable_headers_preserve_bytes_values_and_index_identity(self):
+        enc = HPACKEncoder()
+        dec = HPACKDecoder()
+        block = enc.encode_headers(
+            iter([(b"X-Custom", b"value"), ("x-custom", "value")])
+        )
+        self.assertEqual(
+            dec.decode_headers(block), [("x-custom", "value"), ("x-custom", "value")]
+        )
+        self.assertEqual(
+            enc.dynamic_table, [("x-custom", "value"), ("x-custom", b"value")]
+        )
+        # The bytes-valued entry remains distinct at dynamic index 63.
+        self.assertEqual(enc.encode_headers(iter([(b"x-custom", b"value")])), b"\xbf")
+
+    def test_invalid_utf8_headers_leave_encoder_state_unchanged(self):
+        invalid_headers = [
+            ("x", b"\xff"),
+            (b"\xff", "value"),
+            ("x", "\ud800"),
+            ("\ud800", "value"),
+        ]
+        for invalid in invalid_headers:
+            with self.subTest(invalid=invalid):
+                enc, dec = HPACKEncoder(), HPACKDecoder()
+                original = [("x-existing", "value")]
+                dec.decode_headers(enc.encode_headers(original))
+                enc.set_table_size(128)
+                size = enc._dynamic_table_size
+                with self.assertRaisesRegex(ValueError, "valid UTF-8"):
+                    enc.encode_headers(iter([("x-new", "value"), invalid]))
+                self.assertEqual(enc.dynamic_table, original)
+                self.assertEqual(enc._dynamic_table_size, size)
+                block = enc.encode_headers(original)
+                self.assertEqual(block[0] & 0xE0, 0x20)
+                self.assertEqual(dec.decode_headers(block), original)
+                self.assertEqual(dec._table_size, 128)
+
+    def test_unicode_insertion_evicts_by_wire_size(self):
+        for value in ("é", "é".encode("utf-8")):
+            with self.subTest(value=value):
+                enc, dec = HPACKEncoder(), HPACKDecoder()
+                enc.set_table_size(68)
+                headers = [("x", value), ("y", "z"), ("q", "r")]
+                for name, field in headers:
+                    expected = (
+                        field.decode("utf-8") if isinstance(field, bytes) else field
+                    )
+                    self.assertEqual(
+                        dec.decode_headers(enc.encode_headers([(name, field)])),
+                        [(name, expected)],
+                    )
+                self.assertEqual(enc.dynamic_table, [("q", "r"), ("y", "z")])
+                self.assertEqual(enc._dynamic_table_size, 68)
+                # This index must still identify y on both sides after eviction.
+                self.assertEqual(
+                    dec.decode_headers(enc.encode_headers([("y", "z")])),
+                    [("y", "z")],
+                )
+
+    def test_unicode_resize_evicts_and_reinserts_consistently(self):
+        enc, dec = HPACKEncoder(), HPACKDecoder()
+        header = [("x", "值")]
+        self.assertEqual(dec.decode_headers(enc.encode_headers(header)), header)
+        self.assertEqual(enc._dynamic_table_size, 36)
+        enc.set_table_size(35)
+        self.assertEqual(enc.dynamic_table, [])
+        self.assertEqual(enc._dynamic_table_size, 0)
+        self.assertEqual(dec.decode_headers(enc.encode_headers(header)), header)
+        self.assertEqual(dec.dynamic_table, [])
+        enc.set_table_size(36)
+        self.assertEqual(dec.decode_headers(enc.encode_headers(header)), header)
+        self.assertEqual(dec.decode_headers(enc.encode_headers(header)), header)
+
+    def test_unicode_name_and_oversized_entry_use_wire_size(self):
+        enc, dec = HPACKEncoder(), HPACKDecoder()
+        enc.set_table_size(38)
+        dec.decode_headers(enc.encode_headers([("x", "a")]))
+        # Codec-level input: the UTF-8 name and value require 39 table bytes.
+        header = [("x-é", "值")]
+        self.assertEqual(dec.decode_headers(enc.encode_headers(header)), header)
+        self.assertEqual(enc.dynamic_table, [])
+        self.assertEqual(enc._dynamic_table_size, 0)
+        self.assertEqual(dec.decode_headers(enc.encode_headers(header)), header)
 
     def test_encode_multiple_headers(self):
         enc = HPACKEncoder()
