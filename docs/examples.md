@@ -25,7 +25,7 @@ asserts the content and consumption behavior it demonstrates.
 
 ## Native async loopback example
 
-From a 2.1.0 or later source checkout with the package installed:
+From the current source checkout with its package installed:
 
 ```sh
 .venv/bin/python docs/examples/async_client.py
@@ -33,7 +33,7 @@ From a 2.1.0 or later source checkout with the package installed:
 
 [Download/view the async script](examples/async_client.py). It exercises native
 async requests against an event-controlled HTTP peer on an OS-assigned loopback
-port: awaited JSON/text, Cookies, retries and an async hook, prefix-before-tail
+port: awaited JSON/text, Cookies and an awaited file round trip, retries and an async hook, prefix-before-tail
 streaming, gzip/deflate/Brotli, byte lines, caller cancellation and an explicitly
 borrowed pool. It closes accepted connections, joins tasks and stops the server
 before exiting. There are no external requests or retained files.
@@ -41,6 +41,24 @@ before exiting. There are no external requests or retained files.
 The [async guide](async.md) describes body caching, strict decoder failures,
 timeouts and pool ownership. This HTTP demonstration is not TLS/H2 or supported
 environment acceptance; those paths have their own integration tests.
+
+## Streaming upload example
+
+Run the streaming upload APIs against a loopback HTTP peer:
+
+```sh
+.venv/bin/python docs/examples/uploads.py
+```
+
+[View the upload script](examples/uploads.py). It checks sync/async binary files,
+fixed and chunked framing, delivery of the first bytes before source EOF, and
+async multipart fields with repeated files. A standard-library parser checks
+the multipart body. Caller handles remain open; the temporary path fixture and
+local server are cleaned up. This HTTP/1 example complements the independent
+TLS/H2 and proxy integration tests; it does not establish those paths by itself.
+
+See [upload ownership and replay](streaming.md#upload-replay-and-ownership) before
+reusing a source across requests or enabling retries.
 
 ## Existing application examples
 
@@ -69,6 +87,6 @@ and retention contract.
 ```
 
 The checker validates built internal links/anchors and required generated API
-objects, checks all Python snippets for Python 3.7 syntax, then executes both
+objects, checks all Python snippets for Python 3.7 syntax, then executes all three
 loopback examples. Placeholder HTTPS and certificate snippets are syntax-checked,
 not executed against unknown services. See [building these docs](contributing_docs.md).

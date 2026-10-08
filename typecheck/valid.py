@@ -13,6 +13,14 @@ from ja3requests.base import BaseRequest
 from ja3requests.cookies import Ja3RequestsCookieJar
 from ja3requests.pool import ConnectionPool
 from ja3requests.protocol.h2.frame import H2Frame, build_settings_frame
+from ja3requests.protocol.h2.hpack import (
+    HPACKDecoder,
+    HPACKEncoder,
+    decode_integer,
+    decode_string,
+    encode_integer,
+    encode_string,
+)
 from ja3requests.protocol.h2.huffman import huffman_decode, huffman_encode
 from ja3requests.protocol.tls.client_hello_info import inspect_client_hello
 from ja3requests.requests.request import Request
@@ -28,6 +36,11 @@ def after(response: Response) -> Optional[Response]:
     return None
 
 
+async def upload_chunks() -> AsyncIterator[bytes]:
+    yield b'first'
+    yield b'second'
+
+
 def protocol_value_boundaries(record: bytes) -> None:
     frame = build_settings_frame({1: 4096})
     assert_type(frame, H2Frame)
@@ -39,6 +52,22 @@ def protocol_value_boundaries(record: bytes) -> None:
     assert_type(huffman_encode('header'), bytes)
     assert_type(huffman_encode(bytearray(b'header')), bytes)
     assert_type(huffman_decode(iter(record), max_size=1024), bytes)
+    assert_type(encode_integer(1337, 5), bytes)
+    assert_type(decode_integer(record, 0, 5), Tuple[int, int])
+    assert_type(encode_string('header'), bytes)
+    assert_type(encode_string(b'header'), bytes)
+    assert_type(decode_string(record, 0, max_size=1024), Tuple[bytes, int])
+    header_pairs: List[Tuple[Union[str, bytes], Union[str, bytes]]] = [
+        ('x-text', 'value'),
+        (b'x-bytes', b'value'),
+    ]
+    encoder = HPACKEncoder()
+    encoder.set_table_size(1024)
+    assert_type(encoder.encode_headers(iter(header_pairs)), bytes)
+    assert_type(encoder.dynamic_table, List[Tuple[str, Union[str, bytes]]])
+    decoder = HPACKDecoder(max_table_size=1024, max_header_list_size=4096)
+    assert_type(decoder.decode_headers(record), List[Tuple[str, str]])
+    assert_type(decoder.dynamic_table, List[Tuple[str, str]])
     hello = inspect_client_hello(record)
     assert_type(hello['version'], int)
     assert_type(hello['groups'], List[int])
@@ -103,6 +132,8 @@ def public_calls(url: str, cookie_path: Path) -> None:
             session.post(url, files={'parts': [BytesIO(b'one'), 'two.bin']})
             session.put(url, data=(('a', 1), ('b', 'two')), timeout=2)
             session.patch(url, data='a=one')
+            assert_type(session.put(url, data=BytesIO(b'file')), Response)
+            assert_type(session.post(url, data=iter((b'one', b'two'))), Response)
             session.delete(url, timeout=None)
             session.head(url, h1=True)
             session.options(url)
@@ -112,6 +143,8 @@ def public_calls(url: str, cookie_path: Path) -> None:
     assert_type(ja3requests.request('GET', url, params={'page': 2}), Response)
     assert_type(ja3requests.post(url, json=b'{"ready":true}'), Response)
     assert_type(ja3requests.put(url, data={'name': 'one'}), Response)
+    assert_type(ja3requests.post(url, data=BytesIO(b'file')), Response)
+    assert_type(ja3requests.put(url, data=iter((b'one', b'two'))), Response)
     assert_type(ja3requests.patch(url, data=[('name', 'two')]), Response)
     assert_type(ja3requests.delete(url), Response)
     assert_type(ja3requests.head(url), Response)
@@ -157,6 +190,22 @@ async def native_async_calls(url: str) -> None:
                 response.encoding = None
                 response.raise_for_status()
             assert_type(await session.post(url, data=b'body'), AsyncResponse)
+            assert_type(await session.post(url, data=BytesIO(b'file')), AsyncResponse)
+            assert_type(
+                await session.put(url, data=iter((b'one', b'two'))), AsyncResponse
+            )
+            assert_type(await session.patch(url, data=upload_chunks()), AsyncResponse)
+            assert_type(
+                await session.request('POST', url, data=upload_chunks()), AsyncResponse
+            )
+            assert_type(
+                await session.post(
+                    url,
+                    data=[('field', 'one'), ('field', 'two')],
+                    files={'file': [BytesIO(b'file'), Path('second.bin')]},
+                ),
+                AsyncResponse,
+            )
             assert_type(await session.put(url, json={'ok': True}), AsyncResponse)
             assert_type(
                 await session.patch(url, headers={'X-Test': 'yes'}), AsyncResponse
@@ -168,4 +217,11 @@ async def native_async_calls(url: str) -> None:
                 AsyncResponse,
             )
             session.cookies.set('name', 'value', domain='example.com')
+            assert_type(await session.save_cookies(Path('cookies.json')), int)
+            assert_type(
+                await session.load_cookies(
+                    'cookies.json', merge=True, include_session=True
+                ),
+                int,
+            )
             await session.aclose()

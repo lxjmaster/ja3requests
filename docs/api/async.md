@@ -7,6 +7,10 @@ synchronous API retains its existing behavior.
 
 ## AsyncSession
 
+`data=` streaming sources and `files=` multipart are documented in the
+[upload guide](../streaming.md#streaming-request-bodies). The Cookie-file
+helpers are awaited; see [Cookie files](../cookie_persistence.md#native-async-files).
+
 ::: ja3requests.async_sessions.AsyncSession
     options:
       members:
@@ -18,6 +22,8 @@ synchronous API retains its existing behavior.
         - delete
         - head
         - options
+        - save_cookies
+        - load_cookies
         - aclose
         - tls_config
         - pool

@@ -6,6 +6,7 @@ Basic of Request.
 """
 
 from __future__ import annotations
+from ja3requests._upload import UploadSource, is_upload
 
 import os
 from io import IOBase
@@ -202,6 +203,8 @@ class BaseRequest(ABC):
         :return:
         """
         self._data = attr
+        if isinstance(attr, UploadSource) or is_upload(attr):
+            return
         if self._data:
             if isinstance(self._data, str):
                 self._data = self._data

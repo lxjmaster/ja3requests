@@ -7,6 +7,8 @@ This module of HTTP Socket.
 
 from ja3requests.base import BaseSocket
 from ja3requests.protocol.tls.debug import debug
+from ja3requests._upload import UploadSource
+from ja3requests.sockets._upload import UploadExchange, upload_headers
 
 
 class HttpSocket(BaseSocket):
@@ -47,6 +49,15 @@ class HttpSocket(BaseSocket):
         read_timeout = getattr(self.context, 'read_timeout', None)
         if read_timeout is not None:
             self.conn.settimeout(read_timeout)
+        if isinstance(self.context.data, UploadSource):
+            headers = upload_headers(self.context)
+            return UploadExchange(
+                self.context,
+                self.conn,
+                self.conn,
+                self.conn.sendall,
+                self.release_response,
+            ).start(headers)
         self.conn.sendall(self.context.message)
         return self.conn
 

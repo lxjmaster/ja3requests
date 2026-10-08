@@ -11,6 +11,10 @@ import io
 import os
 import socket
 import threading
+import time
+from ja3requests._upload import UploadSource
+from ja3requests.exceptions import InvalidData, StreamConsumedError
+from ja3requests.sockets._upload import UploadExchange, _H2WriteGuard, upload_headers
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -30,9 +34,10 @@ from ja3requests.protocol.tls.extensions import Extension
 class _TLSRecordReader(io.RawIOBase):
     """Expose the project's authenticated TLS records as incremental plaintext."""
 
-    def __init__(self, transport):
+    def __init__(self, transport, recv=None):
         super().__init__()
         self.transport = transport
+        self.recv = recv
         self.pending = b""
 
     def readable(self):
@@ -43,7 +48,11 @@ class _TLSRecordReader(io.RawIOBase):
             return 0
         if not self.pending:
             try:
-                self.pending = self.transport._decrypt_single_record() or b""
+                self.pending = (
+                    self.transport._decrypt_single_record()
+                    if self.recv is None
+                    else self.transport._decrypt_single_record(recv=self.recv)
+                ) or b""
             except TLSError as error:
                 raise ConnectionError(f"TLS response failed: {error}") from error
         size = min(len(buffer), len(self.pending))
@@ -92,10 +101,11 @@ class _H2StreamReader(io.RawIOBase):
 class _ResponseConnection:
     """A file adapter whose response owns transport release, not an eager body."""
 
-    def __init__(self, reader, release, body_framed=False):
+    def __init__(self, reader, release, body_framed=False, upload_owner=None):
         self.reader = reader
         self.release_response = release
         self.body_framed = body_framed
+        self.upload_owner = upload_owner
 
     def makefile(self, mode='rb'):
         return io.BufferedReader(self.reader)
@@ -126,6 +136,7 @@ class HttpsSocket(BaseSocket):
         self._h2_pooled_conn = None
         self._h2_reservation = None
         self._h2_io_lock = threading.RLock()
+        self._h2_write_guard = None
 
     @staticmethod
     def _tls_policy_key(config, host):
@@ -316,6 +327,8 @@ class HttpsSocket(BaseSocket):
     def close(self):
         """Close the connection"""
         try:
+            if self._h2_write_guard is not None:
+                self._h2_write_guard.close()
             if self._h2_pooled_conn is not None:
                 self._pool.discard_h2_connection(self._h2_pooled_conn)
             elif self._pool and self._reused and self._pooled_conn:
@@ -360,6 +373,30 @@ class HttpsSocket(BaseSocket):
             read_timeout = getattr(self.context, 'read_timeout', None)
             self.conn.settimeout(read_timeout if read_timeout is not None else 15.0)
 
+            if isinstance(self.context.data, UploadSource):
+
+                def write(data):
+                    with self._h2_io_lock:
+                        for offset in range(0, len(data), 16384):
+                            self.conn.sendall(
+                                self._encrypt_application_data(
+                                    data[offset : offset + 16384]
+                                )
+                            )
+
+                headers = upload_headers(self.context)
+                exchange = UploadExchange(
+                    self.context,
+                    self.conn,
+                    None,
+                    write,
+                    self.release_response,
+                )
+                exchange.response = _ResponseConnection(
+                    _TLSRecordReader(self, recv=exchange.recv), self.release_response
+                )
+                return exchange.start(headers)
+
             # Advance the record sequence once per bounded plaintext fragment.
             # Keep encryption and writes ordered with post-handshake replies.
             with self._h2_io_lock:
@@ -376,6 +413,8 @@ class HttpsSocket(BaseSocket):
         except Exception as e:  # pylint: disable=broad-exception-caught
             debug(f"Encrypted communication failed: {e}")
             self.close()
+            if isinstance(e, (InvalidData, StreamConsumedError)):
+                raise
             raise ConnectionError(f"TLS communication failed: {e}") from e
 
     def _send_h2(self):
@@ -394,7 +433,8 @@ class HttpsSocket(BaseSocket):
 
             tls = self.tls
 
-            def h2_send(data):
+            def h2_send(data, timeout=None):
+                deadline = time.monotonic() + (15.0 if timeout is None else timeout)
                 with self._h2_io_lock:
                     # HTTP/2 frames include a nine-byte header and may exceed
                     # one TLS plaintext record even at the default frame size.
@@ -402,7 +442,7 @@ class HttpsSocket(BaseSocket):
                         encrypted = self._encrypt_application_data(
                             data[offset : offset + 16384]
                         )
-                        self.conn.sendall(encrypted)
+                        self._h2_write_guard.sendall(encrypted, deadline)
 
             def h2_recv(n):
                 return self._decrypt_single_record() or b""
@@ -418,7 +458,14 @@ class HttpsSocket(BaseSocket):
 
             h2 = getattr(tls, '_h2_connection', None)
             if h2 is None:
-                h2 = H2MultiplexConnection(h2_send, h2_recv, settings=h2_settings)
+                self._h2_write_guard = _H2WriteGuard(self.conn)
+                h2 = H2MultiplexConnection(
+                    h2_send,
+                    h2_recv,
+                    settings=h2_settings,
+                    send_with_timeout=h2_send,
+                    close_transport=self._h2_write_guard.close,
+                )
                 h2.initiate(
                     window_update_increment=int(h2_window) if h2_window else None
                 )
@@ -445,8 +492,13 @@ class HttpsSocket(BaseSocket):
             path = getattr(self.context, 'path', '/')
 
             # Build the body through the same context encoder used by HTTP/1.1.
-            _ = self.context.message
-            body = getattr(self.context, 'body', None)
+            uploading = isinstance(self.context.data, UploadSource)
+            if uploading:
+                upload_headers(self.context, h2=True)
+                body = self.context.data
+            else:
+                _ = self.context.message
+                body = getattr(self.context, 'body', None)
             if isinstance(body, str):
                 body = body.encode('utf-8')
 
@@ -457,9 +509,27 @@ class HttpsSocket(BaseSocket):
                 for k, v in ctx_headers.items():
                     req_headers.append((k, v))
 
-            stream_id = h2.send_request(
-                method, host, path, headers=req_headers, body=body, timeout=read_timeout
-            )
+            if uploading:
+                stream_id = h2.begin_upload(
+                    method,
+                    host,
+                    path,
+                    headers=req_headers,
+                    body=body,
+                    timeout=read_timeout,
+                    register=getattr(self.context, '_upload_register', None),
+                )
+                upload_owner = h2._uploads.get(stream_id)
+            else:
+                upload_owner = None
+                stream_id = h2.send_request(
+                    method,
+                    host,
+                    path,
+                    headers=req_headers,
+                    body=body,
+                    timeout=read_timeout,
+                )
             resp_headers = h2.receive_headers(stream_id, timeout=read_timeout)
             released = False
 
@@ -478,6 +548,7 @@ class HttpsSocket(BaseSocket):
                 _H2StreamReader(h2, stream_id, resp_headers, read_timeout),
                 release_stream,
                 body_framed=True,
+                upload_owner=upload_owner,
             )
 
         except Exception as e:  # pylint: disable=broad-exception-caught
@@ -488,18 +559,20 @@ class HttpsSocket(BaseSocket):
                 self.return_to_pool()
             else:
                 self.close()
+            if isinstance(e, (InvalidData, StreamConsumedError)):
+                raise
             raise ConnectionError(f"HTTP/2 communication failed: {e}") from e
 
-    def _decrypt_single_record(self):
+    def _decrypt_single_record(self, recv=None):
         """Read and decrypt a single TLS record, return plaintext."""
         codec = TLSRecordCodec(self.tls)
         while True:
-            header = self._recv_exact(5)
+            header = self._recv_exact(5, recv=recv)
             if not header:
                 codec.check_handshake_complete()
                 return None
             length = codec.record_length(header)
-            payload = self._recv_exact(length)
+            payload = self._recv_exact(length, recv=recv)
             record_type, payload = codec.decode_record(header, payload)
             if record_type == 0x16:
                 self._handle_tls13_post_handshake(payload)
@@ -527,7 +600,10 @@ class HttpsSocket(BaseSocket):
         with self._h2_io_lock:
             replies = _post_handshake_records(self.tls, plaintext)
             for record in replies:
-                self.conn.sendall(record)
+                if self._h2_write_guard is None:
+                    self.conn.sendall(record)
+                else:
+                    self._h2_write_guard.sendall(record, time.monotonic() + 15.0)
 
     def send_key_update(self, request_update=False):
         """Send a TLS 1.3 KeyUpdate on the current connection."""
@@ -536,7 +612,11 @@ class HttpsSocket(BaseSocket):
         if not getattr(tls, '_is_tls13', False) or handshake is None:
             raise ValueError("TLS 1.3 application keys are not available")
         with self._h2_io_lock:
-            self.conn.sendall(handshake.build_key_update(request_update))
+            record = handshake.build_key_update(request_update)
+            if self._h2_write_guard is None:
+                self.conn.sendall(record)
+            else:
+                self._h2_write_guard.sendall(record, time.monotonic() + 15.0)
 
     def _handle_encrypted_response(self):
         """
@@ -571,7 +651,7 @@ class HttpsSocket(BaseSocket):
 
         return None
 
-    def _recv_exact(self, length):
+    def _recv_exact(self, length, recv=None):
         """Receive exactly 'length' bytes from the connection"""
         data = b""
         tls = getattr(self, 'tls', None)
@@ -585,7 +665,7 @@ class HttpsSocket(BaseSocket):
             data = pending[:length]
             setattr(tls, pending_attr, pending[length:])
         while len(data) < length:
-            chunk = self.conn.recv(length - len(data))
+            chunk = (recv or self.conn.recv)(length - len(data))
             if not chunk:
                 return data if data else None
             data += chunk

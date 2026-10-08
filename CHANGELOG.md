@@ -1,5 +1,46 @@
 # Release Notes
 
+## 2.2.0 — streaming request bodies and async file APIs
+
+- Stream binary `data=` files and byte iterators over synchronous/asynchronous
+  HTTP/1.1 and H2; async sources also accept async byte iterators. Bound source
+  reads/pending pieces, honor flow control, preserve complete early responses
+  and isolate H2 producer failures. Borrowed files and ordinary iterators remain open;
+  retries require an unconsumed or replayable source, and length/read failures
+  raise `InvalidData`. Sync redirect behavior remains unchanged.
+- Keep streaming upload progress deadlines separate from the subsequent response
+  wait, so continuous uploads can exceed one timeout interval. Preserve async
+  generator context across body chunks, including ContextVar cleanup. Infer body
+  length only for plain binary files/BytesIO; wrapped streams such as gzip use
+  unknown-length framing unless the caller declares their output length.
+- Propagate cancellation raised by an async upload source without a network
+  retry or a stranded H2 response waiter. Finalize a started native async
+  generator in its upload task, including an early response or cancellation
+  between yields; repeated cancellation waits for its finalizer. Supply a fresh
+  native async generator per request. Custom async iterators remain borrowed.
+- Add async streaming `files=` multipart for paths, binary files and repeated
+  parts, with deterministic metadata per request, lazy owned file handles and
+  replay checks. PathLike inputs are accepted; filename/file tuples are not.
+  Existing synchronous multipart remains buffered.
+
+- Add awaited `AsyncSession.save_cookies()` and `load_cookies()` with the existing
+  interoperable Cookie format, detached snapshots and atomic writes. Helpers on
+  one Session are serialized; cancellation and close join active file work, and
+  a cancelled load cannot mutate the jar afterward. A save may finish its atomic
+  replacement after cancellation. File I/O runs outside the event loop.
+
+- Count HPACK encoder dynamic-table entries using UTF-8 wire bytes, including
+  insertion, eviction and resizing. Reject invalid text header inputs before
+  changing compression state; async H2 validates before admitting a stream, so
+  a local input error does not fail unrelated requests.
+- Compatibility: byte header names/values must now decode as UTF-8 and string
+  inputs must be UTF-8 encodable. Previously accepted arbitrary header bytes can
+  raise `ValueError`. This is a text-API restriction, not an HPACK wire requirement.
+  Raw `encode_string`/`decode_string` codecs still preserve arbitrary bytes.
+  Supply valid UTF-8 text to the header API; raw codecs do not bypass its contract.
+- Add local artifact verification and a full-history documentation CI gate.
+  These changes and the HPACK follow-up are not part of published 2.1.1.
+
 ## 2.1.1 — transport performance and maintenance
 
 - Remove the fixed 300 ms wait from full TLS1.2 handshakes. Continue waiting for

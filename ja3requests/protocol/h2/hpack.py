@@ -6,11 +6,17 @@ Simplified HPACK header compression (RFC 7541).
 Supports static table lookups and literal header encoding.
 """
 
+from __future__ import annotations
+
 import struct
+from typing import Dict, Iterable, List, Optional, Tuple, Union, cast
+
+
+_HeaderField = Union[str, bytes]
 
 
 # HPACK Static Table (RFC 7541 Appendix A) — first 61 entries
-STATIC_TABLE = [
+STATIC_TABLE: List[Optional[Tuple[str, str]]] = [
     None,  # index 0 is unused
     (":authority", ""),
     (":method", "GET"),
@@ -76,8 +82,8 @@ STATIC_TABLE = [
 ]
 
 # Build reverse lookup for static table
-_STATIC_NAME_INDEX = {}
-_STATIC_PAIR_INDEX = {}
+_STATIC_NAME_INDEX: Dict[str, int] = {}
+_STATIC_PAIR_INDEX: Dict[Tuple[str, str], int] = {}
 for _i, _entry in enumerate(STATIC_TABLE):
     if _entry is None:
         continue
@@ -88,7 +94,7 @@ for _i, _entry in enumerate(STATIC_TABLE):
         _STATIC_PAIR_INDEX[(_name, _value)] = _i
 
 
-def encode_integer(value, prefix_bits, first_byte=0):
+def encode_integer(value: int, prefix_bits: int, first_byte: int = 0) -> bytes:
     """
     Encode an integer using HPACK integer encoding (RFC 7541 Section 5.1).
 
@@ -111,7 +117,7 @@ def encode_integer(value, prefix_bits, first_byte=0):
     return result
 
 
-def decode_integer(data, offset, prefix_bits):
+def decode_integer(data: bytes, offset: int, prefix_bits: int) -> Tuple[int, int]:
     """
     Decode an HPACK-encoded integer (RFC 7541 Section 5.1).
 
@@ -142,7 +148,7 @@ def decode_integer(data, offset, prefix_bits):
     raise ValueError("Truncated HPACK integer")
 
 
-def encode_string(s):
+def encode_string(s: _HeaderField) -> bytes:
     """
     Encode a string using HPACK string literal (without Huffman).
 
@@ -159,7 +165,9 @@ class HeaderLimitError(ValueError):
     """The peer exceeded the local compressed or decoded header budget."""
 
 
-def decode_string(data, offset, max_size=None):
+def decode_string(
+    data: bytes, offset: int, max_size: Optional[int] = None
+) -> Tuple[bytes, int]:
     """
     Decode an HPACK string literal (with Huffman support).
 
@@ -192,6 +200,28 @@ def decode_string(data, offset, max_size=None):
     return string_bytes, offset
 
 
+def _hpack_entry_size(name: _HeaderField, value: _HeaderField) -> int:
+    """Count uncompressed octets plus the RFC 7541 table-entry overhead."""
+    name_bytes = name.encode("utf-8") if isinstance(name, str) else name
+    value_bytes = value.encode("utf-8") if isinstance(value, str) else value
+    return len(name_bytes) + len(value_bytes) + 32
+
+
+def validate_header_fields(
+    headers: Iterable[Tuple[_HeaderField, _HeaderField]],
+) -> None:
+    """Validate text fields without changing connection-wide HPACK state."""
+    for name, value in headers:
+        for field in (name, value):
+            try:
+                if isinstance(field, bytes):
+                    field.decode("utf-8")
+                else:
+                    field.encode("utf-8")
+            except UnicodeError as error:
+                raise ValueError("HPACK header fields must be valid UTF-8") from error
+
+
 class HPACKEncoder:
     """
     HPACK encoder with static and dynamic table support.
@@ -200,14 +230,15 @@ class HPACKEncoder:
 
     MAX_DYNAMIC_TABLE_SIZE = 4096
 
-    def __init__(self):
-        self.dynamic_table = []  # List of (name, value) tuples, newest first
+    def __init__(self) -> None:
+        # Names are normalized to str; values retain their input representation.
+        self.dynamic_table: List[Tuple[str, _HeaderField]] = []  # Newest first
         self._dynamic_table_size = 0
         self._max_dynamic_table_size = self.MAX_DYNAMIC_TABLE_SIZE
-        self._pending_table_size_min = None
-        self._pending_table_size_final = None
+        self._pending_table_size_min: Optional[int] = None
+        self._pending_table_size_final: Optional[int] = None
 
-    def set_table_size(self, size):
+    def set_table_size(self, size: int) -> None:
         """Apply a peer limit and announce it at the next header block."""
         size = min(size, self.MAX_DYNAMIC_TABLE_SIZE)
         if size == self._max_dynamic_table_size:
@@ -221,18 +252,28 @@ class HPACKEncoder:
         )
         while self._dynamic_table_size > size and self.dynamic_table:
             name, value = self.dynamic_table.pop()
-            self._dynamic_table_size -= len(name) + len(value) + 32
+            self._dynamic_table_size -= _hpack_entry_size(name, value)
 
-    def encode_headers(self, headers):
+    def encode_headers(
+        self, headers: Iterable[Tuple[_HeaderField, _HeaderField]]
+    ) -> bytes:
         """
-        Encode a list of (name, value) header tuples.
+        Encode UTF-8 (name, value) header tuples.
+
+        Byte fields must contain valid UTF-8; their representation is retained
+        in the encoder table. Unlike this text-header API, encode_string accepts
+        arbitrary octets. Validate the entire block before changing table state.
 
         :param headers: List of (name, value) tuples
         :return: Encoded header block bytes
+        :raises ValueError: A field cannot be represented as UTF-8 text.
         """
+        headers = list(headers)
+        validate_header_fields(headers)
         result = b""
         if self._pending_table_size_final is not None:
-            result += encode_integer(self._pending_table_size_min, 5, 0x20)
+            # set_table_size always initializes both pending sizes together.
+            result += encode_integer(cast(int, self._pending_table_size_min), 5, 0x20)
             if self._pending_table_size_final != self._pending_table_size_min:
                 result += encode_integer(self._pending_table_size_final, 5, 0x20)
             self._pending_table_size_min = None
@@ -241,11 +282,13 @@ class HPACKEncoder:
             result += self._encode_header(name, value)
         return result
 
-    def _find_in_dynamic_table(self, name, value):
+    def _find_in_dynamic_table(
+        self, name: str, value: _HeaderField
+    ) -> Tuple[Optional[int], Optional[int]]:
         """Search dynamic table for exact match or name match.
         Returns (exact_index, name_index) where index is 1-based from static table end.
         """
-        name_match = None
+        name_match: Optional[int] = None
         for i, (n, v) in enumerate(self.dynamic_table):
             idx = len(STATIC_TABLE) + i
             if n == name and v == value:
@@ -254,29 +297,30 @@ class HPACKEncoder:
                 name_match = idx
         return None, name_match
 
-    def _add_to_dynamic_table(self, name, value):
+    def _add_to_dynamic_table(self, name: str, value: _HeaderField) -> None:
         """Add a header to the dynamic table."""
-        entry_size = len(name) + len(value) + 32  # per RFC 7541 Section 4.1
+        entry_size = _hpack_entry_size(name, value)
         # Evict entries if table would exceed max size
         while (
             self._dynamic_table_size + entry_size > self._max_dynamic_table_size
             and self.dynamic_table
         ):
             evicted = self.dynamic_table.pop()
-            self._dynamic_table_size -= len(evicted[0]) + len(evicted[1]) + 32
+            self._dynamic_table_size -= _hpack_entry_size(*evicted)
 
         if entry_size <= self._max_dynamic_table_size:
             self.dynamic_table.insert(0, (name, value))
             self._dynamic_table_size += entry_size
 
-    def _encode_header(self, name, value):
+    def _encode_header(self, name: _HeaderField, value: _HeaderField) -> bytes:
         """Encode a single header field."""
         name_lower = name.lower() if isinstance(name, str) else name.decode().lower()
 
         # Check static table for exact match → indexed
         pair_key = (name_lower, value)
         if pair_key in _STATIC_PAIR_INDEX:
-            idx = _STATIC_PAIR_INDEX[pair_key]
+            # Membership in the static index proves this is a string pair.
+            idx = _STATIC_PAIR_INDEX[cast(Tuple[str, str], pair_key)]
             return encode_integer(idx, 7, 0x80)
 
         # Check dynamic table for exact match → indexed
@@ -322,22 +366,25 @@ class HPACKDecoder:
     HPACK decoder with a bounded dynamic table.
     """
 
-    def __init__(self, max_table_size=4096, max_header_list_size=None):
-        self.dynamic_table = []
+    def __init__(
+        self, max_table_size: int = 4096, max_header_list_size: Optional[int] = None
+    ) -> None:
+        self.dynamic_table: List[Tuple[str, str]] = []
         self._dynamic_table_size = 0
         self._max_table_size = max_table_size
         self._table_size = min(max_table_size, 4096)
         self._max_header_list_size = max_header_list_size
 
-    def _lookup(self, index):
+    def _lookup(self, index: int) -> Tuple[str, str]:
         if 1 <= index < len(STATIC_TABLE):
-            return STATIC_TABLE[index]
+            # Only index zero is the None sentinel in the static table.
+            return cast(Tuple[str, str], STATIC_TABLE[index])
         dynamic_index = index - len(STATIC_TABLE)
         if 0 <= dynamic_index < len(self.dynamic_table):
             return self.dynamic_table[dynamic_index]
         raise ValueError(f"Invalid HPACK header index {index}")
 
-    def _evict_to_fit(self, incoming_size=0):
+    def _evict_to_fit(self, incoming_size: int = 0) -> None:
         while (
             self.dynamic_table
             and self._dynamic_table_size + incoming_size > self._table_size
@@ -347,21 +394,21 @@ class HPACKDecoder:
                 len(name.encode("utf-8")) + len(value.encode("utf-8")) + 32
             )
 
-    def _add_to_dynamic_table(self, name, value):
+    def _add_to_dynamic_table(self, name: str, value: str) -> None:
         entry_size = len(name.encode("utf-8")) + len(value.encode("utf-8")) + 32
         self._evict_to_fit(entry_size)
         if entry_size <= self._table_size:
             self.dynamic_table.insert(0, (name, value))
             self._dynamic_table_size += entry_size
 
-    def decode_headers(self, data):
+    def decode_headers(self, data: bytes) -> List[Tuple[str, str]]:
         """
         Decode an HPACK-encoded header block.
 
         :param data: HPACK-encoded bytes
         :return: List of (name, value) tuples
         """
-        headers = []
+        headers: List[Tuple[str, str]] = []
         offset = 0
         saw_header = False
         header_size = 0

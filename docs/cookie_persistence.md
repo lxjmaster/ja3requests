@@ -12,6 +12,8 @@ context exit do not read, save or delete any Cookie file.
 | `session.load_cookies(path, merge=False, include_session=False)` | Replace stored Cookies with the eligible file entries | Number loaded |
 | `session.load_cookies(path, merge=True, include_session=False)` | Merge eligible entries, replacing only matching identities | Number loaded, not the final jar size |
 | `jar.save(path, include_session=False)` / `jar.load(path, merge=False, include_session=False)` | The same operations on `Ja3RequestsCookieJar` | Number saved/loaded |
+| `await async_session.save_cookies(path, include_session=False)` | Save a detached snapshot without blocking the event loop | Number saved |
+| `await async_session.load_cookies(path, merge=False, include_session=False)` | Validate off-loop, then replace/merge the current jar on its event loop | Number loaded |
 
 `path` is a string or `Path` pointing to a caller-selected file; its parent
 directory must exist. There is no implicit filename or automatic persistence.
@@ -31,11 +33,51 @@ file's entry; replace removes previously stored entries, including when an
 otherwise valid file contains no eligible Cookies. Loading preserves the jar's
 existing Cookie policy; policy objects are not serialized.
 
-Session operations use the stored jar, not the aggregate returned by the
+Synchronous Session operations use the stored jar, not the aggregate returned by the
 `session.cookies` getter. That getter produces a snapshot and can include
 Cookies from the last request/response. Calling `session.cookies.load(...)`
 therefore modifies a snapshot; use `session.load_cookies(...)` to affect future
 requests. Transient per-request Cookies are not included in `save_cookies()`.
+
+## Native async files
+
+The awaited helpers use the same format, defaults, validation and atomic file
+replacement as the synchronous API. Files are interchangeable. `AsyncSession.cookies`
+is the live jar, unlike the synchronous compatibility getter described above.
+Use the awaited helpers for disk access; `session.cookies.save()` remains blocking.
+
+```python
+from pathlib import Path
+from ja3requests import AsyncSession
+
+async def restore_and_save(path: Path) -> None:
+    async with AsyncSession() as session:
+        await session.load_cookies(path, include_session=True)
+        # Make the application's requests here.
+        await session.save_cookies(path, include_session=True)
+```
+
+File helpers on one Session run serially, in the order they acquire their async
+lock. Save snapshots all Cookie fields, including extension metadata, after
+acquiring that lock and before starting file work. Later request updates do not
+change that snapshot. Load parses into detached data; on successful completion
+it updates the Session's then-current jar once, retaining that jar and its policy.
+`merge=True` uses the state at this commit point. Replacement discards all current
+entries, including updates received while reading the file. Already prepared
+requests retain their own Cookie snapshots.
+
+Cancellation while queued starts no file work. Once a worker starts, cancellation
+waits for that worker and its temporary-file cleanup before propagating
+`asyncio.CancelledError`. A save may still replace the destination; cancellation
+does not roll back an atomic replacement. A cancelled load does not apply its
+parsed data later. `aclose()` cancels and joins this Session's file helpers, and
+closed or cross-loop Sessions reject further operations. Blocking filesystem
+calls cannot be forcibly interrupted, so a slow filesystem can delay cancellation
+and close. There is no background auto-save or file-operation timeout.
+
+Different Sessions and external writers are not serialized with one another.
+Concurrent saves use independent temporary files; the last successful replacement
+wins. The helpers do not provide cross-process locking.
 
 ## Example
 

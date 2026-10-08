@@ -3,6 +3,8 @@
 import asyncio
 import gzip
 import json
+from pathlib import Path
+from tempfile import TemporaryDirectory
 import zlib
 
 import brotli
@@ -154,6 +156,17 @@ async def run_demo():
                 assert response.content == b'{"message": "hello"}'
                 cookie = await session.get(base_url + '/cookie', timeout=3)
                 assert await cookie.text() == 'demo=kept'
+                with TemporaryDirectory(prefix='ja3requests-async-cookies-') as root:
+                    path = Path(root) / 'cookies.json'
+                    assert await session.save_cookies(path, include_session=True) == 1
+                    async with AsyncSession(pool=pool) as restored:
+                        assert (
+                            await restored.load_cookies(path, include_session=True) == 1
+                        )
+                        restored_cookie = await restored.get(
+                            base_url + '/cookie', timeout=3
+                        )
+                        assert await restored_cookie.text() == 'demo=kept'
                 retried = await session.get(base_url + '/retry', timeout=3)
                 assert await retried.text() == 'retry complete'
                 assert peer.retry_calls == 2
@@ -213,7 +226,7 @@ async def run_demo():
     finally:
         await peer.aclose()
     print(
-        'PASS: native async JSON, Cookies, retry/hooks, first-chunk streaming, '
+        'PASS: native async JSON, Cookies/file round trip, retry/hooks, first-chunk streaming, '
         'gzip/deflate/br, lines, cancellation, borrowed pool'
     )
 

@@ -54,6 +54,7 @@ class HttpRequest(BaseRequest):
         pool = kwargs.pop('pool', None)
 
         context = HTTPContext()
+        context._upload_register = kwargs.pop('_upload_register', None)
         context.set_payload(
             method=self.method,
             start_line=self.url,
@@ -72,9 +73,15 @@ class HttpRequest(BaseRequest):
             response = HTTPResponse(
                 conn, method=self.method, release=sock.release_response
             )
+            response._upload_owner = conn if hasattr(conn, 'finalize_source') else None
             response.handle()
+            if hasattr(conn, 'upload_headers_received'):
+                conn.upload_headers_received()
         except Exception:
-            sock.close()
+            if 'conn' in locals() and hasattr(conn, 'release_response'):
+                conn.release_response(False)
+            else:
+                sock.close()
             raise
 
         return response

@@ -130,6 +130,9 @@ and non-negative, or `None`; `None` means no deadline for that phase.
 - The read-side value bounds pending request writes/flow-control waits and this
   response's next awaited read progress. Time spent processing a chunk in your
   application is excluded; another H2 stream does not reset this deadline.
+  Streaming uploads apply this value to each source/read-write progress wait;
+  the separate response-header wait starts when upload completes. Early responses
+  remain observable while the request is still being sent.
 - Each retry or redirect hop gets new phase budgets. Backoff uses cancellable
   async waits. Hooks have caller cancellation, without a separate network timer.
 
@@ -192,12 +195,22 @@ The implementation covers direct HTTP/HTTPS, project TLS1.2/1.3, negotiated H2,
 HTTP CONNECT and SOCKS4a/5, in-memory Cookies, hooks, retry/redirect policy and
 compressed response streaming. Proxy routes are explicit request arguments;
 environment proxy discovery and an HTTPS connection to the proxy are outside
-the first scope.
+the first scope. Unlike the synchronous simple parser, async accepts `http`,
+`socks4`, `socks4a`, `socks5` and `socks5h` URLs with an explicit host and port,
+percent-decodes credentials, and includes the proxy URL in its connection-pool
+key. See the [API-specific proxy contracts](proxies.md#native-asyncsession).
 
-Request bodies support in-memory bytes/text, form fields and JSON. Pre-encoded
-multipart bytes can be supplied as `data` with their matching Content-Type.
-Deferred interfaces are file-object/path `files=` uploads, Cookie-file helpers,
-streaming uploads, a public prepared-request/`send()` API and async module-level
+Request bodies support in-memory bytes/text, form fields and JSON. Streaming
+uploads add binary files, byte iterators and async byte iterators as
+`data=`, and streaming multipart paths/handles as `files=`. See the
+[upload contract](streaming.md#streaming-request-bodies) for length,
+replay, cancellation and caller ownership. Pre-encoded multipart bytes can still
+be supplied as `data` with their matching Content-Type.
+Awaited `save_cookies()` and `load_cookies()` reuse the synchronous
+file format with detached snapshots, serial file operations and owned cancellation
+cleanup. See [async Cookie files](cookie_persistence.md#native-async-files).
+
+Deferred interfaces are a public prepared-request/`send()` API and async module-level
 convenience functions. HTTP/3, QUIC, ECH/PQ, 0-RTT, server push, Trio/AnyIO and
 cross-loop pools are not added by this implementation.
 

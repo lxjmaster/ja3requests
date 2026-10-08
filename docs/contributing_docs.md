@@ -30,7 +30,7 @@ GitHub Pages configuration, commit or remote write is part of these commands.
 missing targets, unrecognized links and invalid anchors are enabled as warnings.
 `docs/verify.py` additionally follows generated HTML links and asset references,
 checks required synchronous/async API IDs and Python code-fence syntax, and
-executes both documented local examples. To check an alternate build directory:
+executes all three documented local examples. To check an alternate build directory:
 
 ```sh
 .venv/bin/python -m mkdocs build --strict --site-dir /path/to/task-owned-site
@@ -40,7 +40,18 @@ executes both documented local examples. To check an alternate build directory:
 The checker does not claim availability of external websites. Repository-source
 links retained in the three historical guides are pinned to the published
 2.0.1 commit so their evidence does not drift with a later default branch.
-It checks those source paths against the local Git object when available.
+For every pinned link, it unconditionally runs `git cat-file -e` against the
+referenced commit and path. Those historical Git objects must be available:
+use a full-history checkout, or fetch the referenced objects before checking.
+A shallow checkout that lacks them fails verification; the check is not skipped.
+A `git archive` directory or extracted sdist is not a substitute for that checkout.
+
+The documentation workflow uses Python 3.12, a full-history checkout
+(`fetch-depth: 0`), and the same strict build and checker commands above. It
+installs the project with the separate docs requirements and runs the three local
+examples. Its repository permission is `contents: read`; it does not deploy a
+site or upload artifacts. A successful local run does not claim that the workflow
+has run on GitHub; that requires a later authorized push or workflow run.
 
 Keep guide behavior consistent with the current source, label changes that are
 not yet released, and preserve dated acceptance records. A docs build is not a

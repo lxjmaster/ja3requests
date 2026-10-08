@@ -45,8 +45,14 @@ including `assert_type` checks that catch an accidental `Any` return. Every
 `# E:` line in `invalid.py` must produce its specific diagnostic; wrong URLs,
 timeouts, streaming options, upload tuples, callback returns, TLS configuration,
 Cookie values, and response return types are covered. The current consumers
-include 39 negative markers: async additions reject synchronous pools, incorrect
-awaited return types, invalid budgets/iterators, and deferred file-upload APIs.
+include 59 negative markers: async additions reject synchronous pools, incorrect
+awaited return types, invalid budgets/iterators, text files and unsupported file tuples.
+Synchronous upload calls reject async iterators; async calls accept byte iterators
+and async byte iterators. Async multipart paths include `PathLike[str]`.
+Eight HPACK cases reject invalid codec inputs, header fields and table/header
+limits.
+The awaited Cookie-file methods preserve integer results and reject invalid paths,
+option types and result assignments in installed consumers.
 Temporary files are
 removed on exit. The script never sends HTTP requests.
 
@@ -54,10 +60,19 @@ The checker uses `follow_imports = silent`, which loads imported inline types
 while withholding diagnostics from implementation bodies. It does **not** use
 `follow_imports = skip`, `ignore_errors`, or a global missing-import exemption.
 The source gate strictly checks the aliases, top-level facade, retry policy,
-HTTP/2 frame values, HPACK Huffman codec, and ClientHello inspection schema.
+HTTP/2 frame values, HPACK header and Huffman codecs, and the ClientHello
+inspection schema.
 The protocol modules are an incremental internal migration, not a claim that
 the full connection and TLS implementation is type-clean. Installed consumers
-also check precise protocol-value return types and three invalid protocol uses.
+also check precise protocol-value return types and eleven invalid protocol uses.
+HPACK consumers preserve iterable string/bytes header inputs, distinct encoder
+value representations, and the decoder's string-pair results without widening
+those boundaries to `Any`.
+The header encoder accepts UTF-8 text: byte-valued names and values must decode
+as UTF-8, and strings must be UTF-8 encodable. Invalid text raises `ValueError`
+before any table state changes. This is a text-header API restriction, not an
+HPACK wire-format requirement; the lower-level `encode_string`/`decode_string`
+primitives continue to preserve arbitrary bytes.
 To inspect the non-gating internal migration backlog explicitly:
 
 ```sh
@@ -69,5 +84,7 @@ diagnostics in protocol internals and mutable compatibility classes. It is not
 the public-consumer acceptance gate. JSON results intentionally remain `Any`;
 request JSON input matches the current `dict`/`str`/`bytes` implementation. Upload
 values in the synchronous API are paths or binary file objects (optionally lists),
-not the filename/file tuple convention of other HTTP clients. The initial async
-API accepts replayable in-memory body bytes and has no `files` parameter.
+not the filename/file tuple convention of other HTTP clients. Unreleased raw
+`data=` uploads accept binary files and byte iterators in both APIs, with async
+iterators additionally supported by AsyncSession. Async `files=` has the same
+mapping convention and also accepts `PathLike[str]` values.
