@@ -9,10 +9,11 @@ from __future__ import annotations
 from ja3requests._upload import UploadSource
 from ja3requests.exceptions import InvalidData
 
-from urllib.parse import urlparse, urlencode, parse_qsl
+from urllib.parse import urlsplit, urlencode, parse_qsl
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Tuple, Union
 from ja3requests._typing import Data, HeaderValue, JsonBody, Timeout
+from ja3requests.utils import _encode_http1_headers, _validated_header_items
 from json import dumps
 import mimetypes
 
@@ -30,6 +31,7 @@ class BaseContext(ABC):
         self._protocol_version = None
         self._method = None
         self._destination_address = None
+        self._host_authority = None
         self._path = None
         self._port = None
         self._headers = None
@@ -149,8 +151,19 @@ class BaseContext(ABC):
         :return:
         """
         if attr:
-            parse = urlparse(attr)
+            parse = urlsplit(attr)
             self.destination_address = parse.hostname
+            if parse.port is not None:
+                self.port = parse.port
+            else:
+                self.port = 443 if parse.scheme.lower() == "https" else 80
+
+            host = self.destination_address or ""
+            authority = "[%s]" % host if ":" in host else host
+            default_port = 443 if parse.scheme.lower() == "https" else 80
+            if self.port != default_port:
+                authority += ":%d" % self.port
+            self._host_authority = authority
             self.path = parse.path
             if self.path == "":
                 self.path = "/"
@@ -177,9 +190,11 @@ class BaseContext(ABC):
         """
         headers = attr
         if headers:
-            if not headers.get("Host", None):
-                if self.destination_address:
-                    headers.update({"Host": self.destination_address})
+            if not any(name.lower() == "host" for name in headers):
+                if self._host_authority or self.destination_address:
+                    headers.update(
+                        {"Host": self._host_authority or self.destination_address}
+                    )
 
             if self.method in ["POST", "PUT"]:
                 if isinstance(self.data, UploadSource):
@@ -211,6 +226,16 @@ class BaseContext(ABC):
                     )
 
         self._headers = headers
+
+    def _validated_header_items(self):
+        """Return final header pairs after validating wire-safe text.
+
+        Hooks can edit the request after the normal header setters run, so
+        validation belongs immediately before every serialization path.
+        Field names use the RFC token grammar; values allow horizontal tab but
+        reject all other C0 controls and DEL, including CR, LF and NUL.
+        """
+        return _validated_header_items(self.headers)
 
     @property
     def data(self) -> Optional[str]:
@@ -353,9 +378,7 @@ class BaseContext(ABC):
                 message += self.start_line.encode()
             if self.headers:
                 message += b"\r\n"
-                message += "\r\n".join(
-                    [f"{k}: {v}" for k, v in self.headers.items()]
-                ).encode()
+                message += _encode_http1_headers(self.headers)
 
             message += b"\r\n\r\n"
 

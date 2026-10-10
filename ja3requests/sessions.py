@@ -21,7 +21,7 @@ from ja3requests.const import DEFAULT_REDIRECT_LIMIT
 from ja3requests.base import BaseRequest
 from ja3requests.requests.request import Request
 from ja3requests.exceptions import MaxRetriedException
-from ja3requests.protocol.tls.config import TlsConfig
+from ja3requests.protocol.tls.config import TlsConfig, _validate_http_alpn
 from ja3requests.pool import ConnectionPool, get_default_pool
 from ja3requests.cookies import (
     Ja3RequestsCookieJar,
@@ -33,6 +33,7 @@ from ja3requests.retry import HTTPRetry
 from ja3requests._cookie_file import load_cookie_file, save_cookie_file
 from ja3requests._upload import UploadSource, is_upload
 from ja3requests.sockets._upload import upload_length
+from ja3requests.utils import _validated_header_items
 from ja3requests.exceptions import InvalidData, StreamConsumedError
 from ja3requests._typing import (
     Auth,
@@ -454,6 +455,11 @@ class Session(BaseSession):
         # Dispatch before_request hooks
         request = self._dispatch_hooks("before_request", request, per_request_hooks)
         request._refresh_cookies()
+        # Caller input errors must not open a connection or enter HTTP retries.
+        # Keep raw bytes intact: the chosen transport owns their encoding.
+        _validated_header_items(request.headers)
+        if request.schema == 'https' and request.tls_config is not None:
+            _validate_http_alpn(request.tls_config.alpn_protocols)
         source = request.data
         if is_upload(source) or isinstance(source, UploadSource):
             if request.json is not None or request.files:
@@ -526,8 +532,9 @@ class Session(BaseSession):
                     last_response = response
                     if attempt < max_attempts - 1:
                         response.close()
-                        retry.sleep_for_retry(response, attempt + 1)
                         request._refresh_cookies()
+                        _validated_header_items(request.headers)
+                        retry.sleep_for_retry(response, attempt + 1)
                         retrying = True
                         continue
                     break

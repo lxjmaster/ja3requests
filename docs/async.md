@@ -158,6 +158,10 @@ snapshot, including expiry and deletion. Status retries rebuild automatically
 generated Cookie headers from that updated snapshot; explicit or hook-modified
 Cookie headers retain their precedence. Cookies passed to one request are not
 persisted in the Session unless the server sets them in a response.
+Automatic Cookie refreshes are validated after URL selection and response
+updates. Invalid values raise `ValueError` before source preparation, retry
+backoff/replay or the next connection; rejecting them preserves an existing
+shared H2 connection.
 
 Async redirects preserve method/body for 307/308, change POST to GET for 301/302,
 and use GET for 303 except HEAD. The limit is eight redirects. Cross-origin hops
@@ -210,9 +214,103 @@ Awaited `save_cookies()` and `load_cookies()` reuse the synchronous
 file format with detached snapshots, serial file operations and owned cancellation
 cleanup. See [async Cookie files](cookie_persistence.md#native-async-files).
 
-Deferred interfaces are a public prepared-request/`send()` API and async module-level
-convenience functions. HTTP/3, QUIC, ECH/PQ, 0-RTT, server push, Trio/AnyIO and
+Async module-level helpers and prepared streaming bodies remain deferred.
+HTTP/3, QUIC, ECH/PQ, 0-RTT, server push, Trio/AnyIO and
 cross-loop pools are not added by this implementation.
+
+## Prepare, inspect and send buffered requests
+
+Buffered prepared requests are available starting with **2.3.0**.
+Use `await session.prepare_request()` to encode a request without connecting,
+running hooks or sending anything. Inspect its normalized `method`, `url`,
+read-only `headers` and bytes `body`. To add a signature, derive new headers:
+
+```python
+import hashlib
+import hmac
+from ja3requests import AsyncSession
+
+async def signed_post(url, signing_key):
+    async with AsyncSession() as session:
+        prepared = await session.prepare_request(
+            "POST", url, params={"page": 1}, json={"message": "hello"}
+        )
+        # This example protocol signs method, encoded URL and body only.
+        payload = prepared.method.encode() + b"\n" + prepared.url.encode() + b"\n" + prepared.body
+        signature = hmac.new(signing_key, payload, hashlib.sha256).hexdigest()
+        signed = prepared.with_headers(dict(prepared.headers, Authorization=signature))
+        response = await session.send(signed, timeout=(3, 10), allow_redirects=False)
+        response.raise_for_status()
+        return await response.json()
+```
+
+Preparation normalizes the destination URL before signing: protocol and host
+names use the transport's casing, internationalized hosts use IDNA, port leading
+zeros and default ports are removed, an empty path becomes `/`, and empty query
+delimiters and fragments are omitted. For example, `HTTP://HOST:00080/signed?`
+becomes `http://host/signed`; `http://host?q=1` becomes `http://host/?q=1`.
+Existing percent-encoded paths, leading slash counts and query contents are
+preserved in both the inspected URL and the HTTP1/HTTP2 request target.
+Generated Cookies are selected for this normalized destination. An explicit
+`Host` override remains in the headers and does not change the destination URL;
+include that header in your signing protocol when it matters to verification.
+
+`with_headers()` replaces the header mapping, validates it and restores
+Host/Content-Length framing as usual. It creates a separate prepared object.
+Header names must use ASCII HTTP token characters. Values may contain horizontal
+tab, but other C0 controls and DEL raise `ValueError`. The same validation applies
+to ordinary requests, preparation, derived headers and send-time hook edits,
+before network I/O or HTTP2 stream admission.
+Inspection exposes `Mapping[str, Union[str, bytes]]`: bytes stay unchanged,
+text stays text and numeric values become strings. `with_headers()` preserves
+byte values as well. HTTP1 writes bytes unchanged and encodes text as Latin-1;
+H2 requires UTF-8 bytes and encodes text as UTF-8. Protocol-specific encoding
+errors raise `ValueError` at send after negotiation, before request fields are
+written; they do not damage an existing shared H2 connection. Preparation does
+not negotiate a protocol or promise that every syntactically valid value is
+encodable by the eventual transport.
+A Cookie supplied in this replacement mapping is explicit, even when copied
+unchanged from generated headers, and is not refreshed on retries. Omitting a
+previously generated Cookie removes it. Live Session response Cookies still update.
+Prepare and send on the same Session and event loop. Sending with another
+Session raises `ValueError`; a closed Session or another loop raises
+`RuntimeError`. Use the Session factory rather than constructing
+`AsyncPreparedRequest` directly.
+
+| Prepared input | Behavior |
+| --- | --- |
+| `data=None`, bytes/text, form mapping/pairs | Encoded into immutable bytes using the existing request encoder |
+| `json` dict/text/bytes | Existing JSON encoding; cannot combine with `data` |
+| Binary files and sync/async byte iterators | `InvalidData` before reading, seeking, iterating or closing a source |
+| `files=` | Unsupported keyword (`TypeError`); use the high-level `request()` upload API |
+
+Preparation snapshots Cookie jars, proxy routes and TLS configuration, including
+`verify`, ALPN and client certificate settings, when its coroutine executes.
+File paths are copied as configuration; their contents are read at transport
+setup. The TLS session-cache object stays shared. Later changes to input
+mappings or Session configuration do not change this prepared request.
+
+Each `send()` clones request metadata and its Cookie/TLS/proxy state, so buffered
+requests can be sent sequentially or concurrently. Each send still has normal
+application effects; request reuse provides no exactly-once guarantee. Response
+Cookies update the live Session and the send's private snapshots. Generated
+Cookie headers continue expiry filtering and refresh after retry/redirect
+responses; a later independent resend begins from the prepared Cookie snapshot.
+
+Session hooks and retry policy are chosen at send time. Existing hooks receive
+mutable request metadata, run once per redirect hop and may change signed fields;
+they must leave a bytes body for this prepared API. Hook failures, ownership
+transfer and cancellation use the same dispatcher as `request()`. An application
+signing changed fields or a redirected URL must recompute its signature; use
+`allow_redirects=False` when its signing protocol requires a fixed URL.
+For protocols that sign Cookies, supply the chosen Cookie explicitly through
+`with_headers()`. If a signature depends on automatic changes between attempts,
+disable automatic retry/redirect policy or manage those attempts in application
+code. Before-request hooks do not run again for a status retry.
+
+`send(..., stream=True)` returns a live response owned by that Session. Consume
+or close it, or use its async context manager before closing the Session. The
+prepared object itself owns no transport and needs no close method.
 
 Use the [self-contained local async example](examples.md#native-async-loopback-example)
 to exercise the public API without external services. The

@@ -24,11 +24,19 @@ from ja3requests.exceptions import (
     TLSError,
     TLSDecryptionError,
     TLSKeyError,
+    TLSHandshakeError,
 )
 from ja3requests.protocol.tls import TLS
+from ja3requests.protocol.tls.config import _validate_http_alpn
 from ja3requests.protocol.tls.crypto import AESCipher, _decrypt_tls12_cbc_record
 from ja3requests.protocol.tls.debug import debug
 from ja3requests.protocol.tls.extensions import Extension
+from ja3requests.protocol.h2.frame import (
+    normalize_settings,
+    validate_initial_window,
+    normalize_pseudo_header_order,
+    normalize_priority_frames,
+)
 
 
 class _TLSRecordReader(io.RawIOBase):
@@ -142,6 +150,8 @@ class HttpsSocket(BaseSocket):
     def _tls_policy_key(config, host):
         if config is None:
             return None
+        _validate_http_alpn(config.alpn_protocols)
+        validate_initial_window(config.h2_window_update)
         return (
             config.tls_version,
             tuple(
@@ -178,7 +188,9 @@ class HttpsSocket(BaseSocket):
             config.verify_cert,
             config.client_cert,
             config.client_key,
-            tuple((config.h2_settings or {}).items()),
+            normalize_settings(config.h2_settings),
+            normalize_pseudo_header_order(config.h2_pseudo_header_order),
+            normalize_priority_frames(config.h2_priority_frames),
             config.h2_window_update,
         )
 
@@ -249,6 +261,8 @@ class HttpsSocket(BaseSocket):
             tls._pool_policy_key = policy_key
             tls.set_payload(tls_config=tls_config)
             handshake_success = tls.handshake()
+            if handshake_success:
+                self._validate_negotiated_protocol(tls._negotiated_protocol)
         except Exception:  # pylint: disable=broad-exception-caught
             self.close()
             raise
@@ -349,10 +363,18 @@ class HttpsSocket(BaseSocket):
         self._reused = False
         self._release_h2_reservation()
 
+    @staticmethod
+    def _validate_negotiated_protocol(protocol):
+        """No ALPN retains HTTP1 compatibility; any selection must be implemented."""
+        if protocol not in (None, 'http/1.1', 'h2'):
+            raise TLSHandshakeError(
+                f"Unsupported negotiated ALPN protocol: {protocol!r}"
+            )
+
     def send(self):
         """
         Send HTTP message over TLS connection.
-        Routes to HTTP/2 if ALPN negotiated 'h2', otherwise HTTP/1.1.
+        Route supported ALPN selections; no ALPN retains HTTP/1.1 compatibility.
         :return:
         """
         if not (hasattr(self, 'tls') and self.tls):
@@ -362,6 +384,11 @@ class HttpsSocket(BaseSocket):
 
         # Check if ALPN negotiated HTTP/2
         negotiated = getattr(self.tls, '_negotiated_protocol', None)
+        try:
+            self._validate_negotiated_protocol(negotiated)
+        except TLSHandshakeError:
+            self.close()
+            raise
         if negotiated == 'h2':
             return self._send_h2()
 
@@ -413,7 +440,7 @@ class HttpsSocket(BaseSocket):
         except Exception as e:  # pylint: disable=broad-exception-caught
             debug(f"Encrypted communication failed: {e}")
             self.close()
-            if isinstance(e, (InvalidData, StreamConsumedError)):
+            if isinstance(e, (ValueError, InvalidData, StreamConsumedError)):
                 raise
             raise ConnectionError(f"TLS communication failed: {e}") from e
 
@@ -463,12 +490,16 @@ class HttpsSocket(BaseSocket):
                     h2_send,
                     h2_recv,
                     settings=h2_settings,
+                    pseudo_header_order=(
+                        tls_config.h2_pseudo_header_order if tls_config else None
+                    ),
+                    priority_frames=(
+                        tls_config.h2_priority_frames if tls_config else None
+                    ),
                     send_with_timeout=h2_send,
                     close_transport=self._h2_write_guard.close,
                 )
-                h2.initiate(
-                    window_update_increment=int(h2_window) if h2_window else None
-                )
+                h2.initiate(window_update_increment=h2_window)
                 tls._h2_connection = h2
                 if multiplexed:
                     pooled = self._pool.put_h2_connection(
@@ -502,12 +533,14 @@ class HttpsSocket(BaseSocket):
             if isinstance(body, str):
                 body = body.encode('utf-8')
 
-            # Build headers from context
-            req_headers = []
-            ctx_headers = getattr(self.context, 'headers', None) or {}
-            if isinstance(ctx_headers, dict):
-                for k, v in ctx_headers.items():
-                    req_headers.append((k, v))
+            # Validate field syntax without changing HPACK's UTF-8 byte input.
+            self.context._validated_header_items()
+            req_headers = list((self.context.headers or {}).items())
+            host = next(
+                (value for name, value in req_headers if name.lower() == 'host'),
+                getattr(self.context, '_host_authority', None) or host,
+            )
+            host = host.decode('utf-8') if isinstance(host, bytes) else str(host)
 
             if uploading:
                 stream_id = h2.begin_upload(
@@ -559,7 +592,7 @@ class HttpsSocket(BaseSocket):
                 self.return_to_pool()
             else:
                 self.close()
-            if isinstance(e, (InvalidData, StreamConsumedError)):
+            if isinstance(e, (ValueError, InvalidData, StreamConsumedError)):
                 raise
             raise ConnectionError(f"HTTP/2 communication failed: {e}") from e
 

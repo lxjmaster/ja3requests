@@ -26,8 +26,8 @@ TLS 握手和记录层由本项目实现，密码学基础运算使用 `cryptogr
 
 Ja3Requests 支持 HTTP 和 HTTPS 上的 HTTP/1.1；HTTPS 连接也可以通过 ALPN
 协商 HTTP/2。2.0 默认验证证书，优先使用 TLS 1.3，并允许 TLS 1.2 ECDHE/GCM 回退。
-2.2.0 版本链接：[PyPI](https://pypi.org/project/ja3requests/2.2.0/)
-和 [GitHub](https://github.com/lxjmaster/ja3requests/releases/tag/v2.2.0)。
+2.3.0 版本链接：[PyPI](https://pypi.org/project/ja3requests/2.3.0/)
+和 [GitHub](https://github.com/lxjmaster/ja3requests/releases/tag/v2.3.0)。
 本版本新增流式请求体、异步 multipart/files 和异步 Cookie 文件；范围及限制见
 [发布说明](CHANGELOG.md)。
 

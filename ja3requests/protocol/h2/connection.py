@@ -29,16 +29,26 @@ from ja3requests.protocol.h2.frame import (
     build_data_frame,
     build_ping_frame,
     build_rst_stream_frame,
+    build_priority_frame,
+    normalize_settings,
+    validate_initial_window,
+    normalize_pseudo_header_order,
+    normalize_priority_frames,
     data_payload,
     header_block_fragment,
-    parse_settings_payload,
+    parse_settings_pairs,
     DEFAULT_SETTINGS,
     SETTINGS_HEADER_TABLE_SIZE,
     SETTINGS_ENABLE_PUSH,
     SETTINGS_MAX_FRAME_SIZE,
     SETTINGS_MAX_HEADER_LIST_SIZE,
 )
-from ja3requests.protocol.h2.hpack import HeaderLimitError, HPACKEncoder, HPACKDecoder
+from ja3requests.protocol.h2.hpack import (
+    HeaderLimitError,
+    HPACKEncoder,
+    HPACKDecoder,
+    validate_header_fields,
+)
 from ja3requests.protocol.tls.debug import debug
 
 
@@ -64,21 +74,31 @@ class H2Connection:
     4. Receive and assemble response HEADERS + DATA
     """
 
-    def __init__(self, send_func, recv_func, settings=None):
+    def __init__(
+        self,
+        send_func,
+        recv_func,
+        settings=None,
+        pseudo_header_order=None,
+        priority_frames=None,
+    ):
         """
         :param send_func: Callable to send bytes (e.g., tls.encrypt + socket.send)
         :param recv_func: Callable to receive bytes
-        :param settings: Custom SETTINGS dict for H2 fingerprinting
+        :param settings: Exact ordered SETTINGS mapping or pairs; None uses defaults
         """
         self._send = send_func
         self._recv = recv_func
         self._encoder = HPACKEncoder()
         self._next_stream_id = 1  # Client streams are odd-numbered
+        self._wire_settings = normalize_settings(settings)
+        self._pseudo_header_order = normalize_pseudo_header_order(pseudo_header_order)
+        self._priority_frames = normalize_priority_frames(priority_frames)
         self._local_settings = dict(DEFAULT_SETTINGS)
-        if settings:
-            self._local_settings.update(settings)
-        if self._local_settings[SETTINGS_ENABLE_PUSH] != 0:
-            raise ValueError("HTTP/2 server push is not supported")
+        self._local_settings.update(self._wire_settings)
+        # Decoded headers need a local budget even when ID 6 is not advertised.
+        # Keep the previous 16 KiB budget as that fallback; explicit ID 6,
+        # including zero, overrides it without adding fields to wire SETTINGS.
         header_limit = self._local_settings[SETTINGS_MAX_HEADER_LIST_SIZE]
         self._decoder = HPACKDecoder(
             self._local_settings[SETTINGS_HEADER_TABLE_SIZE], header_limit
@@ -120,14 +140,17 @@ class H2Connection:
         :param window_update_increment: Optional initial WINDOW_UPDATE value
             for H2 fingerprint customization.
         """
+        validate_initial_window(window_update_increment)
+        if self._preface_sent:
+            raise RuntimeError("HTTP/2 connection is already initiated")
         # Send connection preface magic
         self._send(CONNECTION_PREFACE)
 
         # Send SETTINGS frame
-        settings_frame = build_settings_frame(self._local_settings)
+        settings_frame = build_settings_frame(self._wire_settings)
         self._send(settings_frame.serialize())
         self._preface_sent = True
-        debug(f"H2: Sent SETTINGS: {self._local_settings}")
+        debug(f"H2: Sent SETTINGS: {self._wire_settings}")
 
         # Send WINDOW_UPDATE if specified (for H2 fingerprinting)
         if window_update_increment:
@@ -136,6 +159,54 @@ class H2Connection:
             self._connection_receive_target += window_update_increment
             self._connection_receive_window += window_update_increment
             debug(f"H2: Sent WINDOW_UPDATE increment={window_update_increment}")
+
+        for priority in self._priority_frames:
+            self._send(build_priority_frame(*priority).serialize())
+
+    def _prepare_request_headers(self, method, authority, path, headers, scheme):
+        """Prepare all sender paths before stream or HPACK state changes."""
+        pseudo = {
+            ":method": method,
+            ":authority": authority,
+            ":scheme": scheme,
+            ":path": path,
+        }
+        fields = []
+        for name, value in headers or ():
+            try:
+                name = name.decode('utf-8') if isinstance(name, bytes) else name
+            except UnicodeError as error:
+                raise ValueError(
+                    "HTTP/2 header fields must contain valid UTF-8"
+                ) from error
+            fields.append(
+                (name.lower(), value if isinstance(value, (str, bytes)) else str(value))
+            )
+        excluded = {
+            "host",
+            "connection",
+            "transfer-encoding",
+            "upgrade",
+            "keep-alive",
+            "proxy-connection",
+        }
+        for name, value in fields:
+            if name == "connection":
+                tokens = value.decode("ascii") if isinstance(value, bytes) else value
+                excluded.update(token.strip().lower() for token in tokens.split(","))
+        result = [(name, pseudo[name]) for name in self._pseudo_header_order]
+        for name, value in fields:
+            if name in excluded:
+                continue
+            if name.startswith(":"):
+                raise ValueError("HTTP/2 regular headers cannot contain pseudo-headers")
+            if name == "te":
+                text = value.decode("ascii") if isinstance(value, bytes) else value
+                if text.strip().lower() != "trailers":
+                    raise ValueError("HTTP/2 TE only supports trailers")
+            result.append((name, value))
+        validate_header_fields(result)
+        return result
 
     def send_request(
         self, method, authority, path, headers=None, body=None, scheme="https"
@@ -153,6 +224,9 @@ class H2Connection:
         """
         if body is not None and not isinstance(body, bytes):
             raise TypeError("HTTP/2 request body must be bytes")
+        h2_headers = self._prepare_request_headers(
+            method, authority, path, headers, scheme
+        )
         if self._failed is not None:
             raise self._failed
         if self._goaway_received:
@@ -163,26 +237,6 @@ class H2Connection:
         self._next_stream_id += 2
         self._active_receive_stream = stream_id
         self._stream_receive_window = self._local_settings[4]
-
-        # Build pseudo-headers + regular headers
-        h2_headers = [
-            (":method", method),
-            (":authority", authority),
-            (":scheme", scheme),
-            (":path", path),
-        ]
-        if headers:
-            for name, value in headers:
-                lower_name = name.lower()
-                # Skip connection-specific headers
-                if lower_name in ("host", "connection", "transfer-encoding", "upgrade"):
-                    continue
-                h2_headers.append(
-                    (
-                        lower_name,
-                        value if isinstance(value, (str, bytes)) else str(value),
-                    )
-                )
 
         # Encode headers with HPACK
         header_block = self._encoder.encode_headers(h2_headers)
@@ -282,6 +336,40 @@ class H2Connection:
             raise ValueError("Invalid HTTP/2 response :status")
         return status
 
+    @classmethod
+    def _validate_response_headers(cls, headers, trailers=False):
+        """Validate a fully decoded block before exposing any HTTP fields."""
+        regular_seen = False
+        for name, value in headers:
+            pseudo = name.startswith(":")
+            token = name[1:] if pseudo else name
+            if not token or any(
+                char not in "!#$%&'*+-.^_`|~0123456789abcdefghijklmnopqrstuvwxyz"
+                for char in token
+            ):
+                raise ValueError("Invalid HTTP/2 response field name")
+            if any(char in value for char in "\x00\r\n") or (
+                value and (value[0] in " \t" or value[-1] in " \t")
+            ):
+                raise ValueError("Invalid HTTP/2 response field value")
+            if pseudo:
+                if trailers or regular_seen or name != ":status":
+                    raise ValueError("Invalid HTTP/2 response pseudo-header :status")
+            else:
+                regular_seen = True
+                if name in (
+                    "connection",
+                    "proxy-connection",
+                    "keep-alive",
+                    "transfer-encoding",
+                    "upgrade",
+                    "te",
+                ):
+                    raise ValueError(
+                        "Invalid HTTP/2 connection-specific response field"
+                    )
+        return None if trailers else cls._response_status(headers)
+
     def _wait_for_send_window(self, stream_id):
         """Process control frames while retaining an early response."""
         for frame in self._read_frames():
@@ -338,7 +426,7 @@ class H2Connection:
                 frames, self._pending_frames = self._pending_frames, []
             else:
                 frames = [(frame, False) for frame in self._read_frames()]
-            for frame, flow_accounted in frames:
+            for index, (frame, flow_accounted) in enumerate(frames):
                 if end_stream and frame.stream_id == stream_id:
                     if frame.type in (FRAME_DATA, FRAME_HEADERS, FRAME_CONTINUATION):
                         raise ValueError("HTTP/2 response frame after END_STREAM")
@@ -381,19 +469,25 @@ class H2Connection:
                         header_block += frame.payload
                     if frame.flags & FLAG_END_HEADERS:
                         decoded = self._decode_headers(header_block)
-                        if response_headers is None:
-                            status = self._response_status(decoded)
-                            if status < 200:
-                                if header_end_stream:
-                                    raise ValueError(
-                                        "HTTP/2 interim response ended stream"
-                                    )
-                            else:
-                                response_headers = decoded
-                        elif not header_end_stream or any(
-                            name.startswith(":") for name, _ in decoded
-                        ):
-                            raise ValueError("Invalid HTTP/2 response trailers")
+                        try:
+                            status = self._validate_response_headers(
+                                decoded, trailers=response_headers is not None
+                            )
+                            if response_headers is None:
+                                if status < 200:
+                                    if header_end_stream:
+                                        raise ValueError(
+                                            "HTTP/2 interim response ended stream"
+                                        )
+                                else:
+                                    response_headers = decoded
+                            elif not header_end_stream:
+                                raise ValueError("Invalid HTTP/2 response trailers")
+                        except ValueError:
+                            self._active_receive_stream = None
+                            self._pending_frames[0:0] = frames[index + 1 :]
+                            self._send(build_rst_stream_frame(stream_id, 1).serialize())
+                            raise
                         header_block = b""
                         header_open = False
                         if header_end_stream:
@@ -586,30 +680,40 @@ class H2Connection:
             self._clear_header_buffers()
             raise error
 
+    def _update_send_windows(self, delta):
+        if self._active_send_stream is not None:
+            self._stream_send_window += delta
+            if self._stream_send_window > 0x7FFFFFFF:
+                raise ValueError("HTTP/2 stream send window overflow")
+
+    def _apply_peer_settings(self, payload):
+        """Apply each entry, so intermediate limits and table eviction matter."""
+        try:
+            for key, value in parse_settings_pairs(payload):
+                if key == SETTINGS_ENABLE_PUSH and value != 0:
+                    raise ValueError("Invalid server HTTP/2 ENABLE_PUSH setting")
+                if key == 4:
+                    if value > 0x7FFFFFFF:
+                        raise ValueError("Invalid HTTP/2 initial stream window")
+                    self._update_send_windows(value - self._peer_settings[4])
+                if key == 5 and not 16384 <= value <= 16777215:
+                    raise ValueError("Invalid HTTP/2 maximum frame size")
+                if key == SETTINGS_HEADER_TABLE_SIZE:
+                    self._encoder.set_table_size(value)
+                self._peer_settings[key] = value
+        except ValueError as error:
+            self._failed = error
+            self._clear_header_buffers()
+            raise
+        self._peer_settings_received = True
+
     def _handle_connection_frame(self, frame):
         """Handle connection-level (stream 0) frames."""
         if frame.type == FRAME_SETTINGS:
             if frame.flags & FLAG_ACK:
                 debug("H2: Received SETTINGS ACK")
             else:
-                # Parse and store peer settings
-                if frame.length % 6:
-                    raise ValueError("Invalid HTTP/2 SETTINGS frame")
-                settings = parse_settings_payload(frame.payload)
-                if settings.get(SETTINGS_ENABLE_PUSH, 0) != 0:
-                    raise ValueError("Invalid server HTTP/2 ENABLE_PUSH setting")
-                if 4 in settings and settings[4] > 0x7FFFFFFF:
-                    raise ValueError("Invalid HTTP/2 initial stream window")
-                if 5 in settings and not 16384 <= settings[5] <= 16777215:
-                    raise ValueError("Invalid HTTP/2 maximum frame size")
-                if 4 in settings and self._active_send_stream is not None:
-                    self._stream_send_window += settings[4] - self._peer_settings[4]
-                    if self._stream_send_window > 0x7FFFFFFF:
-                        raise ValueError("HTTP/2 stream send window overflow")
-                self._peer_settings.update(settings)
-                self._peer_settings_received = True
-                if 1 in settings:
-                    self._encoder.set_table_size(settings[1])
+                self._apply_peer_settings(frame.payload)
                 debug(f"H2: Received peer SETTINGS: {self._peer_settings}")
                 # Send SETTINGS ACK
                 ack = build_settings_frame(ack=True)

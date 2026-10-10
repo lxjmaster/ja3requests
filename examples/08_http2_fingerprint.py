@@ -7,15 +7,18 @@ config = TlsConfig.from_browser("chrome", 120)
 
 # Customize H2 SETTINGS frame values
 config.h2_settings = {
-    0x01: 65536,    # HEADER_TABLE_SIZE
-    0x02: 0,        # ENABLE_PUSH (disabled)
-    0x03: 1000,     # MAX_CONCURRENT_STREAMS
+    0x01: 65536,  # HEADER_TABLE_SIZE
+    0x02: 0,  # ENABLE_PUSH (disabled)
+    0x03: 1000,  # MAX_CONCURRENT_STREAMS
     0x04: 6291456,  # INITIAL_WINDOW_SIZE (6MB)
-    0x06: 262144,   # MAX_HEADER_LIST_SIZE
+    0x06: 262144,  # MAX_HEADER_LIST_SIZE
 }
 
 # Customize initial WINDOW_UPDATE
 config.h2_window_update = 15663105
+config.h2_pseudo_header_order = [":method", ":path", ":authority", ":scheme"]
+config.h2_priority_frames = [(3, 0, 201, False), (5, 3, 101, True)]
+config.validate(strict=True)
 
 print(f"H2 SETTINGS: {config.h2_settings}")
 print(f"H2 WINDOW_UPDATE: {config.h2_window_update}")
@@ -28,6 +31,7 @@ session = Session(tls_config=config)
 # 2. Send connection preface with custom SETTINGS
 # 3. Send WINDOW_UPDATE with custom increment
 # 4. Encode requests as HTTP/2 HEADERS + DATA frames
+# Initial PRIORITY signals are sent once and do not implement scheduling.
 
 # Firefox has different H2 fingerprint
 firefox_config = TlsConfig.from_browser("firefox", 121)

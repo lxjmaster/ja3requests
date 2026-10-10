@@ -45,7 +45,7 @@ including `assert_type` checks that catch an accidental `Any` return. Every
 `# E:` line in `invalid.py` must produce its specific diagnostic; wrong URLs,
 timeouts, streaming options, upload tuples, callback returns, TLS configuration,
 Cookie values, and response return types are covered. The current consumers
-include 59 negative markers: async additions reject synchronous pools, incorrect
+include 70 negative markers: async additions reject synchronous pools, incorrect
 awaited return types, invalid budgets/iterators, text files and unsupported file tuples.
 Synchronous upload calls reject async iterators; async calls accept byte iterators
 and async byte iterators. Async multipart paths include `PathLike[str]`.
@@ -53,6 +53,11 @@ Eight HPACK cases reject invalid codec inputs, header fields and table/header
 limits.
 The awaited Cookie-file methods preserve integer results and reject invalid paths,
 option types and result assignments in installed consumers.
+Prepared-request consumers check `Mapping[str, Union[str, bytes]]` inspection,
+byte-value narrowing and header derivation. Preparation preserves byte values
+and converts numeric values to strings. HTTP1 transmits bytes unchanged; H2
+requires valid UTF-8 bytes. Protocol-specific encoding checks occur at send
+after negotiation; shared field syntax checks occur before network/source work.
 Temporary files are
 removed on exit. The script never sends HTTP requests.
 
@@ -84,7 +89,7 @@ diagnostics in protocol internals and mutable compatibility classes. It is not
 the public-consumer acceptance gate. JSON results intentionally remain `Any`;
 request JSON input matches the current `dict`/`str`/`bytes` implementation. Upload
 values in the synchronous API are paths or binary file objects (optionally lists),
-not the filename/file tuple convention of other HTTP clients. Unreleased raw
-`data=` uploads accept binary files and byte iterators in both APIs, with async
-iterators additionally supported by AsyncSession. Async `files=` has the same
+not the filename/file tuple convention of other HTTP clients. Raw `data=` uploads
+accept binary files and byte iterators in both APIs, with async iterators also
+supported by AsyncSession. Async `files=` has the same
 mapping convention and also accepts `PathLike[str]` values.

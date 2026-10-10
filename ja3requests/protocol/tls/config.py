@@ -8,8 +8,16 @@ This module provides TLS configuration for customizing TLS handshake parameters.
 from __future__ import annotations
 
 import struct
-from typing import TYPE_CHECKING, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 from ja3requests.protocol.tls.cipher_suites import CipherSuite
+from ja3requests.protocol.h2.frame import (
+    H2Settings,
+    H2Priority,
+    normalize_settings,
+    validate_initial_window,
+    normalize_pseudo_header_order,
+    normalize_priority_frames,
+)
 
 from ja3requests.protocol.tls.cipher_suites.suites import (
     EcdheEcdsaWithAes128GcmSha256,
@@ -29,6 +37,15 @@ if TYPE_CHECKING:
 
 CipherSpec = Union[int, CipherSuite]
 CertificateInput = Union[str, bytes]
+
+
+def _validate_http_alpn(protocols):
+    """Reject application protocols the HTTP client cannot send or receive."""
+    for proto in protocols or ():
+        if not isinstance(proto, str) or not 0 < len(proto) <= 255:
+            raise ValueError(f"Invalid ALPN protocol: {proto!r}")
+        if proto not in ('h2', 'http/1.1'):
+            raise ValueError(f"Unsupported HTTP ALPN protocol: {proto!r}")
 
 
 class TlsConfig:
@@ -98,8 +115,10 @@ class TlsConfig:
         self._session_cache: Optional[TLSSessionCache] = None
 
         # HTTP/2 fingerprint settings
-        self._h2_settings: Optional[Dict[int, int]] = None
+        self._h2_settings: Optional[Union[Dict[int, int], List[Tuple[int, int]]]] = None
         self._h2_window_update: Optional[int] = None
+        self._h2_pseudo_header_order: Optional[List[str]] = None
+        self._h2_priority_frames: Optional[List[H2Priority]] = None
 
         # Client certificate for mutual TLS
         self._client_cert: Optional[CertificateInput] = None  # PEM bytes or file path
@@ -303,14 +322,19 @@ class TlsConfig:
         self._session_cache = cache
 
     @property
-    def h2_settings(self) -> Optional[Dict[int, int]]:
-        """Get HTTP/2 SETTINGS for H2 fingerprint."""
+    def h2_settings(self) -> Optional[Union[Dict[int, int], List[Tuple[int, int]]]]:
+        """Exact HTTP/2 SETTINGS; None uses defaults, an empty input emits none."""
         return self._h2_settings
 
     @h2_settings.setter
-    def h2_settings(self, settings: Optional[Dict[int, int]]) -> None:
-        """Set HTTP/2 SETTINGS dict (e.g., {0x01: 65535, 0x03: 1000})."""
-        self._h2_settings = settings
+    def h2_settings(self, settings: Optional[H2Settings]) -> None:
+        """Copy a mapping or ordered pairs, retaining order and repeated IDs."""
+        pairs = normalize_settings(settings)
+        self._h2_settings = (
+            None
+            if settings is None
+            else dict(pairs) if isinstance(settings, Mapping) else list(pairs)
+        )
 
     @property
     def h2_window_update(self) -> Optional[int]:
@@ -320,7 +344,28 @@ class TlsConfig:
     @h2_window_update.setter
     def h2_window_update(self, value: Optional[int]) -> None:
         """Set HTTP/2 initial WINDOW_UPDATE increment."""
+        validate_initial_window(value)
         self._h2_window_update = value
+
+    @property
+    def h2_pseudo_header_order(self) -> Optional[List[str]]:
+        """Request pseudo-header permutation; None retains the default order."""
+        return self._h2_pseudo_header_order
+
+    @h2_pseudo_header_order.setter
+    def h2_pseudo_header_order(self, order: Optional[Sequence[str]]) -> None:
+        normalized = normalize_pseudo_header_order(order)
+        self._h2_pseudo_header_order = None if order is None else list(normalized)
+
+    @property
+    def h2_priority_frames(self) -> Optional[List[H2Priority]]:
+        """Ordered initial (stream, dependency, weight, exclusive) signals."""
+        return self._h2_priority_frames
+
+    @h2_priority_frames.setter
+    def h2_priority_frames(self, frames: Optional[Sequence[H2Priority]]) -> None:
+        normalized = normalize_priority_frames(frames)
+        self._h2_priority_frames = None if frames is None else list(normalized)
 
     @property
     def client_cert(self) -> Optional[CertificateInput]:
@@ -481,6 +526,18 @@ class TlsConfig:
         """
         issues = []
 
+        # Recheck mutable public values before connection/pool use.
+        for check, value in (
+            (normalize_settings, self._h2_settings),
+            (validate_initial_window, self._h2_window_update),
+            (normalize_pseudo_header_order, self._h2_pseudo_header_order),
+            (normalize_priority_frames, self._h2_priority_frames),
+        ):
+            try:
+                check(value)
+            except ValueError as error:
+                issues.append(str(error))
+
         # High-level protocol state must agree with custom wire declarations.
         # Raw ClientHello/Extension remain available for encoding-only use.
         from ja3requests.protocol.tls.extensions import (
@@ -576,10 +633,10 @@ class TlsConfig:
                     issues.append(f"Invalid signature algorithm: 0x{alg:04X}")
 
         # ALPN protocols
-        if self._alpn_protocols:
-            for proto in self._alpn_protocols:
-                if not isinstance(proto, str) or len(proto) == 0 or len(proto) > 255:
-                    issues.append(f"Invalid ALPN protocol: {proto!r}")
+        try:
+            _validate_http_alpn(self._alpn_protocols)
+        except ValueError as error:
+            issues.append(str(error))
 
         # Client random length
         if self._client_random is not None and len(self._client_random) != 32:
@@ -660,7 +717,7 @@ class TlsConfig:
             config.key_share_groups = list(preset["key_share_groups"])
         if preset.get("session_id_length"):
             config.session_id = os.urandom(preset["session_id_length"])
-        config._h2_settings = preset.get("h2_settings")
+        config.h2_settings = preset.get("h2_settings")
         config._h2_window_update = preset.get("h2_window_update")
         if server_name:
             config._server_name = server_name

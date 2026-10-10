@@ -22,6 +22,7 @@ from cryptography.hazmat.primitives.asymmetric import (
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM, ChaCha20Poly1305
 from cryptography.hazmat.backends import default_backend
+from ja3requests.protocol.tls.extensions import ALPNExtension
 
 from ja3requests.protocol.tls.debug import debug
 from ja3requests.protocol.tls.certificate_verify import verify_tls_signature
@@ -412,6 +413,7 @@ class TLS13Handshake:
         post_handshake_auth=False,
         client_cert_pem=None,
         client_key_pem=None,
+        offered_alpn=(),
     ):
         """
         :param conn: Raw TCP socket
@@ -440,6 +442,7 @@ class TLS13Handshake:
         self._pending_handshake = b""
         self._server_finished_transcript = None
         self._negotiated_protocol = None
+        self._offered_alpn_protocols = tuple(offered_alpn)
         self._certificate_verifier = None
         self._server_public_key = None
         self._certificate_verify_received = False
@@ -854,6 +857,7 @@ class TLS13Handshake:
         if len(data) < 2 or int.from_bytes(data[:2], 'big') != len(data) - 2:
             raise ValueError("TLS 1.3: invalid EncryptedExtensions length")
         offset = 2
+        seen_extensions = set()
         while offset < len(data):
             if offset + 4 > len(data):
                 raise ValueError("TLS 1.3: truncated extension header")
@@ -863,14 +867,13 @@ class TLS13Handshake:
             if len(extension) != size:
                 raise ValueError("TLS 1.3: truncated extension data")
             offset += size
+            if kind in seen_extensions:
+                raise ValueError("TLS 1.3: duplicate extension (including ALPN)")
+            seen_extensions.add(kind)
             if kind == 16:
-                if (
-                    len(extension) < 4
-                    or int.from_bytes(extension[:2], 'big') != len(extension) - 2
-                    or extension[2] != len(extension) - 3
-                ):
-                    raise ValueError("TLS 1.3: invalid ALPN selection")
-                self._negotiated_protocol = extension[3:].decode('ascii')
+                self._negotiated_protocol = ALPNExtension.decode_selection(
+                    extension, self._offered_alpn_protocols
+                )
 
     def verify_server_finished(self, finished_data):
         """

@@ -55,6 +55,10 @@ def rejects(url: str, response: Response, session: Session) -> None:
     config = TlsConfig()
     config.verify_cert = 'yes'  # E: assignment
     config.h2_settings = {'1': 65536}  # E: dict-item
+    config.h2_settings = [('1', 65536)]  # E: list-item
+    config.h2_pseudo_header_order = [1, 2, 3, 4]  # E: list-item
+    config.h2_priority_frames = [(3, 0, '256', False)]  # E: list-item
+    config.h2_priority_frames = [(3, 0, 256)]  # E: list-item
     jar = Ja3RequestsCookieJar()
     jar.set('name', 42)  # E: arg-type
     jar.save(42)  # E: arg-type
@@ -100,3 +104,15 @@ async def async_rejects(
     ja3requests.AsyncSession(
         hooks={'after_request': [lambda item: 'bad']}  # E: arg-type
     )
+    prepared = await session.prepare_request('POST', url, data=b'body')
+    await session.prepare_request('POST', url, data=BytesIO())  # E: arg-type
+    await session.prepare_request('POST', url, data=iter((b'one',)))  # E: arg-type
+    await session.prepare_request('POST', url, data=async_bytes())  # E: arg-type
+    await session.prepare_request('POST', url, files={})  # E: call-arg
+    await session.send(response)  # E: arg-type
+    await session.send(prepared, verify=False)  # E: call-arg
+    await session.send(prepared, timeout='slow')  # E: arg-type
+    await session.send(prepared, stream='yes')  # E: arg-type
+    prepared.body = b'changed'  # E: misc
+    prepared.headers['X-Test'] = 'changed'  # E: index
+    prepared.with_headers({'X-Test': object()})  # E: dict-item

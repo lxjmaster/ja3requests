@@ -12,7 +12,7 @@ import os
 from io import IOBase
 from abc import ABC, abstractmethod
 from http.cookiejar import CookieJar
-from urllib.parse import urlparse, urlencode
+from urllib.parse import urlparse, urlencode, urlsplit, urlunsplit
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from ja3requests._typing import (
     Auth,
@@ -97,7 +97,7 @@ class BaseRequest(ABC):
         :param attr:
         :return:
         """
-        self._port = attr if attr else DEFAULT_HTTP_PORT
+        self._port = attr if attr is not None else DEFAULT_HTTP_PORT
 
     @property
     def method(self) -> Optional[str]:
@@ -133,16 +133,13 @@ class BaseRequest(ABC):
         if self._url:
             parse = urlparse(self._url)
             self.schema = parse.scheme
-
-            if parse.netloc != "" and ":" in parse.netloc:
-                port = parse.netloc.split(":")[-1]
-                self.port = int(port)
+            # ``urlparse().port`` understands bracketed IPv6 authorities and
+            # validates explicit ports without splitting colons in the address.
+            if parse.port is not None:
+                self.port = parse.port
             else:
-                # Set default port based on schema
-                if self.schema == "https":
-                    self.port = 443
-                else:
-                    self.port = 80
+                # Set default port based on schema.
+                self.port = 443 if self.schema == "https" else 80
 
     @property
     def params(self) -> Optional[Params]:
@@ -177,12 +174,12 @@ class BaseRequest(ABC):
             if self._params.startswith("?"):
                 self._params = self._params.replace("?", "")
 
-            parse = urlparse(self.url)
-
-            if parse.query != "":
-                self.url += "&" + self._params
-            else:
-                self.url += "?" + self._params
+            parse = urlsplit(self.url)
+            query = "&".join(filter(None, (parse.query, self._params)))
+            # Query parameters belong before a URL fragment.  Keep the
+            # fragment in the logical URL; BaseContext excludes it from the
+            # HTTP request-target when it builds the start line.
+            self.url = urlunsplit(parse._replace(query=query))
 
     @property
     def data(self) -> Optional[Data]:

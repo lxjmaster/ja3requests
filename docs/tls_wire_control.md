@@ -34,6 +34,12 @@ and Extension encoders remain usable for encoding-only experiments. An unknown
 extension can be encoded by subclassing `Extension`; this does not claim support
 for the corresponding server behavior. No generic plugin/backend framework is added.
 
+An extension-free TLS 1.2 ClientHello remains supported by the low-level TLS
+engine, including `TlsConfig.legacy()` without `server_host`. It offers no ALPN
+and can complete a handshake with a compatible peer. High-level requests normally
+add destination SNI. The legacy preset retains its explicit certificate-verification
+and cipher choices; this compatibility path does not change secure defaults.
+
 The normal high-level TLS 1.3 path generates `key_share` and PSK from private
 keys/cache state. Caller-provided replacements are rejected: replaying a public
 key or binder without the matching secret cannot establish a working session.

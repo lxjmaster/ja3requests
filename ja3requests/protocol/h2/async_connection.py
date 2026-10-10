@@ -17,8 +17,12 @@ from ja3requests.protocol.h2.frame import (
     build_data_frame,
     build_rst_stream_frame,
 )
-from ja3requests.protocol.h2.stream_state import H2StreamError, H2StreamState, _Stream
-from ja3requests.protocol.h2.hpack import validate_header_fields
+from ja3requests.protocol.h2.stream_state import (
+    H2StreamError,
+    H2ResponseHeaderError,
+    H2StreamState,
+    _Stream,
+)
 
 
 class H2ProtocolError(RequestException):
@@ -59,8 +63,15 @@ class AsyncH2Connection(H2StreamState):
         send_func: Callable[[bytes], Awaitable[None]],
         recv_func: Callable[[int], Awaitable[bytes]],
         settings=None,
+        pseudo_header_order=None,
+        priority_frames=None,
     ) -> None:
-        super().__init__(self._queue_control, settings=settings)
+        super().__init__(
+            self._queue_control,
+            settings=settings,
+            pseudo_header_order=pseudo_header_order,
+            priority_frames=priority_frames,
+        )
         self._send_func = send_func
         self._recv_func = recv_func
         self._loop = None
@@ -265,9 +276,13 @@ class AsyncH2Connection(H2StreamState):
                     self._send(build_rst_stream_frame(stream_id, 8).serialize())
                     current.send_done = True
         if stream is not None and stream.error is not None:
-            if frame.type == FRAME_PRIORITY or (
-                frame.type == FRAME_RST_STREAM
-                and int.from_bytes(frame.payload, "big") != 7
+            if (
+                isinstance(stream.error, H2ResponseHeaderError)
+                or frame.type == FRAME_PRIORITY
+                or (
+                    frame.type == FRAME_RST_STREAM
+                    and int.from_bytes(frame.payload, "big") != 7
+                )
             ):
                 stream.error = H2ProtocolError(str(stream.error))
 
@@ -413,6 +428,9 @@ class AsyncH2Connection(H2StreamState):
     async def _reserve_request(
         self, method, authority, path, headers, body, scheme, timeout
     ):
+        h2_headers = self._prepare_request_headers(
+            method, authority, path, headers, scheme
+        )
         self._bind_loop()
         if self._reader_task is None:
             raise RuntimeError("HTTP/2 connection has not been initiated")
@@ -424,22 +442,6 @@ class AsyncH2Connection(H2StreamState):
         self._check_connection()
         if self._goaway_received:
             raise ConnectionError("HTTP/2 connection received GOAWAY")
-        h2_headers = [
-            (":method", method),
-            (":authority", authority),
-            (":scheme", scheme),
-            (":path", path),
-        ]
-        for name, value in headers or ():
-            name = name.lower()
-            if name in ("host", "connection", "transfer-encoding", "upgrade"):
-                continue
-            h2_headers.append(
-                (name, value if isinstance(value, (str, bytes)) else str(value))
-            )
-        # Local input errors must not escape the shared writer and fail other
-        # streams. Validate before reserving a stream or queuing any wire data.
-        validate_header_fields(h2_headers)
         stream_id = self._next_stream_id
         self._next_stream_id += 2
         stream = _AsyncStream(self._peer_settings[4], self._local_settings[4])

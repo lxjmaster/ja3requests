@@ -122,6 +122,22 @@ class ClientHello(HandShake):
 
         self._cipher_suites = cipher_bytes
 
+    @property
+    def offered_alpn_protocols(self):
+        """ALPN names from the encoded extensions, including custom payloads."""
+        data = self._extensions
+        if not data:
+            return ()
+        offset = 2
+        while offset < len(data):
+            kind, size = struct.unpack('!HH', data[offset : offset + 4])
+            offset += 4
+            payload = data[offset : offset + size]
+            offset += size
+            if kind == ALPNExtension.extension_type:
+                return ALPNExtension.decode_protocols(payload)
+        return ()
+
     def _build_extensions(self):
         """
         Build TLS extensions from Extension objects and configuration parameters.

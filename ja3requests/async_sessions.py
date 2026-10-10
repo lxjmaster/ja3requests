@@ -12,6 +12,7 @@ import weakref
 from dataclasses import dataclass
 from functools import partial
 from http.cookiejar import CookieJar
+from types import MappingProxyType
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -19,6 +20,7 @@ from typing import (
     BinaryIO,
     Dict,
     Iterator,
+    Mapping,
     Optional,
     Tuple,
     Union,
@@ -70,11 +72,15 @@ from ja3requests.exceptions import (
 )
 from ja3requests.protocol.exceptions import ProxyError
 from ja3requests.protocol.h2.async_connection import AsyncH2Connection
-from ja3requests.protocol.tls.config import TlsConfig
+from ja3requests.protocol.tls.config import TlsConfig, _validate_http_alpn
 from ja3requests.protocol.tls.session_cache import TLSSessionCache
 from ja3requests.retry import HTTPRetry
 from ja3requests.sockets.https import HttpsSocket
-from ja3requests.utils import default_headers
+from ja3requests.utils import (
+    _encode_http1_headers,
+    _validated_header_items,
+    default_headers,
+)
 
 if TYPE_CHECKING:
     from typing_extensions import Unpack
@@ -84,6 +90,7 @@ if TYPE_CHECKING:
 _UploadBody = Union[
     bytes, BinaryIO, Iterator[bytes], AsyncIterator[bytes], UploadSource
 ]
+_HeaderText = Union[str, bytes]
 
 
 @dataclass
@@ -92,11 +99,85 @@ class _RequestMetadata:
 
     method: str
     url: str
-    headers: Dict[str, str]
+    headers: Dict[str, _HeaderText]
     body: _UploadBody
     _cookie_from_jar: Optional[str] = None
     _cookie_header_managed: bool = True
     _auto_length: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class _PreparedContext:
+    session: AsyncSession
+    config: TlsConfig
+    proxies: Dict[str, str]
+    jar: Ja3RequestsCookieJar
+    session_jar: Ja3RequestsCookieJar
+
+
+class AsyncPreparedRequest:
+    """Read-only buffered request created by ``AsyncSession.prepare_request()``.
+
+    Inspect ``method``, ``url``, ``headers`` and ``body`` before sending. Use
+    ``with_headers()`` to derive a signed copy; send with the preparing Session
+    on its event loop. Preparation owns no connection or upload handle.
+    """
+
+    __slots__ = ('_request', '_context')
+
+    def __init__(self) -> None:
+        raise TypeError('Use AsyncSession.prepare_request()')
+
+    @classmethod
+    def _create(
+        cls, request: _RequestMetadata, context: _PreparedContext
+    ) -> AsyncPreparedRequest:
+        instance = object.__new__(cls)
+        instance._request = request
+        instance._context = context
+        return instance
+
+    def __repr__(self) -> str:
+        return '<AsyncPreparedRequest [%s]>' % self.method
+
+    @property
+    def method(self) -> str:
+        """Normalized HTTP method."""
+        return self._request.method
+
+    @property
+    def url(self) -> str:
+        """Normalized destination URL with query parameters and no fragment."""
+        return self._request.url
+
+    @property
+    def headers(self) -> Mapping[str, _HeaderText]:
+        """Read-only normalized headers; supplied byte values remain bytes."""
+        return MappingProxyType(self._request.headers)
+
+    @property
+    def body(self) -> bytes:
+        """Encoded buffered request body."""
+        assert isinstance(self._request.body, bytes)
+        return self._request.body
+
+    def with_headers(self, headers: Headers) -> AsyncPreparedRequest:
+        """Derive a copy with replacement headers, preserving URL/body/context.
+
+        To add a signature, pass ``dict(self.headers, Authorization=signature)``.
+        Headers are validated again; no hooks or network I/O run here.
+        """
+        request = copy.copy(self._request)
+        request.headers = _headers(headers)
+        if any(
+            isinstance(name, str) and name.lower() == 'cookie'
+            for name in request.headers
+        ):
+            # A replacement mapping is caller-supplied, even if it copies the
+            # generated value exactly. Retrying must not rewrite a signed Cookie.
+            request._cookie_from_jar = None
+            request._cookie_header_managed = False
+        return self._create(_freeze(request), self._context)
 
 
 def _origin(url: str) -> Tuple[str, str, int]:
@@ -114,16 +195,19 @@ def _origin(url: str) -> Tuple[str, str, int]:
     )
 
 
-def _headers(headers: Optional[Headers]) -> Dict[str, str]:
+def _authority(scheme: str, host: str, port: int) -> str:
+    authority = '[' + host + ']' if ':' in host else host.encode('idna').decode('ascii')
+    if port != (443 if scheme == 'https' else 80):
+        authority += ':' + str(port)
+    return authority
+
+
+def _headers(headers: Optional[Headers]) -> Dict[str, _HeaderText]:
     values = default_headers() if headers is None else headers
     result = {}
-    for name, value in values.items():
-        if not isinstance(name, str) or not name or any(c in name for c in '\r\n :\t'):
-            raise ValueError('Invalid HTTP header name')
-        value = value.decode('latin1') if isinstance(value, bytes) else str(value)
-        if '\r' in value or '\n' in value:
-            raise ValueError('Invalid HTTP header value')
-        result[name.title()] = value
+    for name, value in _validated_header_items(values):
+        original = values[name]
+        result[name.title()] = original if isinstance(original, bytes) else value
     return result
 
 
@@ -164,10 +248,7 @@ def _freeze(request: _RequestMetadata) -> _RequestMetadata:
     if streaming:
         _upload_length(request.headers)
     headers = _headers(request.headers)
-    authority = '[' + host + ']' if ':' in host else host.encode('idna').decode('ascii')
-    if port != (443 if scheme == 'https' else 80):
-        authority += ':' + str(port)
-    headers.setdefault('Host', authority)
+    headers.setdefault('Host', _authority(scheme, host, port))
     if 'Transfer-Encoding' in headers:
         raise ValueError('Streaming/chunked request uploads are not supported')
     auto_length = request._auto_length
@@ -267,6 +348,7 @@ def _prepare(
         ).decode('ascii')
     request = _freeze(_RequestMetadata(method, url, values, body))
     _refresh_cookie_header(cookies, request)
+    _validated_header_items(request.headers)
     return request
 
 
@@ -526,6 +608,135 @@ class AsyncSession:
         request = _prepare(
             method, url, params, data, json, headers, auth, jar, files=files
         )
+        return await self._submit(
+            request,
+            config,
+            dict(proxies or {}),
+            budgets,
+            stream,
+            allow_redirects,
+            hooks,
+            jar,
+            session_jar,
+        )
+
+    async def prepare_request(
+        self,
+        method: str,
+        url: str,
+        *,
+        params: Optional[Params] = None,
+        data: Optional[Params] = None,
+        headers: Optional[Headers] = None,
+        cookies: Optional[Cookies] = None,
+        auth: Optional[Auth] = None,
+        proxies: Optional[Proxies] = None,
+        json: Optional[JsonBody] = None,
+        verify: Optional[bool] = None,
+        tls_config: Optional[TlsConfig] = None,
+        h1: bool = False,
+    ) -> AsyncPreparedRequest:
+        """Encode a buffered request for inspection/signing without network I/O.
+
+        Snapshot TLS, proxy and Cookie configuration when awaited. Binary files,
+        iterators and multipart ``files=`` are excluded from this prepared API;
+        use ``request()`` for streaming uploads. Hooks run when ``send()`` runs.
+        """
+        self._bind()
+        if self._closed:
+            raise RuntimeError('AsyncSession is closed')
+        if isinstance(data, UploadSource) or is_upload(data, allow_async=True):
+            raise InvalidData('Prepared requests require a buffered body')
+        config = tls_config or self._tls_config
+        cache = config.session_cache
+        config = copy.deepcopy(config, {id(cache): cache})
+        if verify is not None:
+            config.verify_cert = verify
+        if h1:
+            config.alpn_protocols = ['http/1.1']
+        routes = dict(proxies or {})
+        if any(k not in ('http', 'https') for k in routes):
+            raise ValueError('proxies keys must be http or https')
+        session_jar = Ja3RequestsCookieJar()
+        merge_cookies(session_jar, self.cookies)
+        jar = session_jar.copy()
+        if cookies is not None:
+            merge_cookies(jar, cookies)
+        request = _prepare(method, url, params, data, json, headers, auth, jar)
+        parsed = urlsplit(request.url)
+        scheme, host, port = _origin(request.url)
+        if scheme == 'https':
+            _validate_http_alpn(config.alpn_protocols)
+        # Match the transport's scheme/authority/target before callers sign.
+        request.url = urlunsplit(
+            (
+                scheme,
+                _authority(scheme, host, port),
+                parsed.path or '/',
+                parsed.query,
+                '',
+            )
+        )
+        _refresh_cookie_header(jar, request)
+        _validated_header_items(request.headers)
+        return AsyncPreparedRequest._create(
+            request, _PreparedContext(self, config, routes, jar, session_jar)
+        )
+
+    async def send(
+        self,
+        request: AsyncPreparedRequest,
+        *,
+        timeout: TimeoutInput = None,
+        stream: bool = False,
+        allow_redirects: bool = True,
+        hooks: Optional[AsyncHooks] = None,
+    ) -> AsyncResponse:
+        """Send a prepared buffered request on its preparing Session and loop.
+
+        Each send gets independent metadata and Cookie/TLS/proxy copies. Session
+        hooks and retry policy are selected at send time. A streaming response
+        stays owned by this Session until consumed, closed or adopted elsewhere.
+        """
+        self._bind()
+        if self._closed:
+            raise RuntimeError('AsyncSession is closed')
+        if not isinstance(request, AsyncPreparedRequest):
+            raise TypeError('send() requires AsyncPreparedRequest')
+        context = request._context
+        if context.session is not self:
+            raise ValueError('Prepared request belongs to another AsyncSession')
+        budgets = timeout_pair(timeout)
+        metadata = _freeze(request._request)
+        config = context.config
+        cache = config.session_cache
+        config = copy.deepcopy(config, {id(cache): cache})
+        return await self._submit(
+            metadata,
+            config,
+            dict(context.proxies),
+            budgets,
+            stream,
+            allow_redirects,
+            hooks,
+            context.jar.copy(),
+            context.session_jar.copy(),
+            buffered_only=True,
+        )
+
+    async def _submit(
+        self,
+        request,
+        config,
+        routes,
+        budgets,
+        stream,
+        allow_redirects,
+        hooks,
+        jar,
+        session_jar,
+        buffered_only=False,
+    ):
         callbacks = {
             name: list(self.hooks.get(name, [])) + list((hooks or {}).get(name, []))
             for name in ('before_request', 'after_request')
@@ -537,7 +748,6 @@ class AsyncSession:
             or policy.total < 0
         ):
             raise ValueError('retry.total must be a non-negative integer')
-        routes = dict(proxies or {})
         if any(k not in ('http', 'https') for k in routes):
             raise ValueError('proxies keys must be http or https')
         # Only library-owned request tasks are cancelled by session shutdown.
@@ -553,6 +763,7 @@ class AsyncSession:
                 policy,
                 jar,
                 session_jar,
+                buffered_only=buffered_only,
             )
         )
         self._requests.add(task)
@@ -573,6 +784,7 @@ class AsyncSession:
         retry,
         jar,
         session_jar,
+        buffered_only=False,
     ):
         response = None
         sources = set()
@@ -596,7 +808,13 @@ class AsyncSession:
                         if isinstance(previous_body, UploadSource):
                             await previous_body.aclose_owned()
                     request = _freeze(request)
+                    if buffered_only and not isinstance(request.body, bytes):
+                        raise InvalidData('Prepared requests require a buffered body')
                 request = _freeze(request)
+                _refresh_cookie_header(jar, request)
+                _validated_header_items(request.headers)
+                if _origin(request.url)[0] == 'https':
+                    _validate_http_alpn(config.alpn_protocols)
                 if not isinstance(request.body, bytes):
                     length = _upload_length(request.headers)
                     if not isinstance(request.body, UploadSource):
@@ -620,7 +838,6 @@ class AsyncSession:
                         request.body, budgets[1], response=redirect_response
                     )
                 redirect_body = redirect_response = None
-                _refresh_cookie_header(jar, request)
                 attempts = 1 + (
                     retry.total
                     if retry and retry.is_retryable_method(request.method)
@@ -661,6 +878,8 @@ class AsyncSession:
                         and retry.is_retryable_status(response.status_code)
                     )
                     if retryable and attempt + 1 < attempts:
+                        _refresh_cookie_header(jar, request)
+                        _validated_header_items(request.headers)
                         if isinstance(request.body, UploadSource):
                             if request.body in response._upload_sources:
                                 response._upload_sources.remove(request.body)
@@ -670,7 +889,6 @@ class AsyncSession:
                             request.body, budgets[1], response=response
                         )
                         await self._backoff(retry, response, attempt + 1)
-                        _refresh_cookie_header(jar, request)
                         response = None
                         continue
                     break
@@ -796,10 +1014,18 @@ class AsyncSession:
     async def _attempt(self, request, config, proxies, budgets):
         scheme, host, port = _origin(request.url)
         proxy = proxies.get(scheme)
+        headers = dict(request.headers)
+        proxy_auth = headers.pop('Proxy-Authorization', None)
+        if proxy is None or urlsplit(proxy).scheme != 'http':
+            proxy_auth = None
+        elif proxy_auth and len(proxy_auth.split(None, 1)) == 1:
+            proxy_auth = (
+                b'Basic ' if isinstance(proxy_auth, bytes) else 'Basic '
+            ) + proxy_auth
         policy = (
             HttpsSocket._tls_policy_key(config, host) if scheme == 'https' else None
         )
-        key = (host, port, scheme, proxy, policy)
+        key = (host, port, scheme, proxy, proxy_auth, policy)
         connect_timeout, read_timeout = budgets
         deadline = (
             None if connect_timeout is None else self._loop.time() + connect_timeout
@@ -809,18 +1035,25 @@ class AsyncSession:
             remaining = (
                 None if deadline is None else max(0, deadline - self._loop.time())
             )
+            transport_options = {'proxy_auth': proxy_auth} if proxy_auth else {}
             transport = await open_transport(
                 host,
                 port,
                 tls_config=config if scheme == 'https' else None,
                 proxy=proxy,
                 timeout=remaining,
+                **transport_options,
             )
             h2 = None
             try:
+                HttpsSocket._validate_negotiated_protocol(transport.negotiated_protocol)
                 if transport.negotiated_protocol == 'h2':
                     h2 = AsyncH2Connection(
-                        transport.write, transport.read, settings=config.h2_settings
+                        transport.write,
+                        transport.read,
+                        settings=config.h2_settings,
+                        pseudo_header_order=config.h2_pseudo_header_order,
+                        priority_frames=config.h2_priority_frames,
                     )
                     await h2.initiate(config.h2_window_update)
                     remaining = (
@@ -854,8 +1087,19 @@ class AsyncSession:
         entry = lease.entry
         stream_id = None
         parsed = urlsplit(request.url)
-        path = urlunsplit(('', '', parsed.path or '/', parsed.query, ''))
+        path = parsed.path or '/'
+        if parsed.query:
+            path += '?' + parsed.query
         try:
+            try:
+                HttpsSocket._validate_negotiated_protocol(
+                    entry.transport.negotiated_protocol
+                )
+            except TLSError:
+                # This invalidates the entire connection, including shared H2
+                # leases; ordinary stream errors may otherwise leave H2 reusable.
+                entry.reusable = False
+                raise
             if entry.h2 is not None:
                 send = (
                     entry.h2.begin_upload
@@ -866,7 +1110,7 @@ class AsyncSession:
                     request.method,
                     request.headers['Host'],
                     path,
-                    headers=list(request.headers.items()),
+                    headers=list(headers.items()),
                     body=request.body,
                     scheme=scheme,
                     timeout=read_timeout,
@@ -899,12 +1143,9 @@ class AsyncSession:
                     response._pool_lease = lease
                 return response
             wire = ('%s %s HTTP/1.1\r\n' % (request.method, path)).encode('ascii')
-            headers = dict(request.headers)
             if isinstance(request.body, UploadSource) and request.body.length is None:
                 headers['Transfer-Encoding'] = 'chunked'
-            wire += ''.join('%s: %s\r\n' % item for item in headers.items()).encode(
-                'latin1'
-            )
+            wire += _encode_http1_headers(headers, 'latin1') + b'\r\n'
             if isinstance(request.body, UploadSource):
                 exchange = HTTP1Upload(lease, request.body, read_timeout)
                 response = await exchange.response(wire + b'\r\n', request)

@@ -7,6 +7,7 @@ import threading
 import time
 
 from ja3requests.exceptions import InvalidData, StreamConsumedError
+from ja3requests.utils import _encode_http1_headers
 
 
 class _H2WriteGuard:
@@ -123,11 +124,11 @@ def upload_headers(context, h2=False):
     if h2:
         headers.pop('Transfer-Encoding', None)
     return (
-        context.start_line
-        + '\r\n'
-        + '\r\n'.join('%s: %s' % item for item in headers.items())
-        + '\r\n\r\n'
-    ).encode('utf-8')
+        context.start_line.encode('utf-8')
+        + b'\r\n'
+        + _encode_http1_headers(headers)
+        + b'\r\n\r\n'
+    )
 
 
 def read_upload_piece(source, stopped, timeout):

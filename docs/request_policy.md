@@ -60,11 +60,20 @@ Failures while consuming a returned streaming response are not retried behind
 the caller's back. Application retries must account for method semantics and
 already delivered bytes.
 
+Final header names and control characters are validated after `before_request`
+hooks and before connection or streaming-source preparation. Invalid fields
+raise `ValueError` and do not enter the HTTP retry loop. HTTP2 byte values retain
+their UTF-8 input contract; malformed UTF-8 is also an input error and is not
+retried. An existing shared H2 connection remains usable after rejecting such
+a local field value.
+
 Before retrying a response status, automatically generated Cookie headers are
 rebuilt from that request's jar after applying the response's `Set-Cookie`
 updates, including deletions. Explicit Cookie headers and Cookie choices made
 by `before_request` hooks keep their precedence. Request-only Cookies remain
 local to the request; they are not added to stored Session state.
+Every automatic Cookie refresh is validated. An invalid refreshed field raises
+`ValueError` before retry backoff, source replay or the next connection attempt.
 
 ## Hooks
 

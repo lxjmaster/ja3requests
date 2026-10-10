@@ -2,6 +2,8 @@
 
 import asyncio
 import gzip
+import hashlib
+import hmac
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -31,7 +33,8 @@ class DemoPeer:
 
     async def start(self):
         self.server = await asyncio.start_server(self.serve, '127.0.0.1', 0)
-        return 'http://127.0.0.1:%d' % self.server.sockets[0].getsockname()[1]
+        self.url = 'http://127.0.0.1:%d' % self.server.sockets[0].getsockname()[1]
+        return self.url
 
     @staticmethod
     async def reply(writer, body, status=200, headers=b''):
@@ -74,6 +77,18 @@ class DemoPeer:
                     )
                 elif path == b'/cookie':
                     await self.reply(writer, headers.get(b'cookie', b''))
+                elif path == b'/prepared?page=1':
+                    payload = b'POST\n' + self.url.encode() + path + b'\n' + body
+                    expected = (
+                        hmac.new(b'local-demo-key', payload, hashlib.sha256)
+                        .hexdigest()
+                        .encode()
+                    )
+                    assert headers[b'authorization'] == expected
+                    assert json.loads(body) == {'message': 'prepared'}
+                    await self.reply(
+                        writer, body, headers=b'Content-Type: application/json\r\n'
+                    )
                 elif path == b'/retry':
                     self.retry_calls += 1
                     await self.reply(
@@ -167,6 +182,28 @@ async def run_demo():
                             base_url + '/cookie', timeout=3
                         )
                         assert await restored_cookie.text() == 'demo=kept'
+                prepared = await session.prepare_request(
+                    'POST',
+                    base_url + '/prepared',
+                    params={'page': 1},
+                    json={'message': 'prepared'},
+                )
+                payload = (
+                    prepared.method.encode()
+                    + b'\n'
+                    + prepared.url.encode()
+                    + b'\n'
+                    + prepared.body
+                )
+                signature = hmac.new(
+                    b'local-demo-key', payload, hashlib.sha256
+                ).hexdigest()
+                signed = prepared.with_headers(
+                    dict(prepared.headers, Authorization=signature)
+                )
+                sent = await session.send(signed, timeout=3, allow_redirects=False)
+                assert await sent.json() == {'message': 'prepared'}
+                assert 'Authorization' not in prepared.headers
                 retried = await session.get(base_url + '/retry', timeout=3)
                 assert await retried.text() == 'retry complete'
                 assert peer.retry_calls == 2
@@ -222,7 +259,7 @@ async def run_demo():
             async with AsyncSession(pool=pool) as second:
                 response = await second.get(base_url + '/lines', timeout=3)
                 assert await response.text() == 'alpha\r\nbeta\nlast'
-        assert len(events) == 9 and all(status == 200 for status in events)
+                assert len(events) == 10 and all(status == 200 for status in events)
     finally:
         await peer.aclose()
     print(

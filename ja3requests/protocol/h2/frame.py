@@ -19,7 +19,7 @@ Frame format:
 from __future__ import annotations
 
 import struct
-from typing import Dict, List, Mapping, Optional, Tuple
+from typing import Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 
 # Frame types (RFC 7540 Section 6)
@@ -74,6 +74,95 @@ DEFAULT_SETTINGS = {
     SETTINGS_MAX_FRAME_SIZE: 16384,
     SETTINGS_MAX_HEADER_LIST_SIZE: 16384,
 }
+
+H2Settings = Union[Mapping[int, int], Sequence[Tuple[int, int]]]
+H2Priority = Tuple[int, int, int, bool]
+DEFAULT_PSEUDO_HEADER_ORDER = (":method", ":authority", ":scheme", ":path")
+
+
+def _integer(value: int, minimum: int, maximum: int, label: str) -> None:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int)
+        or not minimum <= value <= maximum
+    ):
+        raise ValueError(f"Invalid HTTP/2 {label}: {value!r}")
+
+
+def normalize_settings(settings: Optional[H2Settings]) -> Tuple[Tuple[int, int], ...]:
+    """Validate and snapshot exact wire pairs; repeated IDs retain wire order."""
+    if settings is None:
+        settings = DEFAULT_SETTINGS
+    if isinstance(settings, Mapping):
+        pairs = tuple(settings.items())
+    elif isinstance(settings, Sequence) and not isinstance(settings, (str, bytes)):
+        pairs = tuple(settings)
+    else:
+        raise ValueError("HTTP/2 settings must be a mapping or ordered pairs")
+    if len(pairs) * 6 > 16384:
+        raise ValueError("HTTP/2 initial SETTINGS exceeds the default frame size")
+    for pair in pairs:
+        if not isinstance(pair, (tuple, list)) or len(pair) != 2:
+            raise ValueError("HTTP/2 settings must contain (identifier, value) pairs")
+        setting_id, value = pair
+        _integer(setting_id, 0, 65535, "setting identifier")
+        _integer(value, 0, 0xFFFFFFFF, "setting value")
+        if setting_id == SETTINGS_ENABLE_PUSH and value != 0:
+            raise ValueError(
+                "HTTP/2 server push is not supported; ENABLE_PUSH must be 0"
+            )
+        if setting_id == SETTINGS_INITIAL_WINDOW_SIZE and value > 0x7FFFFFFF:
+            raise ValueError("Invalid HTTP/2 initial stream window")
+        if setting_id == SETTINGS_MAX_FRAME_SIZE and not 16384 <= value <= 16777215:
+            raise ValueError("Invalid HTTP/2 maximum frame size")
+    return tuple((identifier, value) for identifier, value in pairs)
+
+
+def validate_initial_window(increment: Optional[int]) -> None:
+    """Zero/None omit the frame; positive increments cannot overflow 65535."""
+    if increment is not None:
+        _integer(
+            increment, 0, 0x7FFFFFFF - 65535, "initial connection window increment"
+        )
+
+
+def normalize_pseudo_header_order(order: Optional[Sequence[str]]) -> Tuple[str, ...]:
+    if order is None:
+        return DEFAULT_PSEUDO_HEADER_ORDER
+    if (
+        not isinstance(order, Sequence)
+        or isinstance(order, (str, bytes))
+        or len(order) != 4
+        or any(not isinstance(name, str) for name in order)
+        or set(order) != set(DEFAULT_PSEUDO_HEADER_ORDER)
+    ):
+        raise ValueError(
+            "HTTP/2 pseudo-header order must contain each request pseudo-header once"
+        )
+    return tuple(order)
+
+
+def normalize_priority_frames(
+    frames: Optional[Sequence[H2Priority]],
+) -> Tuple[H2Priority, ...]:
+    if frames is None:
+        return ()
+    if not isinstance(frames, Sequence) or isinstance(frames, (str, bytes)):
+        raise ValueError("HTTP/2 priority frames must be an ordered sequence")
+    result = []
+    for priority in frames:
+        if not isinstance(priority, (tuple, list)) or len(priority) != 4:
+            raise ValueError(
+                "HTTP/2 priority must be (stream_id, dependency, weight, exclusive)"
+            )
+        stream_id, dependency, weight, exclusive = priority
+        _integer(stream_id, 1, 0x7FFFFFFF, "priority stream identifier")
+        _integer(dependency, 0, 0x7FFFFFFF, "priority dependency")
+        _integer(weight, 1, 256, "priority weight")
+        if dependency == stream_id or not isinstance(exclusive, bool):
+            raise ValueError("Invalid HTTP/2 priority dependency or exclusive flag")
+        result.append((stream_id, dependency, weight, exclusive))
+    return tuple(result)
 
 
 class H2Frame:
@@ -163,12 +252,12 @@ class H2Frame:
 
 
 def build_settings_frame(
-    settings: Optional[Mapping[int, int]] = None, ack: bool = False
+    settings: Optional[H2Settings] = None, ack: bool = False
 ) -> H2Frame:
     """
     Build a SETTINGS frame.
 
-    :param settings: Dict of {setting_id: value}
+    :param settings: Mapping or ordered (setting_id, value) pairs; None is empty
     :param ack: If True, build a SETTINGS ACK frame (empty payload)
     :return: H2Frame
     """
@@ -176,7 +265,7 @@ def build_settings_frame(
         return H2Frame(FRAME_SETTINGS, FLAG_ACK, 0, b"")
 
     payload = b""
-    for setting_id, value in (settings or {}).items():
+    for setting_id, value in normalize_settings({} if settings is None else settings):
         payload += struct.pack("!HI", setting_id, value)
 
     return H2Frame(FRAME_SETTINGS, 0, 0, payload)
@@ -190,8 +279,21 @@ def build_window_update_frame(stream_id: int, increment: int) -> H2Frame:
     :param increment: Window size increment
     :return: H2Frame
     """
-    payload = struct.pack("!I", increment & 0x7FFFFFFF)
+    _integer(stream_id, 0, 0x7FFFFFFF, "window stream identifier")
+    _integer(increment, 1, 0x7FFFFFFF, "window increment")
+    payload = struct.pack("!I", increment)
     return H2Frame(FRAME_WINDOW_UPDATE, 0, stream_id, payload)
+
+
+def build_priority_frame(
+    stream_id: int, dependency: int, weight: int, exclusive: bool = False
+) -> H2Frame:
+    """Encode a legacy PRIORITY signal without opening a request stream."""
+    normalize_priority_frames([(stream_id, dependency, weight, exclusive)])
+    payload = struct.pack(
+        "!IB", dependency | (0x80000000 if exclusive else 0), weight - 1
+    )
+    return H2Frame(FRAME_PRIORITY, 0, stream_id, payload)
 
 
 def build_headers_frame(
@@ -256,15 +358,16 @@ def build_rst_stream_frame(stream_id: int, error_code: int = 0) -> H2Frame:
 # ============================================================================
 
 
+def parse_settings_pairs(payload: bytes) -> List[Tuple[int, int]]:
+    """Parse every SETTINGS entry in wire order, including repeated IDs."""
+    if len(payload) % 6:
+        raise ValueError("Invalid HTTP/2 SETTINGS frame")
+    return list(struct.iter_unpack("!HI", payload))
+
+
 def parse_settings_payload(payload: bytes) -> Dict[int, int]:
-    """Parse SETTINGS frame payload into dict."""
-    settings: Dict[int, int] = {}
-    offset = 0
-    while offset + 6 <= len(payload):
-        setting_id, value = struct.unpack("!HI", payload[offset : offset + 6])
-        settings[setting_id] = value
-        offset += 6
-    return settings
+    """Return final SETTINGS values; protocol application uses ordered pairs."""
+    return dict(parse_settings_pairs(payload))
 
 
 def header_block_fragment(frame: H2Frame) -> bytes:

@@ -758,8 +758,10 @@ class TestH2Connection(unittest.TestCase):
                         conn = connection_type(lambda raw: None, lambda size: b"")
                         conn._peer_settings_received = True
                         conn.send_request("GET", "example.com", "/")
-                        with self.assertRaisesRegex(ValueError, ":status"):
-                            conn._dispatch_frame(frame)
+                        conn._dispatch_frame(frame)
+                        with self.assertRaisesRegex(ConnectionError, ":status"):
+                            conn.receive_response(1)
+                        self.assertIsNone(conn._failed)
 
     def test_interim_response_and_trailers_preserve_final_headers(self):
         encoder = HPACKEncoder()
@@ -828,9 +830,15 @@ class TestH2Connection(unittest.TestCase):
                         conn = connection_type(lambda raw: None, lambda size: b"")
                         conn._peer_settings_received = True
                         conn.send_request("GET", "example.com", "/")
-                        with self.assertRaisesRegex(ValueError, message):
+                        error_type = (
+                            ConnectionError
+                            if frames == (ended_interim,)
+                            else ValueError
+                        )
+                        with self.assertRaisesRegex(error_type, message):
                             for frame in frames:
                                 conn._dispatch_frame(frame)
+                            conn.receive_response(1)
 
     def test_response_frames_after_end_stream_fail_both_connection_paths(self):
         ending_headers = H2Frame(
@@ -895,7 +903,9 @@ class TestH2Connection(unittest.TestCase):
 
     def test_server_cannot_enable_push(self):
         for value in (1, 2):
-            setting = build_settings_frame({SETTINGS_ENABLE_PUSH: value})
+            setting = H2Frame(
+                FRAME_SETTINGS, payload=struct.pack('!HI', SETTINGS_ENABLE_PUSH, value)
+            )
             for connection_type in (H2Connection, H2MultiplexConnection):
                 with self.subTest(value=value, connection_type=connection_type):
                     conn = connection_type(lambda data: None, lambda size: b"")

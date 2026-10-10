@@ -2,13 +2,18 @@
 
 from io import BytesIO
 from pathlib import Path
-from typing import AsyncIterator, Dict, Iterator, List, Optional, Tuple, Union
+from typing import AsyncIterator, Dict, Iterator, List, Mapping, Optional, Tuple, Union
 
 from typing_extensions import assert_type
 
 import ja3requests
 from ja3requests import HTTPRetry, Response, Session, TlsConfig
-from ja3requests import AsyncConnectionPool, AsyncResponse, AsyncSession
+from ja3requests import (
+    AsyncConnectionPool,
+    AsyncPreparedRequest,
+    AsyncResponse,
+    AsyncSession,
+)
 from ja3requests.base import BaseRequest
 from ja3requests.cookies import Ja3RequestsCookieJar
 from ja3requests.pool import ConnectionPool
@@ -39,6 +44,44 @@ def after(response: Response) -> Optional[Response]:
 async def upload_chunks() -> AsyncIterator[bytes]:
     yield b'first'
     yield b'second'
+
+
+async def prepared_calls(session: AsyncSession, url: str) -> None:
+    prepared = await session.prepare_request(
+        'POST',
+        url,
+        params=[('q', 'one'), ('q', 'two')],
+        json={'a': 1},
+        headers={'X-Input': b'value', 'X-Number': 1},
+        auth=('u', 'p'),
+        proxies={},
+        verify=True,
+        tls_config=TlsConfig.secure(),
+        h1=True,
+    )
+    assert_type(prepared, AsyncPreparedRequest)
+    assert_type(prepared.method, str)
+    assert_type(prepared.url, str)
+    assert_type(prepared.body, bytes)
+    assert_type(prepared.headers, Mapping[str, Union[str, bytes]])
+    assert_type(prepared.headers['X-Input'], Union[str, bytes])
+    byte_value = prepared.headers['X-Input']
+    if isinstance(byte_value, bytes):
+        assert_type(byte_value, bytes)
+        byte_value.decode('utf-8')
+    signed = prepared.with_headers(dict(prepared.headers, Authorization='signature'))
+    assert_type(signed, AsyncPreparedRequest)
+    assert_type(
+        prepared.with_headers({'X-Input': b'value', 'X-Number': 2}),
+        AsyncPreparedRequest,
+    )
+    assert_type(await session.send(signed, timeout=(1, 3)), AsyncResponse)
+    async with await session.send(
+        signed, stream=True, allow_redirects=False
+    ) as response:
+        assert_type(await response.read(), bytes)
+    await session.prepare_request('PUT', url, data=b'bytes')
+    await session.prepare_request('POST', url, data=[('name', 'value')])
 
 
 def protocol_value_boundaries(record: bytes) -> None:
@@ -83,6 +126,13 @@ def public_calls(url: str, cookie_path: Path) -> None:
     config.extension_order = [0, 43, 51]
     config.h2_settings = {1: 65536, 2: 0, 4: 6291456}
     config.h2_window_update = 15663105
+    config.h2_settings = [(4, 6291456), (1, 65536), (2, 0)]
+    if isinstance(config.h2_settings, list):
+        assert_type(config.h2_settings, List[Tuple[int, int]])
+    config.h2_pseudo_header_order = (':method', ':path', ':authority', ':scheme')
+    config.h2_priority_frames = [(3, 0, 256, True)]
+    assert_type(config.h2_pseudo_header_order, Optional[List[str]])
+    assert_type(config.h2_priority_frames, List[Tuple[int, int, int, bool]])
     config.client_cert = 'client.pem'
     config.client_key = b'PEM bytes'
     assert_type(config.validate(), List[str])

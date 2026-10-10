@@ -154,6 +154,30 @@ class ALPNExtension(Extension):
             protocols_data += struct.pack("!B", len(proto_bytes)) + proto_bytes
         return struct.pack("!H", len(protocols_data)) + protocols_data
 
+    @staticmethod
+    def decode_protocols(data):
+        """Validate the complete ProtocolNameList, retaining opaque wire bytes."""
+        if len(data) < 3 or int.from_bytes(data[:2], 'big') != len(data) - 2:
+            raise ValueError("Invalid ALPN protocol list length")
+        protocols = []
+        offset = 2
+        while offset < len(data):
+            size = data[offset]
+            offset += 1
+            if size == 0 or offset + size > len(data):
+                raise ValueError("Invalid ALPN protocol name length")
+            protocols.append(data[offset : offset + size])
+            offset += size
+        return tuple(protocols)
+
+    @staticmethod
+    def decode_selection(data, offered):
+        """A server selects exactly one name actually emitted by this client."""
+        protocols = ALPNExtension.decode_protocols(data)
+        if len(protocols) != 1 or protocols[0] not in offered:
+            raise ValueError("Invalid or unoffered ALPN selection")
+        return protocols[0].decode('utf-8')
+
 
 class ECPointFormatsExtension(Extension):
     """EC Point Formats extension (type 0x000B).
