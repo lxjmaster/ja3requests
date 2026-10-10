@@ -27,6 +27,7 @@ from test.integration.test_sync_upload_network import h2_write_guards
 from test.mock_servers.local import (
     LocalServer,
     h2_frame,
+    read_exact,
     read_headers,
     tls13_context,
 )
@@ -375,7 +376,9 @@ def test_direct_https_request_preserves_invalid_field_error(
         connections.append(conn.selected_alpn_protocol())
         try:
             if alpn == 'h2':
-                start_h2(conn)
+                assert read_exact(conn, 24) == b'PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n'
+                # Local field validation closes before waiting for peer SETTINGS.
+                # Sending them here races that deliberate close on some runtimes.
             await_transport_close(conn)
         except (ConnectionResetError, BrokenPipeError):
             # Rejecting local input closes the newly established transport.
