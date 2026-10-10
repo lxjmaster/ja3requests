@@ -88,30 +88,49 @@ def test_data_before_response_headers_discards_connection(local_certificate):
 
 @pytest.mark.parametrize("pooled", [False, True])
 def test_missing_response_status_fails_over_tls(local_certificate, pooled):
+    streams, resets = [], []
+
     def handler(conn):
         assert read_exact(conn, 24) == b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
         conn.sendall(h2_frame(4, 0, 0))
-        while True:
+        while len(streams) < (2 if pooled else 1):
             header = read_exact(conn, 9)
-            read_exact(conn, int.from_bytes(header[:3], "big"))
+            payload = read_exact(conn, int.from_bytes(header[:3], "big"))
+            stream_id = int.from_bytes(header[5:9], "big") & 0x7FFFFFFF
+            if header[3] == 3:
+                resets.append((stream_id, payload))
             if header[3] == 1:
-                stream_id = int.from_bytes(header[5:9], "big") & 0x7FFFFFFF
-                conn.sendall(h2_frame(1, 5, stream_id))
-                return
+                streams.append(stream_id)
+                conn.sendall(
+                    h2_frame(1, 5, stream_id, b"" if stream_id == 1 else b"\x88")
+                )
+        # A malformed HTTP field block fails its stream, so keep the peer alive
+        # until the owner closes it rather than racing a transport EOF.
+        while recv_with_ragged_eof(conn, 4096):
+            pass
 
     config = TlsConfig.legacy()
     config.alpn_protocols = ["h2", "http/1.1"]
     pool = ConnectionPool() if pooled else None
     with LocalServer(handler, tls12_context(*local_certificate, alpn="h2")) as server:
-        with Session(tls_config=config, use_pooling=pooled, pool=pool) as session:
-            with pytest.raises(ConnectionError) as failure:
-                session.get(f"https://127.0.0.1:{server.port}/", timeout=3)
-            cause = failure.value
-            while cause.__cause__ is not None:
-                cause = cause.__cause__
-            assert ":status" in str(cause)
-            if pooled:
-                assert pool.get_stats()["total_connections"] == 0
+        try:
+            with Session(tls_config=config, use_pooling=pooled, pool=pool) as session:
+                url = f"https://127.0.0.1:{server.port}/"
+                with pytest.raises(ConnectionError) as failure:
+                    session.get(url, timeout=3)
+                cause = failure.value
+                while cause.__cause__ is not None:
+                    cause = cause.__cause__
+                assert ":status" in str(cause)
+                if pooled:
+                    assert pool.get_stats()["total_connections"] == 1
+                    assert session.get(url, timeout=3).status_code == 200
+        finally:
+            if pool is not None:
+                pool.close_all()
+    assert streams == ([1, 3] if pooled else [1])
+    if pooled:
+        assert resets == [(1, b"\x00\x00\x00\x01")]
 
 
 @pytest.mark.parametrize("pooled", [False, True])
