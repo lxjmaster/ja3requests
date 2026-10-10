@@ -3,6 +3,7 @@
 import pytest
 
 from ja3requests import Session
+from ja3requests.contexts.context import HTTPContext
 from test.mock_servers.local import LocalServer, read_headers
 
 
@@ -123,3 +124,76 @@ def test_sync_multihop_redirect_clears_mixed_case_entity_headers_only():
         assert headers['cookie'] == 'sid=manual'
         assert headers['authorization'] == observed[0][1]['authorization']
     assert observed[-1][1]['x-hop-trace'] == 'from-hook'
+
+
+def test_sync_params_are_inserted_before_fragment_and_host_keeps_port():
+    observed = []
+    with LocalServer(_redirect_peer(observed, []), connections=1) as peer:
+        with Session(use_pooling=False) as session:
+            response = session.get(
+                'http://127.0.0.1:%d/path?before=one#fragment' % peer.port,
+                params={'q': 'a b'},
+                timeout=2,
+            )
+            assert response.status_code == 200
+
+    assert observed[0][0] == 'GET /path?before=one&q=a+b HTTP/1.1'
+    assert observed[0][1]['host'] == '127.0.0.1:%d' % peer.port
+
+
+@pytest.mark.parametrize(
+    'suffix,target',
+    [
+        ('/resource;version=2?x=1#fragment', '/resource;version=2?x=1&q=2'),
+        ('/resource;#fragment', '/resource;?q=2'),
+        ('/a;b/c;d?x=1', '/a;b/c;d?x=1&q=2'),
+        ('/encoded%3Btext;v=2', '/encoded%3Btext;v=2?q=2'),
+    ],
+)
+def test_sync_request_retains_semicolon_path_components(suffix, target):
+    observed = []
+    with LocalServer(_redirect_peer(observed, [])) as peer, Session(
+        use_pooling=False
+    ) as session:
+        response = session.get(
+            'http://127.0.0.1:%d%s' % (peer.port, suffix), params={'q': '2'}, timeout=2
+        )
+        assert response.status_code == 200
+    assert observed[0][0] == 'GET %s HTTP/1.1' % target
+
+
+def test_sync_context_formats_bracketed_ipv6_authority():
+    context = HTTPContext()
+    context.set_payload(
+        method='GET',
+        start_line='http://[::1]:8080/path',
+        port=8080,
+        headers={'X-Test': 'ok'},
+    )
+
+    assert context.destination_address == '::1'
+    assert context.start_line == 'GET /path HTTP/1.1'
+    assert context.headers['Host'] == '[::1]:8080'
+
+
+@pytest.mark.parametrize(
+    'name,value',
+    [
+        ('X-Test', 'good\r\nInjected: yes'),
+        ('X-Test', 'bad\x00value'),
+        ('X\n-Test', 'value'),
+    ],
+)
+def test_sync_header_controls_are_rejected_at_serialization(name, value):
+    context = HTTPContext()
+    context.set_payload(
+        method='GET',
+        start_line='http://example.test/path',
+        headers={'X-Test': 'ok'},
+    )
+    # Mutating the prepared mapping models a hook edit after the normal setter.
+    context.headers.clear()
+    context.headers[name] = value
+
+    with pytest.raises(ValueError, match='Invalid HTTP header'):
+        _ = context.message

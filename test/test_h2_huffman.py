@@ -138,6 +138,13 @@ class TestALPNParsing(unittest.TestCase):
         s1, s2 = socket.socketpair()
         try:
             tls = TLS(s1)
+            from ja3requests import TlsConfig
+
+            config = TlsConfig()
+            config.alpn_protocols = ['h2']
+            tls.set_payload(config)
+            tls._send_client_hello(tls.body)
+            s2.recv(65536)
 
             # Build a minimal ServerHello with ALPN extension
             version = b"\x03\x03"

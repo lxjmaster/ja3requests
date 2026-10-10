@@ -116,6 +116,25 @@ def test_http_reuse_and_binary_or_json_request_serialization():
     asyncio.run(run())
 
 
+@pytest.mark.parametrize(
+    'path',
+    [
+        '/signed',
+        '//signed',
+        '///signed',
+        '//encoded%2f/../?q=a%2Bb&q=%2F',
+    ],
+)
+def test_request_preserves_leading_slashes_and_encoded_target(path):
+    async def run():
+        async with Peer(ok) as peer, AsyncSession() as session:
+            response = await session.get(peer.url + path, timeout=1)
+            assert response.content == b'ok'
+            assert peer.requests[0][1] == path
+
+    asyncio.run(run())
+
+
 def test_retry_hooks_and_cookies_have_one_final_boundary():
     async def run():
         calls = []

@@ -20,13 +20,15 @@ from ja3requests.protocol.h2.frame import (
     build_window_update_frame,
     data_payload,
     header_block_fragment,
-    parse_settings_payload,
-    SETTINGS_ENABLE_PUSH,
 )
 
 
 class H2StreamError(ConnectionError):
     """A single stream failed while the underlying connection may remain usable."""
+
+
+class H2ResponseHeaderError(H2StreamError):
+    """A decoded HTTP field block is malformed; HPACK state remains usable."""
 
 
 class _Stream:
@@ -48,8 +50,21 @@ class _Stream:
 class H2StreamState(H2Connection):
     """Apply frames and flow control without owning threads or network waits."""
 
-    def __init__(self, send_func, recv_func=None, settings=None):
-        super().__init__(send_func, recv_func, settings=settings)
+    def __init__(
+        self,
+        send_func,
+        recv_func=None,
+        settings=None,
+        pseudo_header_order=None,
+        priority_frames=None,
+    ):
+        super().__init__(
+            send_func,
+            recv_func,
+            settings=settings,
+            pseudo_header_order=pseudo_header_order,
+            priority_frames=priority_frames,
+        )
         self._streams = {}
         self._failed = None
         self._pooled_connection = None
@@ -135,7 +150,7 @@ class H2StreamState(H2Connection):
                     self._discard_body(stream)
             return
         stream = self._streams.get(frame.stream_id)
-        if stream is None:
+        if stream is None or stream.error is not None:
             if frame.type == FRAME_DATA:
                 self._account_connection_data(frame.length)
             elif frame.type in (FRAME_HEADERS, FRAME_CONTINUATION):
@@ -173,19 +188,26 @@ class H2StreamState(H2Connection):
             )
             if frame.flags & FLAG_END_HEADERS:
                 decoded = self._decode_headers(stream.header_block)
-                if stream.headers is None:
-                    status = self._response_status(decoded)
-                    if status < 200:
-                        if stream.header_end_stream:
-                            raise ValueError("HTTP/2 interim response ended stream")
-                    else:
-                        stream.headers = decoded
-                elif not stream.header_end_stream or any(
-                    name.startswith(":") for name, _ in decoded
-                ):
-                    raise ValueError("Invalid HTTP/2 response trailers")
                 stream.header_block = b""
                 stream.header_open = False
+                try:
+                    status = self._validate_response_headers(
+                        decoded, trailers=stream.headers is not None
+                    )
+                    if stream.headers is None:
+                        if status < 200:
+                            if stream.header_end_stream:
+                                raise ValueError("HTTP/2 interim response ended stream")
+                        else:
+                            stream.headers = decoded
+                    elif not stream.header_end_stream:
+                        raise ValueError("Invalid HTTP/2 response trailers")
+                except ValueError as error:
+                    stream.error = H2ResponseHeaderError(str(error))
+                    stream.error.__cause__ = error
+                    self._discard_body(stream)
+                    self._send(build_rst_stream_frame(frame.stream_id, 1).serialize())
+                    return
                 if stream.header_end_stream:
                     stream.done = True
         elif frame.type == FRAME_DATA:
@@ -213,33 +235,23 @@ class H2StreamState(H2Connection):
             )
             self._discard_body(stream)
 
+    def _update_send_windows(self, delta):
+        for stream in self._streams.values():
+            stream.send_window += delta
+            if stream.send_window > 0x7FFFFFFF:
+                raise ValueError("HTTP/2 stream send window overflow")
+
     def _handle_connection_frame(self, frame):
         if frame.type == FRAME_SETTINGS:
             if frame.flags & FLAG_ACK:
                 if frame.length:
                     raise ValueError("Invalid HTTP/2 SETTINGS ACK")
                 return
-            if frame.length % 6:
-                raise ValueError("Invalid HTTP/2 SETTINGS frame")
-            settings = parse_settings_payload(frame.payload)
-            if settings.get(SETTINGS_ENABLE_PUSH, 0) != 0:
-                raise ValueError("Invalid server HTTP/2 ENABLE_PUSH setting")
-            if 4 in settings and settings[4] > 0x7FFFFFFF:
-                raise ValueError("Invalid HTTP/2 initial stream window")
-            if 5 in settings and not 16384 <= settings[5] <= 16777215:
-                raise ValueError("Invalid HTTP/2 maximum frame size")
-            if 4 in settings:
-                delta = settings[4] - self._peer_settings[4]
-                for stream in self._streams.values():
-                    stream.send_window += delta
-                    if stream.send_window > 0x7FFFFFFF:
-                        raise ValueError("HTTP/2 stream send window overflow")
-            self._peer_settings.update(settings)
-            self._peer_settings_received = True
-            if 1 in settings:
-                self._encoder.set_table_size(settings[1])
-            if 3 in settings and self._pooled_connection is not None:
-                self._pooled_connection.set_max_concurrent_streams(settings[3])
+            self._apply_peer_settings(frame.payload)
+            if self._pooled_connection is not None:
+                self._pooled_connection.set_max_concurrent_streams(
+                    self._peer_settings[3]
+                )
             self._send(build_settings_frame(ack=True).serialize())
         elif frame.type == FRAME_WINDOW_UPDATE:
             self._connection_send_window += self._window_increment(frame)

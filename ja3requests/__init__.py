@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Optional
 
 from ._typing import Data, JsonBody, Params
 from .sessions import Session
-from .async_sessions import AsyncSession
+from .async_sessions import AsyncPreparedRequest, AsyncSession
 from .async_response import AsyncResponse
 from .async_pool import AsyncConnectionPool
 from .protocol.tls.config import TlsConfig
@@ -48,6 +48,7 @@ if TYPE_CHECKING:
 __all__ = [
     'Session',
     'AsyncSession',
+    'AsyncPreparedRequest',
     'AsyncResponse',
     'AsyncConnectionPool',
     'TlsConfig',

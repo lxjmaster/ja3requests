@@ -7,7 +7,7 @@ import copy
 import math
 import socket
 import ssl
-from typing import Optional
+from typing import Optional, Union
 from urllib.parse import unquote, urlsplit
 
 from ja3requests._async_utils import owner_task
@@ -18,6 +18,7 @@ from ja3requests.protocol.tls import TLS
 from ja3requests.protocol.tls._io import Call, Pause, Read, Write
 from ja3requests.protocol.tls.config import TlsConfig
 from ja3requests.sockets.https import TLSRecordCodec
+from ja3requests.utils import _encode_http1_headers, _validated_header_items
 
 
 class _AsyncHandshakeSocket:
@@ -353,21 +354,26 @@ async def _proxy_exact(transport, size):
     return result
 
 
-async def _http_tunnel(transport, host, port, proxy):
+async def _http_tunnel(transport, host, port, proxy, proxy_auth=None):
     hostname = host.encode('idna').decode('ascii')
     authority = (
         "[{}]:{}".format(hostname, port)
         if ':' in hostname
         else "{}:{}".format(hostname, port)
     )
-    lines = ["CONNECT {} HTTP/1.1".format(authority), "Host: " + authority]
-    if proxy.username is not None:
+    headers = {'Host': authority}
+    if proxy_auth:
+        headers['Proxy-Authorization'] = proxy_auth
+    elif proxy.username is not None:
         credentials = unquote(proxy.username) + ':' + unquote(proxy.password or '')
-        lines.append(
-            "Proxy-Authorization: Basic "
-            + b64encode(credentials.encode()).decode('ascii')
-        )
-    await transport._send(('\r\n'.join(lines) + '\r\n\r\n').encode('ascii'))
+        headers['Proxy-Authorization'] = 'Basic ' + b64encode(
+            credentials.encode()
+        ).decode('ascii')
+    await transport._send(
+        ('CONNECT {} HTTP/1.1\r\n'.format(authority)).encode('ascii')
+        + _encode_http1_headers(headers, 'latin1')
+        + b'\r\n\r\n'
+    )
     response = b""
     while b'\r\n\r\n' not in response:
         if len(response) >= 65536:
@@ -451,6 +457,7 @@ async def open_transport(
     *,
     tls_config: Optional[TlsConfig] = None,
     proxy: Optional[str] = None,
+    proxy_auth: Optional[Union[str, bytes]] = None,
     timeout: Optional[float] = None,
 ) -> AsyncTransport:
     """Connect once, sharing one deadline across DNS, candidates, tunnel and TLS."""
@@ -462,6 +469,8 @@ async def open_transport(
     ):
         raise ValueError("connect timeout must be finite and non-negative or None")
     parsed_proxy = urlsplit(proxy) if proxy is not None else None
+    if proxy_auth is not None:
+        _validated_header_items({'Proxy-Authorization': proxy_auth})
     if parsed_proxy is not None:
         if parsed_proxy.scheme not in (
             'http',
@@ -482,7 +491,7 @@ async def open_transport(
         try:
             if parsed_proxy:
                 if parsed_proxy.scheme == 'http':
-                    await _http_tunnel(transport, host, port, parsed_proxy)
+                    await _http_tunnel(transport, host, port, parsed_proxy, proxy_auth)
                 else:
                     await _socks_tunnel(transport, host, port, parsed_proxy)
             if tls_config is not None:

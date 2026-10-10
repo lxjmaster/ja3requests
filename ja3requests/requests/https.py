@@ -16,6 +16,7 @@ from ja3requests.sockets.proxy import ProxySocket
 from ja3requests.sockets.socks import SocksProxySocket
 from ja3requests.response import HTTPSResponse
 from ja3requests.pool import ConnectionPool
+from ja3requests.protocol.tls.config import _validate_http_alpn
 
 
 class HttpsRequest(BaseRequest):
@@ -38,6 +39,9 @@ class HttpsRequest(BaseRequest):
         :param pool: Connection pool for reuse
         :return:
         """
+        config = getattr(context, 'tls_config', None)
+        if config is not None:
+            _validate_http_alpn(config.alpn_protocols)
         if context.proxy:
             scheme = getattr(context, 'proxy_scheme', None)
             if scheme in ('socks5', 'socks4'):

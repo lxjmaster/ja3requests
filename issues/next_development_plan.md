@@ -1,5 +1,74 @@
 # Next Development Plan
 
+## 2.3.0 delivery (2026-10-10)
+
+The user selected commit, push and release of the reviewed buffered async
+prepared API, exact H2 controls and protocol/wire fixes as 2.3.0. The guides
+below now describe 2.3.0; prior local-only status and 2.2.0 baseline statements
+are dated historical evidence. Publication requires exact-commit artifact/CI
+acceptance and readback from GitHub and the official PyPI index. Further product
+candidates remain unselected; this release adds no documentation hosting or
+Session-default/streaming-prepared implementation.
+
+## Selected buffered async prepared requests (2026-10-09)
+
+The user-selected workflow "prepare, inspect or sign, then send" is **complete
+locally**. `AsyncSession.prepare_request()`, `AsyncPreparedRequest.with_headers()`
+and `AsyncSession.send()` support buffered bodies with read-only inspection,
+Session/loop binding and detached Cookie/TLS/proxy snapshots. Explicit Cookie
+header copies remain explicit on retry. The existing dispatcher retains hooks,
+retry/redirect rules, streaming response ownership and cancellation.
+The review findings are fixed: prepared URLs normalize scheme, destination
+authority, empty paths and query delimiters before signing, matching the
+HTTP1/HTTP2 request target. Both peers independently verify signatures, including
+upper-case schemes and port leading zeros. Generated Cookies use the normalized
+destination; percent encoding and query order are retained.
+The latest fix preserves double/triple leading slashes in the shared async
+HTTP1/H2 request target, so prepared signatures match received paths and ordinary
+requests no longer gain two extra slashes.
+
+Current acceptance status, test counts and artifact paths are recorded only in
+the [execution record](post_2_2_0_execution_plan.md), avoiding stale copies here.
+See the [design](async_prepared_request_design.md) and
+[2.3.0 guide](../docs/async.md#prepare-inspect-and-send-buffered-requests).
+Earlier acceptance records remain superseded history. This candidate remains
+uncommitted/unpublished; the latest published baseline is still 2.2.0. Prepared
+streaming sources and Session-default merging remain future candidates.
+
+## Request wire-boundary maintenance review (2026-10-09)
+
+The TLS/H2 follow-up repairs exact ordered SETTINGS, configuration validation,
+preset isolation, actual offered-ALPN enforcement and valid H2 request fields.
+It adds configurable pseudo-header order and initial PRIORITY fingerprint
+signals through the existing project-owned TLS/H2 engines. Scheduling remains
+a separate deferred capability. Current acceptance is kept in the execution
+record; this local candidate is uncommitted and unpublished.
+
+The bounded maintenance passes share final header validation across synchronous,
+async and CONNECT paths, isolate proxy credentials from destination requests,
+preserve semicolon paths and fragments during query assembly, parse bracketed
+IPv6 and use final `Host` authorities for synchronous HTTP1/H2. They also keep
+release evidence out of the default `make clean` target and narrow publication
+to an explicit version's wheel and sdist. Focused and full local verification is recorded in the linked
+execution plan; remote delivery and publication remain unselected.
+
+## Current baseline and follow-up selection (2026-10-08)
+
+The 2.2.0 release is complete: `master`, `origin/master`, and `v2.2.0` point
+to `83132c84547b6f7bbcf740b961b6d06a7121b058`. GitHub Release and PyPI 2.2.0
+were published after exact-commit tests, typing, documentation, artifact-hash,
+and official-index installation checks. The detailed next-stage selection is in
+the [post-2.2.0 follow-up plan](post_2_2_0_follow_up_plan.md), with the
+[execution sequence](post_2_2_0_execution_plan.md) kept separately.
+
+The completed buffered A3 capability is the current local product boundary.
+Further work requires a reproducible maintenance defect or a named capability
+outside that boundary. Session-default merging, incremental internal typing,
+documentation hosting, and performance CI remain separate candidates. HTTP/3, 0-RTT, ECH,
+H2 push/priority scheduling, browser-profile expansion, and legacy TLS suites remain
+deferred feasibility decisions. The historical sections below retain their
+original evidence and are superseded for current selection by the linked plan.
+
 ## Latest local delivery and client completion (2026-10-08)
 
 Follow-up: the user selected fixes for the second review's source-cancellation

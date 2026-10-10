@@ -693,8 +693,8 @@ async def test_initial_fingerprint_context_isolation_and_close_idempotence():
     async with connected(wire=wire, initial_increment=123) as (conn, _):
         wire.context.reset(token)
         assert wire.sent[0] == PREFACE
-        settings = dict(struct.iter_unpack("!HI", wire.frames(4)[0].payload))
-        assert settings == conn._local_settings
+        settings = list(struct.iter_unpack("!HI", wire.frames(4)[0].payload))
+        assert settings == [(4, 8)]
         assert wire.updates(0) == [123]
         assert conn.receive_buffer_limit == 65535 + 123 + 8
         assert wire.seen_contexts and set(wire.seen_contexts) == {None}

@@ -5,19 +5,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Development Commands
 
 ### Testing
-- Run tests: `python setup.py test` or `pytest`
-- Run specific test: `pytest test/test_session.py`
-- Setup uses pytest with parallel execution and boxed mode by default
+- Run tests: `python -m pytest test --ignore=test/test_session.py -q`
+- Run a focused test: `python -m pytest test/test_sync_redirect_review.py -q`
+- `test/test_session.py` is a legacy manual test that depends on external
+  services; exclude it from the local and CI suite unless you are intentionally
+  running that manual check.
 
 ### Code Quality
 - Format code: `make fmt` (uses black with skip-string-normalization)
 - Lint code: `make lint` (uses pylint with custom configuration)
-- Clean build artifacts: `make clean`
+- Clean transient build artifacts: `make clean` (retains `dist/` acceptance
+  evidence; use `make clean-dist` only when the distribution directory itself
+  is task-owned and may be removed)
 
 ### Building and Distribution
 - Build source distribution: `make dist`
 - Build wheel: `make build`
-- Upload to PyPI: `make upload`
+- Upload the exact versioned wheel and sdist: `make upload RELEASE_VERSION=2.3.0`
 
 ## Architecture Overview
 

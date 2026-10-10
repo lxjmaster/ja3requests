@@ -112,14 +112,15 @@ def test_configured_header_list_limit_is_used_without_changing_settings(limit):
 
 
 @pytest.mark.parametrize('connection_type', [H2Connection, H2MultiplexConnection])
+@pytest.mark.parametrize('settings', [{6: 96}, {}, [], {2: 0}])
 @pytest.mark.parametrize('discarded', [False, True])
 @pytest.mark.parametrize('kind', ['compressed', 'literal', 'indexed', 'trailers'])
 def test_sync_active_and_discarded_header_limits_fail_connection(
-    connection_type, discarded, kind
+    connection_type, settings, discarded, kind
 ):
     incoming = []
     conn = connection_type(
-        lambda _data: None, lambda _size: incoming.pop(0), settings={6: 96}
+        lambda _data: None, lambda _size: incoming.pop(0), settings=settings
     )
     conn._peer_settings_received = True
     stream = conn.send_request('GET', 'example.test', '/')
@@ -132,13 +133,15 @@ def test_sync_active_and_discarded_header_limits_fail_connection(
         block = b'\x20' * (conn._header_block_limit + 1)
     elif kind == 'literal':
         block = HPACKEncoder().encode_headers(
-            [(':status', '200'), ('x-large', 'x' * 128)]
+            [(':status', '200'), ('x-large', 'x' * conn._local_settings[6])]
         )
     elif kind == 'indexed':
-        block = b'\x88' + b'\x8f' * 64
+        block = b'\x88' + b'\x8f' * (conn._local_settings[6] + 1)
     else:
         incoming.append(headers(stream))
-        block = HPACKEncoder().encode_headers([('x-trailer', 'x' * 128)])
+        block = HPACKEncoder().encode_headers(
+            [('x-trailer', 'x' * conn._local_settings[6])]
+        )
     incoming.extend(_fragments(stream, block))
     with pytest.raises(HeaderLimitError):
         if connection_type is H2Connection:
@@ -156,6 +159,61 @@ def test_sync_active_and_discarded_header_limits_fail_connection(
     else:
         with pytest.raises(HeaderLimitError):
             conn.send_request('GET', 'example.test', '/')
+
+
+@pytest.mark.parametrize(
+    'connection_type', [H2Connection, H2MultiplexConnection, AsyncH2Connection]
+)
+@pytest.mark.parametrize('settings', [None, {}, [], {2: 0}, {6: 32768}])
+def test_decoded_budget_is_local_when_not_advertised(connection_type, settings):
+    conn = connection_type(lambda _data: None, lambda _size: b'', settings=settings)
+    limit = 32768 if settings == {6: 32768} else 16384
+    block = HPACKEncoder().encode_headers(
+        [(':status', '200'), ('x', 'a' * (limit - 42 - 33))]
+    )
+    assert conn._decode_headers(block) == [
+        (':status', '200'),
+        ('x', 'a' * (limit - 42 - 33)),
+    ]
+    # The budget resets for each block; an exact boundary does not poison state.
+    assert conn._decode_headers(b'\x88') == [(':status', '200')]
+    oversized = HPACKEncoder().encode_headers(
+        [(':status', '200'), ('x', 'a' * (limit - 42 - 32))]
+    )
+    with pytest.raises(HeaderLimitError, match='decoded header list'):
+        conn._decode_headers(oversized)
+
+
+@pytest.mark.parametrize('settings', [{}, [], {2: 0}])
+@pytest.mark.parametrize('cancelled', [False, True])
+def test_async_omitted_budget_stops_indexed_expansion_and_fails_streams(
+    settings, cancelled
+):
+    async def run():
+        wire = Wire()
+        conn = AsyncH2Connection(wire.send, wire.recv, settings=settings)
+        try:
+            await conn.initiate()
+            wire.feed(h2_frame(4, 0, 0))
+            await wire.flush()
+            first, second = await request(conn), await request(conn)
+            if cancelled:
+                await conn.cancel_stream(first)
+            # 4 KB on the wire would otherwise expand to over 3 MB of fields.
+            block = b'\x88\x40\x01x\x7f\xe9\x06' + b'a' * 1000 + b'\xbe' * 3000
+            wire.feed(h2_frame(1, 5, first, block))
+            with pytest.raises(H2ProtocolError, match='decoded header list'):
+                await conn.receive_headers(second if cancelled else first, timeout=1)
+            assert conn.failed
+            assert not conn._ignored_header_block
+            assert all(not state.header_block for state in conn._streams.values())
+            with pytest.raises(H2ProtocolError):
+                await request(conn)
+        finally:
+            await conn.aclose()
+            assert conn._reader_task.done() and conn._writer_task.done()
+
+    asyncio.run(run())
 
 
 @pytest.mark.parametrize('cancelled', [False, True])

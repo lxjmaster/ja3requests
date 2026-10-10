@@ -1,5 +1,65 @@
 # Release Notes
 
+## 2.3.0 — async prepared requests and exact H2 controls
+
+- Validate H2 response fields before exposure, including interim responses and
+  trailers; reset malformed streams while preserving shared HPACK state and
+  preventing CRLF response/Cookie injection in the synchronous adapter.
+- Apply received SETTINGS in wire order, preserving intermediate HPACK table
+  reductions and rejecting invalid values hidden by later duplicate entries.
+- Handle absent ClientHello extensions when extracting offered ALPN, restoring
+  extension-free legacy TLS 1.2 handshakes without changing encoded bytes.
+
+- Retain a local decoded H2 response-header budget when exact SETTINGS omit
+  MAX_HEADER_LIST_SIZE, without adding advertised fields. Reject indexed HPACK
+  expansion during decoding and close failed connections across sync/async H2.
+- Restrict HTTP ALPN configuration to implemented h2/http/1.1 protocols and
+  recheck negotiated selections before HTTP sending or pool admission/reuse.
+  Invalid configuration fails before upload preparation or connection work;
+  absent ALPN retains HTTP1 compatibility and raw ClientHello encoding stays usable.
+
+- Preserve exact H2 SETTINGS order and field sets for mappings and ordered
+  pairs, validate settings/window ranges and isolate browser preset state.
+- Add configurable request pseudo-header order and initial legacy PRIORITY
+  signals across sync/async H2; all controls partition pooled connections.
+- Reject malformed or unoffered ALPN selections against the actual ClientHello
+  in TLS 1.2/1.3, remove H2 hop fields and allow TE only for trailers.
+
+- Validate automatically refreshed Cookie fields before source/network work
+  and status retries, including hook URL changes and response Cookie updates.
+- Keep async proxy authentication in HTTP CONNECT, away from destination
+  HTTP1/H2 requests, and isolate pooled tunnels by explicit credentials.
+- Preserve original byte-valued headers in synchronous HTTP1, async HTTP1/H2,
+  async hook metadata and prepared inspection/derivation. H2 retains its UTF-8
+  input contract; numeric prepared values are normalized to strings.
+- Read complete synchronous CONNECT headers across fragmented responses,
+  preserve subsequent tunnel bytes and close sockets on handshake failure.
+
+- Preserve synchronous HTTP2 byte-header values as UTF-8 inputs over direct and
+  HTTP proxy routes, for buffered and streaming bodies. Reject malformed sync
+  fields before connection/source preparation; local HTTPS/H2 input errors
+  remain `ValueError` and do not trigger connection retries.
+
+- Validate final header names and control characters consistently across sync,
+  async and HTTP CONNECT. Reject invalid CONNECT fields before opening a proxy
+  connection. Send explicit proxy credentials only to the proxy, preserving
+  caller headers for retries and accepting complete authentication field values.
+- Use the final Host value for synchronous HTTP2 authority, including explicit
+  overrides, IPv6 brackets and non-default ports. Preserve semicolon path
+  components while adding query parameters and sending HTTP1/HTTP2 requests.
+
+- Add `AsyncSession.prepare_request()` and `send()` for buffered requests, with
+  read-only `AsyncPreparedRequest` metadata and `with_headers()` for derived
+  signed headers. Preparation performs no network/source I/O; sends clone
+  Cookie/TLS/proxy state and retain existing hooks, retries, redirects and
+  response ownership. Prepared requests belong to one Session/loop. Files and
+  iterators remain available through the existing high-level streaming API.
+
+- Preserve leading slashes in async HTTP/1.1 and H2 request targets, including
+  prepared sends and ordinary requests. Paths beginning with `//` no longer gain
+  two extra slashes during dispatch, so inspected URLs and signatures match the
+  transmitted target.
+
 ## 2.2.0 — streaming request bodies and async file APIs
 
 - Stream binary `data=` files and byte iterators over synchronous/asynchronous

@@ -66,8 +66,16 @@ class H2MultiplexConnection(H2StreamState):
         settings=None,
         send_with_timeout=None,
         close_transport=None,
+        pseudo_header_order=None,
+        priority_frames=None,
     ):
-        super().__init__(send_func, recv_func, settings=settings)
+        super().__init__(
+            send_func,
+            recv_func,
+            settings=settings,
+            pseudo_header_order=pseudo_header_order,
+            priority_frames=priority_frames,
+        )
         self._condition = threading.Condition(threading.RLock())
         self._reader = None
         self._transport_send = send_func
@@ -157,6 +165,9 @@ class H2MultiplexConnection(H2StreamState):
         scheme="https",
         timeout=None,
     ):
+        h2_headers = self._prepare_request_headers(
+            method, authority, path, headers, scheme
+        )
         deadline = time.monotonic() + (15.0 if timeout is None else timeout)
         with self._condition:
             while (
@@ -177,19 +188,6 @@ class H2MultiplexConnection(H2StreamState):
             self._next_stream_id += 2
             stream = _Stream(self._peer_settings[4], self._local_settings[4])
             self._streams[stream_id] = stream
-            h2_headers = [
-                (":method", method),
-                (":authority", authority),
-                (":scheme", scheme),
-                (":path", path),
-            ]
-            for name, value in headers or ():
-                name = name.lower()
-                if name in ("host", "connection", "transfer-encoding", "upgrade"):
-                    continue
-                h2_headers.append(
-                    (name, value if isinstance(value, (str, bytes)) else str(value))
-                )
             try:
                 block = self._encoder.encode_headers(h2_headers)
                 for frame in self._header_frames(

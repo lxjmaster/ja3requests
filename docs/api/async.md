@@ -15,6 +15,8 @@ helpers are awaited; see [Cookie files](../cookie_persistence.md#native-async-fi
     options:
       members:
         - request
+        - prepare_request
+        - send
         - get
         - post
         - put
@@ -27,6 +29,21 @@ helpers are awaited; see [Cookie files](../cookie_persistence.md#native-async-fi
         - aclose
         - tls_config
         - pool
+
+## AsyncPreparedRequest
+
+Buffered prepared requests are available starting with 2.3.0. See
+[prepare, inspect and send](../async.md#prepare-inspect-and-send-buffered-requests)
+for input restrictions, signatures, snapshots and hook behavior.
+
+::: ja3requests.async_sessions.AsyncPreparedRequest
+    options:
+      members:
+        - method
+        - url
+        - headers
+        - body
+        - with_headers
 
 ## AsyncResponse
 

@@ -7,7 +7,8 @@ This module provides utility functions.
 
 import platform
 from base64 import b64encode
-from typing import Union, AnyStr, List
+from typing import Union, AnyStr, List, Optional, Tuple
+from ._typing import Headers
 from .const import DEFAULT_MAX_RETRY_LIMIT
 from .exceptions import MaxRetriedException
 from .cookies import cookiejar_from_dict
@@ -15,6 +16,45 @@ from .__version__ import __version__
 
 
 ACCEPT_ENCODING = "gzip,deflate"
+_HEADER_TOKEN = frozenset(
+    "!#$%&'*+-.^_`|~0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+)
+
+
+def _validated_header_items(headers: Optional[Headers]) -> List[Tuple[str, str]]:
+    """Validate field syntax and return a text view for metadata consumers.
+
+    HTTP2 callers retain the original byte values after validation so HPACK
+    applies its UTF-8 input contract without a Latin-1 round trip.
+    """
+    items = []
+    for name, value in (headers or {}).items():
+        if (
+            not isinstance(name, str)
+            or not name
+            or not all(char in _HEADER_TOKEN for char in name)
+        ):
+            raise ValueError("Invalid HTTP header name")
+        text = value.decode("latin1") if isinstance(value, bytes) else str(value)
+        if any(
+            (ord(char) < 0x20 and char != "\t") or ord(char) == 0x7F for char in text
+        ):
+            raise ValueError("Invalid HTTP header value")
+        items.append((name, text))
+    return items
+
+
+def _encode_http1_headers(
+    headers: Optional[Headers], text_encoding: str = 'utf-8'
+) -> bytes:
+    """Serialize fields once, preserving byte values after syntax validation."""
+    fields = []
+    values = headers or {}
+    for name, text in _validated_header_items(values):
+        value = values[name]
+        encoded = value if isinstance(value, bytes) else text.encode(text_encoding)
+        fields.append(name.encode('ascii') + b': ' + encoded)
+    return b'\r\n'.join(fields)
 
 
 def b(s: AnyStr):  # pylint: disable=C

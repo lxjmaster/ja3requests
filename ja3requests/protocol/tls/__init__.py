@@ -28,6 +28,7 @@ from ja3requests.exceptions import (
 from ja3requests.protocol.tls.layers import HandShake
 from ja3requests.protocol.tls.debug import debug, debug_hex
 from ja3requests.protocol.tls.layers.client_hello import ClientHello
+from ja3requests.protocol.tls.extensions import ALPNExtension
 from ja3requests.protocol.tls.layers.server_hello import ServerHello
 from ja3requests.protocol.tls.layers.certificate import Certificate
 from ja3requests.protocol.tls.layers.server_key_exchange import ServerKeyExchange
@@ -107,6 +108,7 @@ class TLS:
         self._offered_extended_master_secret = False
         self._extended_master_secret = False
         self._negotiated_protocol = None  # ALPN result (e.g., "h2", "http/1.1")
+        self._offered_alpn_protocols = ()
         self._tls13_psk = None
         self._tls13_pending_record_data = b""
         self._tls12_pending_record_data = b""
@@ -463,6 +465,7 @@ class TLS:
                 ),
                 client_cert_pem=getattr(self, '_client_cert_pem', None),
                 client_key_pem=getattr(self, '_client_key_pem', None),
+                offered_alpn=self._offered_alpn_protocols,
             )
             if getattr(self, '_verify_cert', False):
                 hs._certificate_verifier = self._verify_server_certificate
@@ -752,7 +755,9 @@ class TLS:
     @handshake_io
     def _send_client_hello(self, hello):
         record = hello.message
+        offered_alpn = hello.offered_alpn_protocols
         yield Write(record)
+        self._offered_alpn_protocols = offered_alpn
         self._sent_client_hellos.append(record)
 
     @handshake_io
@@ -1317,6 +1322,7 @@ class TLS:
             ext_end = offset + extensions_length
             if ext_end != len(data):
                 raise TLSHandshakeError("Invalid ServerHello extension length")
+            seen_extensions = set()
             while offset + 4 <= ext_end:
                 ext_type = struct.unpack("!H", data[offset : offset + 2])[0]
                 ext_len = struct.unpack("!H", data[offset + 2 : offset + 4])[0]
@@ -1325,6 +1331,11 @@ class TLS:
                     raise TLSHandshakeError("Truncated ServerHello extension")
                 ext_data = data[offset : offset + ext_len]
                 offset += ext_len
+                if ext_type in seen_extensions:
+                    raise TLSHandshakeError(
+                        "Duplicate ServerHello extension (including ALPN)"
+                    )
+                seen_extensions.add(ext_type)
 
                 if ext_type == 0x002B:
                     self._server_supported_version = ext_data
@@ -1343,16 +1354,18 @@ class TLS:
                     self._server_offered_session_ticket = True
 
                 # ALPN (0x0010): extract negotiated protocol
-                if ext_type == 0x0010 and len(ext_data) >= 4:
-                    proto_list_len = struct.unpack("!H", ext_data[:2])[0]
-                    if proto_list_len > 0:
-                        proto_len = ext_data[2]
-                        self._negotiated_protocol = ext_data[3 : 3 + proto_len].decode(
-                            "ascii"
+                if ext_type == 0x0010:
+                    try:
+                        self._negotiated_protocol = ALPNExtension.decode_selection(
+                            ext_data, self._offered_alpn_protocols
                         )
-                        debug(f"ALPN negotiated: {self._negotiated_protocol}")
+                    except ValueError as error:
+                        raise TLSHandshakeError(str(error)) from error
+                    debug(f"ALPN negotiated: {self._negotiated_protocol}")
             if offset != ext_end:
                 raise TLSHandshakeError("Truncated ServerHello extension")
+            if self._server_supported_version == b'\x03\x04' and 16 in seen_extensions:
+                raise TLSHandshakeError("TLS 1.3 ALPN must be in EncryptedExtensions")
         elif offset != len(data):
             raise TLSHandshakeError("Truncated ServerHello extension length")
 

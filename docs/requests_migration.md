@@ -23,7 +23,7 @@ response.raise_for_status()
 
 | Requests usage / assumption | ja3requests behavior / migration |
 | --- | --- |
-| `get/post/...`, `params`, `data`, `json`, `files` | Similar high-level entry points; request bodies are prepared in memory |
+| `get/post/...`, `params`, `data`, `json`, `files` | Similar high-level entry points; form, JSON and synchronous `files=` bodies are buffered in memory. Synchronous `data=` may also be a binary file or byte iterator for streaming uploads; native async supports streaming bodies and async `files=`. |
 | `.status_code`, `.headers`, `.content`, `.text`, `.json()` | Available; `.headers` is a regular dictionary, and `.text` uses Content-Type's charset or UTF-8 with explicit `.encoding` override |
 | Automatic status exceptions | Neither normal success path implies `raise_for_status()`; call it explicitly |
 | `Session.headers/auth/params/proxies` merging | Pass these arguments on each request; the current Session request path does not merge those properties |

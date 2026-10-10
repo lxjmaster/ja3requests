@@ -34,8 +34,8 @@ groups are not implemented. Implicit Chrome selection remains at version 124.
 
 Ja3Requests supports HTTP/1.1 over HTTP and HTTPS. HTTPS connections can also
 negotiate HTTP/2 with ALPN. Version 2.0 defaults to verified TLS 1.3 with TLS 1.2 ECDHE/GCM fallback.
-Version 2.2.0 release links: [PyPI](https://pypi.org/project/ja3requests/2.2.0/)
-and [GitHub](https://github.com/lxjmaster/ja3requests/releases/tag/v2.2.0).
+Version 2.3.0 release links: [PyPI](https://pypi.org/project/ja3requests/2.3.0/)
+and [GitHub](https://github.com/lxjmaster/ja3requests/releases/tag/v2.3.0).
 This release adds streaming request bodies, async multipart/files and async
 Cookie-file helpers; see [release notes](CHANGELOG.md) for scope and limits.
 
@@ -88,7 +88,10 @@ DATA respects the peer's frame size and connection and stream flow-control
 windows. HTTP/1.1 connections remain serial.
 Server push is disabled because pushed responses are not supported; an
 explicit `SETTINGS_ENABLE_PUSH=1` configuration is rejected.
-Legacy HTTP/2 PRIORITY signals are accepted but do not affect request scheduling.
+Custom H2 SETTINGS preserve the supplied mapping/pair order and field set.
+Pseudo-header order and initial legacy PRIORITY signals are configurable;
+priority signals do not affect request scheduling. See the
+[fingerprint guide](docs/fingerprints.md) for controls and push boundaries.
 Version 2.1.0 reads HTTP/1.1 and HTTP/2 response bodies
 incrementally with `stream=True`, including project TLS record decryption and
 gzip/deflate/Brotli decoding. Version 2.0.1 buffered the full body.
