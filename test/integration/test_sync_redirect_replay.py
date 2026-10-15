@@ -24,7 +24,13 @@ from test.integration.test_h2_streaming_network import (
     trusted_h2_peer,
 )
 from test.integration.test_request_wire_review import read_h2_request
-from test.mock_servers.local import LocalServer, h2_frame, read_exact, read_headers
+from test.mock_servers.local import (
+    LocalServer,
+    h2_frame,
+    read_exact,
+    read_headers,
+    recv_with_ragged_eof,
+)
 
 
 class BorrowedFile(io.BytesIO):
@@ -135,7 +141,7 @@ def redirect_peer(seen, statuses, protocol, *, read_http1_body=False):
                 # Content-Length whose synchronization this peer verifies.
                 received = bytearray(body)
                 while True:
-                    chunk = conn.recv(4096)
+                    chunk = recv_with_ragged_eof(conn, 4096)
                     if not chunk:
                         break
                     received.extend(chunk)

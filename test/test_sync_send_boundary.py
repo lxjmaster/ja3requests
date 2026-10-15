@@ -115,7 +115,8 @@ def test_sync_socks_handshake_failures_close_even_with_retained_exception(
         if sock is not None:
             assert sock.conn is None
         if fault == 'timeout':
-            assert isinstance(caught.value.__cause__, TimeoutError)
+            # socket.timeout became a TimeoutError alias only in Python 3.10.
+            assert isinstance(caught.value.__cause__, socket.timeout)
         while peer.recv(4096):
             pass
     finally:
