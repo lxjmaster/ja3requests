@@ -1,5 +1,26 @@
 # Release Notes
 
+## Unreleased
+
+## 2.5.0 — Chrome 155 subset and redirect policy alignment
+
+- Add explicit `TlsConfig.from_browser('chrome', 155)` for the measured macOS
+  supported subset, with preset-owned ordered SETTINGS, connection window,
+  pseudo-header order, Huffman and path insertion policy. Historical presets
+  and implicit Chrome 124 selection retain their defaults. Unsupported browser
+  negotiations remain excluded; this is not complete browser impersonation.
+- Add profile-default installed-wheel TLS/H2 acceptance, with no connection
+  overrides, deliberate mismatch failures and third-stream reuse checks.
+- Reject live-browser drift in every declared TLS/H2 subset field during
+  profile-default acceptance, while allowing documented omissions and browser
+  extension-order variation. Keep the client's frozen-spec assertions.
+- Align synchronous 301/302/303 redirects with native async: 301/302 rewrite
+  POST only, and 303 rewrites methods other than HEAD, to an empty-body GET.
+  Other methods retain their body and replay contract. For example, PUT -> 302
+  now resends PUT and its body, and HEAD -> 303 retains HEAD and its body.
+  Existing 307/308 behavior is retained. Disable following and send an explicit
+  GET to keep the previous synchronous follow-up behavior.
+
 ## 2.4.0 — H2 encoding controls and synchronous request correctness
 
 - Always perform destination TLS for synchronous HTTPS over CONNECT/SOCKS,

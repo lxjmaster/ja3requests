@@ -92,14 +92,16 @@ def test_invalid_policy_rejected_before_config_or_connection_changes(value):
     assert not writes
 
 
-def test_policy_identity_and_snapshot_preserve_historical_defaults():
-    a = TlsConfig.from_browser('chrome', 154)
+@pytest.mark.parametrize('profile_version', [154, 155])
+def test_policy_identity_and_snapshot_preserve_profile_defaults(profile_version):
+    a = TlsConfig.from_browser('chrome', profile_version)
     b = copy.deepcopy(a)
-    assert a.h2_huffman is b.h2_huffman is False
+    expected = profile_version == 155
+    assert a.h2_huffman is b.h2_huffman is expected
     old = HttpsSocket._tls_policy_key(a, 'localhost')
-    b.h2_huffman = True
+    b.h2_huffman = not expected
     assert old != HttpsSocket._tls_policy_key(b, 'localhost')
-    assert a.h2_huffman is False
+    assert a.h2_huffman is expected
     assert a.get_ja3_string('localhost') == b.get_ja3_string('localhost')
     b._h2_huffman = 'invalid'
     with pytest.raises(ValueError, match='bool'):

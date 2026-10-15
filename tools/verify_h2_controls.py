@@ -79,6 +79,11 @@ def check_controls(case, excluded, reference):
 
 
 def verify(args):
+    profile_defaults = getattr(args, 'profile_defaults', False)
+    capture.require(
+        not profile_defaults or args.client_profile == 'chrome:155',
+        'Profile-default acceptance requires chrome:155',
+    )
     identity = capture.artifact_input(
         args.wheel, args.wheel_sha256, args.artifact_report
     )
@@ -95,6 +100,7 @@ def verify(args):
         'status': 'running',
         'artifact': identity,
         'client_profile': args.client_profile,
+        'mode': 'profile-defaults' if profile_defaults else 'configured-controls',
         'target': 'retained Chrome 155/macOS HEADERS/path/table vectors only',
         'python': sys.version,
         'openssl': ssl.OPENSSL_VERSION,
@@ -160,71 +166,93 @@ def verify(args):
                 listener.bind(('127.0.0.1', 0))
                 listener.listen(8)
                 origin = 'https://localhost:%d' % listener.getsockname()[1]
-                for huffman in (False, True):
-                    for excluded in (False, True):
-                        for kind in ('sync', 'async'):
-                            label = '%s-huffman-%d-excluded-%d' % (
+                variants = (
+                    [(True, True)]
+                    if profile_defaults
+                    else [
+                        (huffman, excluded)
+                        for huffman in (False, True)
+                        for excluded in (False, True)
+                    ]
+                )
+                for huffman, excluded in variants:
+                    for kind in ('sync', 'async'):
+                        label = (
+                            '%s-profile-defaults' % kind
+                            if profile_defaults
+                            else '%s-huffman-%d-excluded-%d'
+                            % (
                                 kind,
                                 int(huffman),
                                 int(excluded),
                             )
-                            inputs = dict(
-                                module_hashes=identity['module_hashes'],
-                                profile=args.client_profile,
-                                kind=kind,
-                                overrides=dict(
+                        )
+                        inputs = dict(
+                            module_hashes=identity['module_hashes'],
+                            profile=args.client_profile,
+                            kind=kind,
+                            overrides=(
+                                {}
+                                if profile_defaults
+                                else dict(
                                     overrides,
                                     h2_huffman=huffman,
                                     h2_indexing_exclusions=(
                                         [':path'] if excluded else []
                                     ),
-                                ),
-                                requests=requests,
-                                headers_priorities=priorities,
-                                origin=origin,
-                                bodies={
-                                    path: capture.digest(body)
-                                    for path, body in capture.BODIES.items()
-                                },
-                            )
-                            case = capture.run_case(
-                                label,
-                                [
-                                    str(python),
-                                    '-I',
-                                    '-c',
-                                    capture.PROBE_SOURCE,
-                                    json.dumps(inputs),
-                                ],
-                                listener,
-                                context,
-                                args.output,
-                                env,
-                                staging,
-                                validate=lambda: capture.validate_probe(
-                                    args.output, label, identity
-                                ),
-                                expected_paths=[path for path, _ in requests],
-                            )
-                            try:
-                                case['controls'] = check_controls(
-                                    case, excluded, reference
                                 )
-                            except Exception as error:
-                                case.update(
-                                    status='failed',
-                                    error='%s: %s' % (type(error).__name__, error),
-                                )
-                                capture.save_json(args.output / (label + '.json'), case)
-                                raise
+                            ),
+                            requests=requests,
+                            headers_priorities=priorities,
+                            origin=origin,
+                            bodies={
+                                path: capture.digest(body)
+                                for path, body in capture.BODIES.items()
+                            },
+                        )
+                        capture.save_json(
+                            args.output / (label + '-inputs.json'), inputs
+                        )
+                        case = capture.run_case(
+                            label,
+                            [
+                                str(python),
+                                '-I',
+                                '-c',
+                                capture.PROBE_SOURCE,
+                                json.dumps(inputs),
+                            ],
+                            listener,
+                            context,
+                            args.output,
+                            env,
+                            staging,
+                            validate=lambda: capture.validate_probe(
+                                args.output, label, identity
+                            ),
+                            expected_paths=[path for path, _ in requests],
+                        )
+                        try:
+                            case['controls'] = (
+                                capture.check_profile_defaults(case, reference)
+                                if profile_defaults
+                                else check_controls(case, excluded, reference)
+                            )
+                        except Exception as error:
+                            case.update(
+                                status='failed',
+                                error='%s: %s' % (type(error).__name__, error),
+                            )
                             capture.save_json(args.output / (label + '.json'), case)
-                            report['cases'].append(
-                                {
-                                    'case': label,
-                                    'status': case['status'],
-                                    'controls': case['controls'],
-                                }
-                            )
+                            raise
+                        capture.save_json(args.output / (label + '.json'), case)
+                        report['cases'].append(
+                            {
+                                'case': label,
+                                'status': case['status'],
+                                'controls': case['controls'],
+                            }
+                        )
                 report['status'] = 'passed'
     except Exception as error:
         report.update(status='failed', error='%s: %s' % (type(error).__name__, error))
@@ -246,6 +274,11 @@ def main(argv=None):
     parser.add_argument('--wheel-sha256', required=True)
     parser.add_argument('--artifact-report', type=Path, required=True)
     parser.add_argument('--client-profile', required=True)
+    parser.add_argument(
+        '--profile-defaults',
+        action='store_true',
+        help='Assert Chrome 155 defaults without connection overrides',
+    )
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args(argv)
     args.output = args.output.resolve()

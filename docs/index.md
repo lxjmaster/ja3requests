@@ -9,11 +9,12 @@ support; Python `ssl` supplies the default CA roots. See the
 
 ## Which version does this site describe?
 
-This site describes [2.4.0](https://github.com/lxjmaster/ja3requests/releases/tag/v2.4.0),
+This site describes [2.5.0](https://github.com/lxjmaster/ja3requests/releases/tag/v2.5.0),
 including incremental response streaming, native async, streaming request bodies,
 async multipart/files, async Cookie files, buffered async prepared requests,
 exact H2 fingerprint controls, optional Huffman/indexing policies, per-request
-HEADERS priority, synchronous 307/308 body replay and public typing.
+HEADERS priority, the explicit Chrome 155/macOS subset, aligned synchronous/async
+redirect method/body policy and public typing.
 The generated API reference reads the checkout's source and docstrings.
 Dated acceptance records in the existing guides remain historical. Building
 these docs locally does not deploy a public documentation site.
@@ -38,5 +39,6 @@ available for the supported HTTP/1.1 and HTTP/2 paths.
 
 The secure default verifies certificates, offers TLS 1.3 with authenticated
 TLS 1.2 fallback, and uses HTTP/1.1 ALPN. A JA3 match alone does not prove browser
-equivalence. The explicitly selected Chrome 154 preset is a documented supported
-subset with differences from the captured browser; implicit Chrome stays at 124.
+equivalence. The explicitly selected Chrome 154 and Chrome 155 presets are
+documented supported subsets with differences from the captured browser;
+implicit Chrome stays at 124.

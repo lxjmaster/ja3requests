@@ -745,7 +745,10 @@ class TlsConfig:
         if preset.get("session_id_length"):
             config.session_id = os.urandom(preset["session_id_length"])
         config.h2_settings = preset.get("h2_settings")
-        config._h2_window_update = preset.get("h2_window_update")
+        config.h2_window_update = preset.get("h2_window_update")
+        config.h2_pseudo_header_order = preset.get("h2_pseudo_header_order")
+        config.h2_huffman = preset.get("h2_huffman", False)
+        config.h2_indexing_exclusions = preset.get("h2_indexing_exclusions", ())
         if server_name:
             config._server_name = server_name
         return config

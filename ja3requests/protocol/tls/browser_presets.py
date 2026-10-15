@@ -8,6 +8,8 @@ signature algorithms, ALPN, GREASE, and H2 settings. Historical presets are
 browser-inspired; capture-calibrated subsets explicitly document their gaps.
 """
 
+from copy import deepcopy
+
 from ja3requests.protocol.tls.cipher_suites.suites import (
     EcdheEcdsaWithAes128GcmSha256,
     EcdheEcdsaWithAes256GcmSha384,
@@ -365,6 +367,22 @@ PRESETS[("chrome", 154)] = {
     "fidelity": "supported subset; different JA3, no browser-identity guarantee",
     # The capture covers TLS only; no invented Chrome H2 SETTINGS.
 }
+
+# Chrome 155/macOS: the supported TLS projection of retained browser sample 1,
+# plus measured connection-level H2 defaults. Headers/HEADERS priority remain
+# caller inputs. See docs/fingerprints.md for the included and omitted fields.
+PRESETS[("chrome", 155)] = deepcopy(PRESETS[("chrome", 154)])
+PRESETS[("chrome", 155)].update(
+    {
+        "extension_order": [13, 0, 45, 5, 23, 51, 10, 16, 11, 35, 65281, 43, 41],
+        "h2_settings": [(1, 65536), (2, 0), (4, 6291456), (6, 262144)],
+        "h2_window_update": 15663105,
+        "h2_pseudo_header_order": [":method", ":authority", ":scheme", ":path"],
+        "h2_huffman": True,
+        "h2_indexing_exclusions": (":path",),
+        "capture": "test/fixtures/chrome155_macos_tls_h2.json",
+    }
+)
 
 # Compatibility defaults remain pinned; new samples require explicit selection.
 _LATEST_VERSIONS = {

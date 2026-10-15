@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 import struct
 
+import pytest
+
 from ja3requests import TlsConfig
 from ja3requests.protocol.tls import TLS
 from test.wire_client_hello import decode, grease, profile, reassemble
@@ -46,6 +48,95 @@ def test_existing_implicit_browser_selection_stays_pinned():
     a = TlsConfig.from_browser('chrome')
     b = TlsConfig.from_browser('chrome', 124)
     assert a.get_ja3_string('localhost') == b.get_ja3_string('localhost')
+
+
+def test_chrome155_subset_and_h2_defaults_are_capture_derived():
+    fixture = json.loads(
+        (Path(__file__).parent / 'fixtures/chrome155_macos_tls_h2.json').read_text()
+    )
+    record = bytes.fromhex(fixture['cases'][0]['hellos'][0]['record_hex'])
+    actual = decode(record)
+    config = TlsConfig.from_browser('chrome', 155)
+    config.validate(strict=True)
+    tls = TLS(None, server_host='localhost')
+    tls.set_payload(config)
+    subset = decode(tls.body.message)
+    kinds = [kind for kind, _ in subset['extensions']]
+    assert kinds == [kind for kind, _ in actual['extensions'] if kind in kinds]
+    assert [
+        value
+        for value in actual['ciphers']
+        if not grease(value) and value not in (52392, 52393)
+    ] == [value for value in subset['ciphers'] if not grease(value)]
+    assert set(kind for kind, _ in actual['extensions'] if not grease(kind)) - set(
+        kinds
+    ) == {18, 27, 17613, 51764, 65037}
+    for kind in (0, 5, 11, 16, 23, 35, 45, 65281):
+        assert dict(actual['extensions'])[kind] == dict(subset['extensions'])[kind]
+    fields = profile(tls.body.message)
+    assert fields['groups'] == [29, 23, 24]
+    assert fields['key_shares'] == [[29, 32]]
+    extensions = dict(subset['extensions'])
+    assert list(struct.unpack('!HH', extensions[43][1:])) == [772, 771]
+    assert [value for (value,) in struct.iter_unpack('!H', extensions[13][2:])] == [
+        value
+        for (value,) in struct.iter_unpack('!H', dict(actual['extensions'])[13][2:])
+        if not grease(value) and value not in (2308, 2309, 2310)
+    ]
+    assert len(subset['session_id']) == 32
+    assert fields['ja3'] != profile(record)['ja3']
+    assert config.h2_settings == [(1, 65536), (2, 0), (4, 6291456), (6, 262144)]
+    assert config.h2_window_update == 15663105
+    assert config.h2_pseudo_header_order == [
+        ':method',
+        ':authority',
+        ':scheme',
+        ':path',
+    ]
+    assert config.h2_huffman is True
+    assert config.h2_indexing_exclusions == (':path',)
+    assert config.h2_priority_frames is None
+
+
+def test_chrome155_factory_copies_and_old_profile_defaults():
+    from ja3requests.protocol.tls.browser_presets import PRESETS
+
+    first = TlsConfig.from_browser('chrome', 155)
+    second = TlsConfig.from_browser('chrome', 155)
+    first.h2_settings.append((3, 1))
+    first.h2_pseudo_header_order.reverse()
+    first.extensions[2].formats.append(1)
+    assert second.h2_settings == [(1, 65536), (2, 0), (4, 6291456), (6, 262144)]
+    assert second.h2_pseudo_header_order == [
+        ':method',
+        ':authority',
+        ':scheme',
+        ':path',
+    ]
+    assert second.extensions[2].formats == [0]
+    for browser, version in PRESETS:
+        if (browser, version) != ('chrome', 155):
+            old = TlsConfig.from_browser(browser, version)
+            assert old.h2_huffman is False
+            assert old.h2_pseudo_header_order is None
+            assert old.h2_indexing_exclusions == ()
+
+
+@pytest.mark.parametrize(
+    'field,value',
+    [
+        ('h2_huffman', 'yes'),
+        ('h2_window_update', -1),
+        ('h2_pseudo_header_order', [':path']),
+        ('h2_indexing_exclusions', ['bad field']),
+    ],
+)
+def test_chrome155_factory_rejects_invalid_preset_values(monkeypatch, field, value):
+    from ja3requests.protocol.tls.browser_presets import PRESETS
+
+    monkeypatch.setitem(PRESETS[('chrome', 155)], field, value)
+    with pytest.raises(ValueError):
+        TlsConfig.from_browser('chrome', 155)
 
 
 def test_preset_extensions_are_not_shared():

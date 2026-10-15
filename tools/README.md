@@ -120,6 +120,44 @@ case. Full artifact verification is run explicitly for the selected candidate.
 
 ## Real TLS and HTTP/2 fingerprint capture
 
+For the 2.5.0 explicit Chrome 155/macOS subset, use **profile defaults**
+instead of the configured comparison mode. First build and verify the combined
+source with `verify_release.py` as above; keep the version unchanged during local
+development. Both commands below must consume that same passing report and wheel:
+
+```sh
+python -m tools.verify_h2_controls \
+  --wheel dist/release-2.5.0/final-candidate/artifacts/ja3requests-2.5.0-py3-none-any.whl \
+  --wheel-sha256 <verified-wheel-sha256> \
+  --artifact-report dist/release-2.5.0/final-candidate/verification.json \
+  --client-profile chrome:155 --profile-defaults \
+  --output dist/release-2.5.0/profile-defaults-h2
+python -m tools.capture_fingerprint \
+  --chrome "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+  --wheel dist/release-2.5.0/final-candidate/artifacts/ja3requests-2.5.0-py3-none-any.whl \
+  --wheel-sha256 <verified-wheel-sha256> \
+  --artifact-report dist/release-2.5.0/final-candidate/verification.json \
+  --client-profile chrome:155 --profile-defaults \
+  --output dist/release-2.5.0/profile-defaults-chrome
+```
+
+`--profile-defaults` asserts the declared subset with `overrides={}`. Request
+headers and priorities remain explicit recorded inputs. The H2 tool runs only
+sync/async, with three streams and no third-stream priority; the live tool
+requires three browser samples and both clients. SETTINGS/order/window, TLS
+projection/payloads, pseudo-header order, priorities, path insertion, persistent
+table state and strictly-shorter Huffman decisions must pass. A mismatch fails
+the command; merely producing comparison JSON is insufficient. The retained
+fixture that defines the projection is copied and hashed with the tool sources.
+The live check additionally requires exact first-request HPACK agreement.
+Every browser sample must also satisfy the frozen declared TLS/H2 subset;
+documented TLS omissions and browser extension-order variation are excluded
+from that comparison. Unexpected TLS IDs or changed supported values fail acceptance,
+even if the client still matches the retained sample. Client extension order
+continues to be checked exactly against the frozen profile.
+Excluded ECH/PQ and other TLS fields remain gaps, as listed in the fingerprint
+guide; fixed order and three samples do not prove full browser identity.
+
 For H2 control acceptance without Chrome, use the exact wheel from the local
 verifier and its report. The independent `hpack` decoder checks HEADERS weights
 256/183, dependency 0/exclusivity, `/pixel.png` insertion, the retained 20/21
@@ -128,11 +166,11 @@ policies run for both installed synchronous and native async clients:
 
 ```sh
 python -m tools.verify_h2_controls \
-  --wheel dist/release-2.4.0/final-candidate/artifacts/ja3requests-2.4.0-py3-none-any.whl \
+  --wheel dist/release-2.5.0/final-candidate/artifacts/ja3requests-2.5.0-py3-none-any.whl \
   --wheel-sha256 <verified-wheel-sha256> \
-  --artifact-report dist/release-2.4.0/final-candidate/verification.json \
+  --artifact-report dist/release-2.5.0/final-candidate/verification.json \
   --client-profile chrome:154 \
-  --output dist/release-2.4.0/h2-controls
+  --output dist/release-2.5.0/configured-controls
 ```
 
 The output must be new. This reuses the collector's TLS peer, artifact identity,

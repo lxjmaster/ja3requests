@@ -1,5 +1,6 @@
-"""307/308 replay and ownership observed at actual HTTP1/TLS/H2 peers."""
+"""Redirect method, replay and ownership observed at actual HTTP1/TLS/H2 peers."""
 
+import asyncio
 import copy
 import io
 import json
@@ -11,8 +12,13 @@ from email.parser import BytesParser
 
 import pytest
 
-from ja3requests import HTTPRetry, Session
-from ja3requests.exceptions import InvalidData, MaxRetriedException, NotAllowedScheme
+from ja3requests import AsyncSession, HTTPRetry, Session
+from ja3requests.exceptions import (
+    InvalidData,
+    MaxRetriedException,
+    NotAllowedScheme,
+    StreamConsumedError,
+)
 from ja3requests.requests.request import Request
 from ja3requests.pool import ConnectionPool
 from ja3requests.protocol.h2.hpack import HPACKDecoder
@@ -414,11 +420,15 @@ def test_early_h2_redirect_replays_without_parent_finalizing_final_stream(
     assert not borrowed.closed
 
 
-@pytest.mark.parametrize('statuses', [(307,), (308,), (307, 302, 308)])
-@pytest.mark.parametrize('method', ['POST', 'PUT', 'HEAD'])
-def test_method_and_body_follow_status_without_expanding_legacy_statuses(
-    statuses, method
-):
+@pytest.mark.parametrize(
+    'statuses', [(301,), (302,), (303,), (307,), (308,), (307, 302, 308)]
+)
+@pytest.mark.parametrize(
+    'method', ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD']
+)
+@pytest.mark.parametrize('entry', ['sync', 'async'])
+@pytest.mark.filterwarnings('ignore:The .* method does not process data:RuntimeWarning')
+def test_redirect_method_and_body_policy_matches_both_clients(statuses, method, entry):
     seen = []
 
     def handler(conn):
@@ -433,35 +443,166 @@ def test_method_and_body_follow_status_without_expanding_legacy_statuses(
             ).encode()
         )
 
-    with LocalServer(handler, connections=len(statuses) + 1) as peer, Session(
-        use_pooling=False
-    ) as session:
-        response = session.request(
-            method,
-            'http://127.0.0.1:%d/start' % peer.port,
-            data='payload' if method != 'HEAD' else None,
-            timeout=3,
-        )
-        assert response.status_code == 200
+    with LocalServer(handler, connections=len(statuses) + 1) as peer:
+        url = 'http://127.0.0.1:%d/start' % peer.port
+
+        async def native():
+            async with AsyncSession() as session:
+                response = await session.request(
+                    method, url, data=b'payload', timeout=3
+                )
+                assert response.status_code == 200
+
+        if entry == 'async':
+            asyncio.run(native())
+        else:
+            with Session(use_pooling=False) as session:
+                response = session.request(method, url, data=b'payload', timeout=3)
+                assert response.status_code == 200
     expected_method = method
-    expected_body = b'payload' if method != 'HEAD' else b''
+    expected_body = b'payload'
     for index, record in enumerate(seen):
-        if index and statuses[index - 1] not in (307, 308):
+        status = statuses[index - 1] if index else None
+        if (status in (301, 302) and expected_method == 'POST') or (
+            status == 303 and expected_method != 'HEAD'
+        ):
             expected_method, expected_body = 'GET', b''
         assert record[0] == expected_method
         assert record[3] == expected_body
+        if index and not expected_body:
+            assert (
+                not {'content-length', 'content-type', 'transfer-encoding'}
+                & record[2].keys()
+            )
+
+
+@pytest.mark.parametrize(
+    'protocol,version,status,method,streamed',
+    [
+        ('h1', 12, 301, 'PUT', False),
+        ('h2', 13, 302, 'PATCH', False),
+        ('h2', 12, 303, 'HEAD', False),
+        ('h1', 13, 302, 'POST', True),
+        ('h2', 13, 303, 'PUT', True),
+        ('http', 13, 302, 'PUT', True),
+    ],
+)
+def test_redirect_new_preserve_and_rewrite_paths_release_uploads(
+    trusted_certificates,
+    monkeypatch,
+    h2_readers,
+    protocol,
+    version,
+    status,
+    method,
+    streamed,
+):
+    config, context = trusted_h2_peer(trusted_certificates, monkeypatch, version)
+    if protocol == 'h1':
+        config.alpn_protocols = ['http/1.1']
+        context.set_alpn_protocols(['http/1.1'])
+    finalized, sources, seen = [], [], []
+    borrowed = BorrowedFile(b'prefix\x00\xffpayload')
+    borrowed.seek(6)
+
+    def chunks():
+        try:
+            yield b'\x00\xffpayload'
+        finally:
+            finalized.append(True)
+
+    preserve = (status in (301, 302) and method != 'POST') or (
+        status == 303 and method == 'HEAD'
+    )
+    replay_error = streamed and preserve
+
+    def before(request):
+        sources.append(request)
+
+    with LocalServer(
+        redirect_peer(seen, [status], protocol, read_http1_body=True),
+        context if protocol != 'http' else None,
+        connections=1 if protocol == 'h2' or replay_error else 2,
+    ) as peer, ConnectionPool() as pool, Session(
+        tls_config=config, pool=pool, hooks={'before_request': [before]}
+    ) as session:
+        url = '%s://127.0.0.1:%d/start' % (
+            'http' if protocol == 'http' else 'https',
+            peer.port,
+        )
+        if replay_error:
+            with pytest.raises(StreamConsumedError):
+                session.request(method, url, data=chunks(), timeout=3)
+        else:
+            response = session.request(
+                method, url, data=chunks() if streamed else borrowed, timeout=3
+            )
+            assert response.status_code == 200
+        assert not session._uploads
+        assert all(
+            request.data._closed
+            for request in sources
+            if hasattr(request.data, '_closed')
+        )
+    assert seen[0][0] == method and seen[0][3] == b'\x00\xffpayload'
+    if replay_error:
+        assert len(seen) == 1
+    else:
+        assert seen[1][0] == (method if preserve else 'GET')
+        assert seen[1][3] == (b'\x00\xffpayload' if preserve else b'')
+    assert not borrowed.closed
+    assert finalized == ([True] if streamed else [])
+
+
+def test_cross_origin_302_keeps_put_body_and_strips_credentials():
+    seen = []
+
+    def destination(conn):
+        seen.append(http1_request(conn))
+        conn.sendall(
+            b'HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n'
+        )
+
+    with LocalServer(destination) as target:
+
+        def source(conn):
+            seen.append(http1_request(conn))
+            conn.sendall(
+                (
+                    'HTTP/1.1 302 Redirect\r\nLocation: http://127.0.0.1:%d/next\r\n'
+                    'Content-Length: 0\r\nConnection: close\r\n\r\n' % target.port
+                ).encode()
+            )
+
+        with LocalServer(source) as origin, Session(use_pooling=False) as session:
+            response = session.put(
+                'http://127.0.0.1:%d/start' % origin.port,
+                data=b'payload',
+                headers={'Cookie': 'secret=1', 'Authorization': 'secret'},
+                timeout=3,
+            )
+            assert response.status_code == 200
+    assert [record[0] for record in seen] == ['PUT', 'PUT']
+    assert [record[3] for record in seen] == [b'payload', b'payload']
+    assert seen[0][2]['authorization'] == 'secret'
+    assert seen[0][2]['cookie'] == 'secret=1'
+    assert not {'authorization', 'proxy-authorization', 'cookie'} & seen[1][2].keys()
+    assert seen[1][2]['host'] == '127.0.0.1:%d' % target.port
 
 
 @pytest.mark.parametrize('replace', ['data', 'request', 'file', 'error'])
 @pytest.mark.parametrize('hook_scope', ['session', 'request'])
+@pytest.mark.parametrize('status,method', [(307, 'POST'), (302, 'PUT')])
 def test_consumed_source_is_rewound_only_if_it_survives_next_hop_hooks(
-    replace, hook_scope
+    replace, hook_scope, status, method
 ):
     seen = []
 
     def handler(conn):
         seen.append(http1_request(conn))
-        reply = '307 Redirect\r\nLocation: /next' if len(seen) == 1 else '200 OK'
+        reply = (
+            '%d Redirect\r\nLocation: /next' % status if len(seen) == 1 else '200 OK'
+        )
         conn.sendall(
             (
                 'HTTP/1.1 %s\r\nContent-Length: 0\r\nConnection: close\r\n\r\n' % reply
@@ -493,7 +634,8 @@ def test_consumed_source_is_rewound_only_if_it_survives_next_hop_hooks(
             )
             if replace == 'error':
                 with pytest.raises(ValueError, match='hook failed'):
-                    session.post(
+                    session.request(
+                        method,
                         'http://127.0.0.1:%d/start' % peer.port,
                         data=iter([b'original']),
                         timeout=3,
@@ -501,7 +643,8 @@ def test_consumed_source_is_rewound_only_if_it_survives_next_hop_hooks(
                     )
             else:
                 assert (
-                    session.post(
+                    session.request(
+                        method,
                         'http://127.0.0.1:%d/start' % peer.port,
                         data=iter([b'original']),
                         timeout=3,

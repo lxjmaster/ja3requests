@@ -1,5 +1,10 @@
 # Post-2.3.0 follow-up roadmap
 
+Current entry, 2026-10-15: use the [post-2.4.0 advancement plan](post_2_4_0_plan.md).
+Huffman, HEADERS priority, indexing exclusions and the selected synchronous
+corrections have shipped in 2.4.0. The dated status, candidate descriptions and
+execution authority below describe historical work; retain them as evidence.
+
 Prepared: 2026-10-12. Status: **F1 + F2 HUFFMAN ACCEPTED LOCALLY**.
 
 Updated: 2026-10-13. Use the [remaining-work solution and execution plan](post_2_3_0_remaining_work_plan.md)

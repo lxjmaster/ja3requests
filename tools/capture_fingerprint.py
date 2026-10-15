@@ -1255,9 +1255,227 @@ def huffman_acceptance(captures):
     }
 
 
+def _profile_tls_projection(fields):
+    """Remove only the explicitly documented Chrome 155 TLS omissions."""
+    projected = {
+        name: fields[name]
+        for name in (
+            'version',
+            'session_id_length',
+            'compression',
+            'point_formats',
+            'alpn_hex',
+        )
+    }
+    projected.update(
+        ciphers=[value for value in fields['ciphers'] if value not in (52392, 52393)],
+        groups=[value for value in fields['groups'] if value not in ('GREASE', 4588)],
+        key_shares=[
+            value for value in fields['key_shares'] if value[0] not in ('GREASE', 4588)
+        ],
+        signature_algorithms=[
+            value
+            for value in fields['signature_algorithms']
+            if value not in ('GREASE', 2308, 2309, 2310)
+        ],
+        supported_versions=[
+            value for value in fields['supported_versions'] if value != 'GREASE'
+        ],
+        extension_types=[
+            kind
+            for kind in fields['extension_types']
+            if kind not in ('GREASE', 18, 27, 17613, 51764, 65037)
+        ],
+    )
+    return projected
+
+
+def check_profile_defaults(case, reference):
+    """Check client defaults and each browser against the frozen subset.
+
+    Browser extension order may vary; the client keeps the frozen order.
+    Reference request values are caller inputs; authority's ephemeral port is
+    excluded here and is compared without normalization in the live report.
+    """
+    frozen = json.loads(
+        (ROOT / 'test/fixtures/chrome155_macos_tls_h2.json').read_bytes()
+    )['cases'][0]
+    require(len(case['hellos']) == 1, 'Profile requires one full-handshake hello')
+    require(
+        len(reference['hellos']) == 1,
+        'Profile browser requires one full-handshake hello',
+    )
+    fields = case['hellos'][0]['fields']
+    expected = _profile_tls_projection(frozen['hellos'][0]['fields'])
+    browser = _profile_tls_projection(reference['hellos'][0]['fields'])
+    for name, value in expected.items():
+        require(fields[name] == value, 'Profile TLS mismatch: ' + name)
+        actual = browser[name]
+        if name == 'extension_types':
+            actual, value = sorted(actual), sorted(value)
+        require(actual == value, 'Profile browser TLS mismatch: ' + name)
+    require(
+        case['hellos'][0]['record_versions'] == frozen['hellos'][0]['record_versions'],
+        'Profile TLS record version mismatch',
+    )
+    require(
+        reference['hellos'][0]['record_versions']
+        == frozen['hellos'][0]['record_versions'],
+        'Profile browser TLS record version mismatch',
+    )
+    payloads = {item['type']: item['payload_hex'] for item in fields['extensions']}
+    browser_payloads = {
+        item['type']: item['payload_hex']
+        for item in reference['hellos'][0]['fields']['extensions']
+    }
+    for kind in (0, 5, 11, 16, 23, 35, 45, 65281):
+        require(
+            payloads.get(kind) == browser_payloads.get(kind),
+            'Profile TLS extension payload mismatch: %d' % kind,
+        )
+    _check_profile_h2(reference, reference)
+    return dict(_check_profile_h2(case, reference), tls_fields=list(expected))
+
+
+def _check_profile_h2(case, reference):
+    """Apply the same declared H2 assertions to browser and client traces."""
+    for kind, key, wanted in (
+        (4, 'settings', [[1, 65536], [2, 0], [4, 6291456], [6, 262144]]),
+        (8, 'increment', 15663105),
+    ):
+        actual = [
+            frame[key]
+            for frame in case['frames']
+            if frame['kind'] == kind and frame['stream'] == 0 and not frame['flags'] & 1
+        ]
+        require(actual == [wanted], 'Profile H2 startup mismatch: ' + key)
+    require(
+        not any(frame['kind'] == 2 for frame in case['frames']),
+        'Profile unexpectedly sends standalone PRIORITY',
+    )
+    requests = case['requests']
+    require(len(requests) in (2, 3), 'Profile requires two or three reused requests')
+    encoder = HuffmanEncoder(REQUEST_CODES, REQUEST_CODES_LENGTH)
+    literals = 0
+    for index, request in enumerate(requests):
+        source = reference['requests'][min(index, 1)]
+        fields = [
+            (bytes.fromhex(name), bytes.fromhex(value))
+            for name, value in request['headers']
+        ]
+        authority = [value for name, value in fields if name == b':authority']
+        source_authority = [
+            bytes.fromhex(value)
+            for name, value in source['headers']
+            if bytes.fromhex(name) == b':authority'
+        ]
+        require(
+            len(authority) == len(source_authority) == 1
+            and re.fullmatch(rb'localhost:[0-9]+', authority[0])
+            and authority[0].rsplit(b':', 1)[0]
+            == source_authority[0].rsplit(b':', 1)[0],
+            'Profile request authority mismatch',
+        )
+        require(
+            [name for name, _ in fields if name.startswith(b':')]
+            == [b':method', b':authority', b':scheme', b':path'],
+            'Profile pseudo-header order mismatch',
+        )
+        require(
+            [(name, value) for name, value in fields if name != b':authority']
+            == [
+                (bytes.fromhex(name), bytes.fromhex(value))
+                for name, value in source['headers']
+                if bytes.fromhex(name) != b':authority'
+            ],
+            'Profile request headers differ from recorded caller inputs',
+        )
+        require(request['stream'] == 1 + index * 2, 'Profile connection reuse failed')
+        require(
+            request['priority'] == (source['priority'] if index < 2 else None),
+            'Profile request HEADERS priority mismatch',
+        )
+        require(
+            request['flags'] == (37 if index < 2 else 5),
+            'Profile HEADERS flags mismatch',
+        )
+        require(
+            request['dynamic_entries_before'] == (0, 14, 20)[index]
+            and request['dynamic_entries_after'] == (14, 20, 20)[index],
+            'Profile dynamic table continuity mismatch',
+        )
+        representations = [
+            item for item in request['representations'] if item['kind'] != 'table-size'
+        ]
+        require(
+            len(representations) == len(fields), 'Profile representation count mismatch'
+        )
+        for representation, pair in zip(representations, fields):
+            if pair[0] == b':path':
+                require(
+                    representation['kind'] == ('indexed' if index == 0 else 'without'),
+                    'Profile path insertion mismatch',
+                )
+            for name, offset in (('name', 0), ('value', 1)):
+                if name in representation:
+                    raw = pair[offset]
+                    encoded = encoder.encode(raw)
+                    shorter = len(encoded) < len(raw)
+                    require(
+                        representation[name]
+                        == {
+                            'huffman': shorter,
+                            'encoded_length': len(encoded) if shorter else len(raw),
+                        },
+                        'Profile Huffman literal mismatch',
+                    )
+                    literals += 1
+    return {
+        'status': 'passed',
+        'reused_streams': [request['stream'] for request in requests],
+        'literal_checks': literals,
+        'connection_overrides': {},
+    }
+
+
+def profile_defaults_acceptance(captures):
+    browsers = [case for case in captures if case['case'].startswith('browser')]
+    clients = [case for case in captures if not case['case'].startswith('browser')]
+    require(
+        len(browsers) == 3
+        and {case['case'] for case in clients} == {'sync', 'async'}
+        and len(clients) == 2,
+        'Profile acceptance requires three browsers and both clients',
+    )
+    results = {}
+    for client in clients:
+        results[client['case']] = {
+            browser['case']: check_profile_defaults(client, browser)
+            for browser in browsers
+        }
+    return {
+        'status': 'passed',
+        'clients': results,
+        'huffman': huffman_acceptance(captures),
+        'scope': 'Declared Chrome 155/macOS subset; fixed TLS order, not full identity',
+    }
+
+
 def capture(args):
     identity = artifact_input(args.wheel, args.wheel_sha256, args.artifact_report)
     huffman = getattr(args, 'h2_huffman', False)
+    profile_defaults = getattr(args, 'profile_defaults', False)
+    require(
+        not profile_defaults
+        or (
+            args.client_profile == 'chrome:155'
+            and not huffman
+            and not args.browser_only
+            and args.browser_samples == 3
+            and args.artifact_report is not None
+        ),
+        'Profile-default acceptance requires chrome:155, artifact report, three browsers and both clients; no overrides',
+    )
     require(
         not huffman or (not args.browser_only and args.browser_samples == 3),
         'F2 Huffman acceptance requires the full capture series',
@@ -1284,6 +1502,7 @@ def capture(args):
         'platform': platform.platform(),
         'artifact': identity,
         'client_profile': args.client_profile,
+        'mode': 'profile-defaults' if profile_defaults else 'configured-comparison',
         'python': sys.version,
         'openssl': ssl.OPENSSL_VERSION,
         'dependencies': {
@@ -1303,6 +1522,7 @@ def capture(args):
                 'requirements-capture.txt',
                 'tools/tests/test_fingerprint_capture.py',
                 'test/test_browser_capture.py',
+                'test/fixtures/chrome155_macos_tls_h2.json',
             )
         },
         'probe_source_sha256': digest(PROBE_SOURCE.encode()),
@@ -1442,6 +1662,8 @@ def capture(args):
                     save_json(args.output / 'manifest.json', manifest)
                 if not args.browser_only:
                     overrides, requests = browser_inputs(captures[0])
+                    if profile_defaults:
+                        overrides = {}
                     if huffman:
                         overrides['h2_huffman'] = True
                     manifest.update(overrides=overrides, requests=requests)
@@ -1453,6 +1675,12 @@ def capture(args):
                         origin=origin,
                         bodies=manifest['bodies'],
                     )
+                    if profile_defaults:
+                        inputs['headers_priorities'] = [
+                            [item['priority'][1], item['priority'][2]]
+                            for item in captures[0]['requests']
+                        ]
+                        manifest['headers_priorities'] = inputs['headers_priorities']
                     env = environment()
                     env['SSL_CERT_FILE'] = str(ca)
                     for kind in ('sync', 'async'):
@@ -1481,6 +1709,10 @@ def capture(args):
                     save_json(args.output / 'comparison.json', compare(captures))
                     if huffman:
                         manifest['huffman_acceptance'] = huffman_acceptance(captures)
+                    if profile_defaults:
+                        manifest['profile_acceptance'] = profile_defaults_acceptance(
+                            captures
+                        )
                 manifest['status'] = 'passed'
     except Exception as error:
         manifest.update(status='failed', error='%s: %s' % (type(error).__name__, error))
@@ -1508,6 +1740,11 @@ def main(argv=None):
     parser.add_argument('--wheel-sha256', required=True)
     parser.add_argument('--artifact-report', type=Path)
     parser.add_argument('--client-profile', required=True)
+    parser.add_argument(
+        '--profile-defaults',
+        action='store_true',
+        help='Assert the Chrome 155 subset using preset defaults without connection overrides',
+    )
     parser.add_argument(
         '--h2-huffman',
         action='store_true',

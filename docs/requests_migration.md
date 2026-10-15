@@ -35,7 +35,7 @@ response.raise_for_status()
 | `iter_content(decode_unicode=True)` | This API yields bytes and has no `decode_unicode` argument |
 | Re-reading a response after streaming iteration | Uncached iteration is single-use and raises `StreamConsumedError` on replay |
 | Requests/urllib3 exception hierarchy | Catch ja3requests errors and actual protocol/OS errors as described in the error guide |
-| Requests' exact redirect method/history behavior | 307/308 preserve the method and body with the upload replay rules; 301/302/303 retain bodyless GET follow-ups. A compatible `history` API is not promised |
+| Requests' exact redirect method/history behavior | 301/302 rewrite POST only; 303 rewrites methods other than HEAD; 307/308 preserve method/body. Retained bodies follow upload replay rules. Synchronous 301/302/303 alignment ships in 2.5.0; a compatible `history` API is not promised |
 | Session close always owns the pool | Default pool is shared; supply a dedicated pool for Session-scoped shutdown |
 
 The redirect implementation has a limit of eight and strips sensitive headers
@@ -43,6 +43,11 @@ on a cross-origin redirect. Synchronous and native async 307/308 preserve the
 method and body; consumed non-replayable sources raise `StreamConsumedError`.
 To retain the former synchronous bodyless GET behavior for 307/308, disable
 automatic following with `allow_redirects=False` and send an explicit GET.
+The 2.5.0 synchronous correction extends retained-body behavior to non-POST
+301/302 and HEAD 303, matching native async. PUT -> 302 now resends PUT and its
+body; HEAD -> 303 keeps HEAD and its body. A consumed one-shot source raises
+`StreamConsumedError` before destination I/O if the next-hop hook retains it.
+Use the same explicit GET migration if those requests must keep their old behavior.
 HTTP status, TLS authentication and application authentication are separate
 checks; a successful fingerprint match does not authenticate a server.
 
