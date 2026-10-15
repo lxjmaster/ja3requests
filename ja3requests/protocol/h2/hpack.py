@@ -9,7 +9,9 @@ Supports static table lookups and literal header encoding.
 from __future__ import annotations
 
 import struct
-from typing import Dict, Iterable, List, Optional, Tuple, Union, cast
+import re
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Union, cast
+from ja3requests.protocol.h2.huffman import huffman_encode
 
 
 _HeaderField = Union[str, bytes]
@@ -148,15 +150,26 @@ def decode_integer(data: bytes, offset: int, prefix_bits: int) -> Tuple[int, int
     raise ValueError("Truncated HPACK integer")
 
 
-def encode_string(s: _HeaderField) -> bytes:
+def validate_huffman(huffman: bool) -> None:
+    """Only an explicit boolean selects the outbound string policy."""
+    if not isinstance(huffman, bool):
+        raise ValueError("HTTP/2 Huffman policy must be a bool")
+
+
+def encode_string(s: _HeaderField, huffman: bool = False) -> bytes:
     """
-    Encode a string using HPACK string literal (without Huffman).
+    Encode octets; optional Huffman is used only when strictly shorter.
 
     :param s: String or bytes to encode
     :return: Encoded bytes
     """
+    validate_huffman(huffman)
     if isinstance(s, str):
         s = s.encode("utf-8")
+    if huffman:
+        encoded = huffman_encode(s)
+        if len(encoded) < len(s):
+            return encode_integer(len(encoded), 7, 0x80) + encoded
     # No Huffman encoding (H=0)
     return encode_integer(len(s), 7, 0) + s
 
@@ -222,6 +235,24 @@ def validate_header_fields(
                 raise ValueError("HPACK header fields must be valid UTF-8") from error
 
 
+def normalize_indexing_exclusions(names: Sequence[str]) -> Tuple[str, ...]:
+    """Copy a field-name set to a canonical immutable connection policy."""
+    if not isinstance(names, Sequence) or isinstance(names, (str, bytes)):
+        raise ValueError('HTTP/2 indexing exclusions must be a sequence of field names')
+    result = set()
+    for name in names:
+        if (
+            not isinstance(name, str)
+            or not name.isascii()
+            or re.fullmatch(r"(?::)?[!#$%&'*+\-.^_`|~0-9a-z]+", name.lower()) is None
+        ):
+            raise ValueError(
+                'Invalid HTTP/2 indexing exclusion field name: %r' % (name,)
+            )
+        result.add(name.lower())
+    return tuple(sorted(result))
+
+
 class HPACKEncoder:
     """
     HPACK encoder with static and dynamic table support.
@@ -230,7 +261,14 @@ class HPACKEncoder:
 
     MAX_DYNAMIC_TABLE_SIZE = 4096
 
-    def __init__(self) -> None:
+    def __init__(
+        self, huffman: bool = False, indexing_exclusions: Sequence[str] = ()
+    ) -> None:
+        validate_huffman(huffman)
+        self._huffman = huffman
+        self._indexing_exclusions = frozenset(
+            normalize_indexing_exclusions(indexing_exclusions)
+        )
         # Names are normalized to str; values retain their input representation.
         self.dynamic_table: List[Tuple[str, _HeaderField]] = []  # Newest first
         self._dynamic_table_size = 0
@@ -340,22 +378,29 @@ class HPACKEncoder:
                 result = encode_integer(idx, 4, 0x10)  # Never indexed
             else:
                 result = b"\x10"
-                result += encode_string(name_lower)
-            result += encode_string(value)
+                result += encode_string(name_lower, self._huffman)
+            result += encode_string(value, self._huffman)
             return result
 
         # Non-sensitive headers: literal with incremental indexing → adds to dynamic table
+        if name_lower in self._indexing_exclusions:
+            index = _STATIC_NAME_INDEX.get(name_lower, name_idx)
+            result = encode_integer(index or 0, 4, 0)
+            if index is None:
+                result += encode_string(name_lower, self._huffman)
+            return result + encode_string(value, self._huffman)
+
         if name_lower in _STATIC_NAME_INDEX:
             idx = _STATIC_NAME_INDEX[name_lower]
             result = encode_integer(idx, 6, 0x40)
-            result += encode_string(value)
+            result += encode_string(value, self._huffman)
         elif name_idx is not None:
             result = encode_integer(name_idx, 6, 0x40)
-            result += encode_string(value)
+            result += encode_string(value, self._huffman)
         else:
             result = b"\x40"  # 0100 0000, new name
-            result += encode_string(name_lower)
-            result += encode_string(value)
+            result += encode_string(name_lower, self._huffman)
+            result += encode_string(value, self._huffman)
 
         self._add_to_dynamic_table(name_lower, value)
         return result

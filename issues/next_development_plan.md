@@ -1,14 +1,60 @@
 # Next Development Plan
 
+## 2.4.0 release scope (2026-10-15)
+
+Version 2.4.0 includes the selected outbound Huffman, per-request HEADERS
+priority and indexing-exclusion controls, synchronous 307/308 body replay, and
+the subsequent transport/hook/body correctness fixes. See the
+[release notes](../CHANGELOG.md) and current user guides for implemented behavior.
+The planning and candidate-acceptance records below are dated history; their
+pending-task and local-only labels do not describe the 2.4.0 release scope.
+Full browser identity and the unselected conditional packages remain outside it.
+
+## Post-2.3.0 planning snapshot (2026-10-13)
+
+The recorded published baseline is 2.3.0 at
+`422012063f4ed12e23bda330c38355566d6d373d`. Use the
+[remaining-work solution and execution plan](post_2_3_0_remaining_work_plan.md)
+for current proposals, compatibility choices, package dependencies and acceptance.
+The [post-2.3.0 roadmap](post_2_3_0_follow_up_plan.md) provides context, the
+[fingerprint execution record](post_2_3_0_execution_plan.md) retains F1/F2 history,
+and the [release notes](../CHANGELOG.md) distinguish released and local changes.
+The real TLS + H2 browser capture/difference package F1 is now accepted locally;
+see the [received-byte results](tls_h2_capture_results.md). F2 outbound Huffman
+also has historical installed-candidate acceptance and is not a new task.
+Four subsequent synchronous SNI/ALPN/redirect/timeout fixes are present with
+regressions/docs; the old Huffman artifact does not cover those source changes.
+
+Recommended next batches are one compatibility-signaled correction of synchronous
+307/308 defaults, then per-request HEADERS weight/exclusive fields (dependency 0)
+and bounded HPACK indexing control. Select the redirect version/migration boundary
+before implementation; add a compatibility option only for a concrete consumer
+need, and retain current 301/302/303 behavior in this batch. H1/H2 can proceed
+independently. Final artifact acceptance occurs once per selected frozen batch,
+with an independent peer suited to the capability; the existing browser collector
+does not cover TLS1.2 or resumption. Reuse the F1 report for a focused selected-TLS
+precheck instead of a new inventory phase. F3, Session defaults, prepared streaming
+and engineering candidates have separate entry and completion conditions.
+Full redirect parity and full Chrome identity remain unachieved.
+
+The current instruction selects planning only. It neither starts these runtime
+packages nor selects commit/push/publication, hosting or remote Issue mutation.
+The five-Issue disposition below is a dated readback, not a refreshed remote status.
+Earlier sections below are dated history; their local-only/unpublished labels
+and unchecked candidates do not reopen delivered work.
+
 ## 2.3.0 delivery (2026-10-10)
 
-The user selected commit, push and release of the reviewed buffered async
-prepared API, exact H2 controls and protocol/wire fixes as 2.3.0. The guides
-below now describe 2.3.0; prior local-only status and 2.2.0 baseline statements
-are dated historical evidence. Publication requires exact-commit artifact/CI
-acceptance and readback from GitHub and the official PyPI index. Further product
-candidates remain unselected; this release adds no documentation hosting or
-Session-default/streaming-prepared implementation.
+Commit, push and publication of the reviewed buffered async prepared API,
+exact H2 controls and protocol/wire fixes are complete in 2.3.0:
+[GitHub](https://github.com/lxjmaster/ja3requests/releases/tag/v2.3.0) and
+[PyPI](https://pypi.org/project/ja3requests/2.3.0/). Exact-commit installed
+acceptance, all five CI workflows and both channels' artifact/installation
+readback passed. Evidence is retained under
+`dist/release-2.3.0/final-candidate/`. Current docs describe the published API;
+prior local-only status and 2.2.0 baseline statements are historical evidence.
+Documentation hosting and Session-default/streaming-prepared implementation
+remain separate future candidates.
 
 ## Selected buffered async prepared requests (2026-10-09)
 

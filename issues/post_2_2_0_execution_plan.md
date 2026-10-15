@@ -2,7 +2,14 @@
 
 Prepared: 2026-10-08
 
-Status: **COMPLETE LOCALLY / UNREGISTERED**. The user authorized execution and selected
+Status: **RELEASED IN 2.3.0 / UNREGISTERED**. Buffered A3 and the subsequent
+TLS/H2 fixes were committed, pushed and published at
+`422012063f4ed12e23bda330c38355566d6d373d`. Final release/CI/publication evidence
+is retained in `dist/release-2.3.0/final-candidate/`; the local snapshots and
+no-remote-write boundaries below retain their historical dates. Current task
+selection is in the [post-2.3.0 roadmap](post_2_3_0_follow_up_plan.md).
+
+The user authorized execution and selected
 the workflow "prepare, inspect or sign, then send". This is the sole execution
 status record; the follow-up plan is a candidate roadmap. The supported
 `codex-plan --json status` still cannot obtain an official session binding.

@@ -22,6 +22,7 @@ from ja3requests.base import BaseRequest
 from ja3requests.requests.request import Request
 from ja3requests.exceptions import MaxRetriedException
 from ja3requests.protocol.tls.config import TlsConfig, _validate_http_alpn
+from ja3requests.protocol.h2.hpack import normalize_indexing_exclusions
 from ja3requests.pool import ConnectionPool, get_default_pool
 from ja3requests.cookies import (
     Ja3RequestsCookieJar,
@@ -276,6 +277,7 @@ class Session(BaseSession):
             proxies=proxies,
             timeout=timeout,
             tls_config=tls_config,
+            h2_headers_priority=kwargs.pop('h2_headers_priority', None),
         )
 
         kwargs.setdefault("allow_redirects", True)
@@ -451,15 +453,35 @@ class Session(BaseSession):
             raise ValueError("You can only send HttpRequest/HttpsRequest.")
 
         per_request_hooks = kwargs.pop("hooks", None)
+        if 'h2_headers_priority' in kwargs:
+            request.h2_headers_priority = kwargs.pop('h2_headers_priority')
+        redirect_chain = kwargs.pop('_redirect_chain', False)
+        replay_source = kwargs.pop('_redirect_replay', None)
 
         # Dispatch before_request hooks
+        redirect_request = request
         request = self._dispatch_hooks("before_request", request, per_request_hooks)
+        if not isinstance(request, BaseRequest):
+            raise TypeError(
+                'before_request hooks must return HttpRequest/HttpsRequest or None'
+            )
+        request._validate_send()
+        request.h2_headers_priority = request.h2_headers_priority
+        if replay_source is not None and request.data is not replay_source:
+            replay_source.close_owned()
+            if request is redirect_request and replay_source.length is not None:
+                request._remove_inherited_length(replay_source.length)
         request._refresh_cookies()
         # Caller input errors must not open a connection or enter HTTP retries.
         # Keep raw bytes intact: the chosen transport owns their encoding.
         _validated_header_items(request.headers)
-        if request.schema == 'https' and request.tls_config is not None:
+        if request.schema == 'https':
+            # Resolve after hooks so replacements and cleared configurations
+            # inherit the Session policy before validation or upload preparation.
+            if request.tls_config is None:
+                request.tls_config = self._tls_config
             _validate_http_alpn(request.tls_config.alpn_protocols)
+            normalize_indexing_exclusions(request.tls_config.h2_indexing_exclusions)
         source = request.data
         if is_upload(source) or isinstance(source, UploadSource):
             if request.json is not None or request.files:
@@ -470,6 +492,8 @@ class Session(BaseSession):
             if not isinstance(source, UploadSource):
                 source = UploadSource(source, length=length)
             try:
+                if source is replay_source:
+                    source.rewind()
                 source.prepare()
             except BaseException:
                 source.close_owned()
@@ -497,7 +521,10 @@ class Session(BaseSession):
             response = None
             upload_owner = None
             retrying = False
+            keep_redirect_source = False
+            exhausted_status = False
             dispatching_hooks = False
+            following_redirects = False
             try:
                 if attempt and source is not None:
                     try:
@@ -537,25 +564,41 @@ class Session(BaseSession):
                         retry.sleep_for_retry(response, attempt + 1)
                         retrying = True
                         continue
-                    break
+                    exhausted_status = True
 
                 allow_redirects = kwargs.get("allow_redirects", True)
                 if allow_redirects and response.is_redirected:
-                    location = response.location
-                    response.close()
-                    response = self.resolve_redirects(location, request, **kwargs)
+                    # The redirect chain takes responsibility for the source;
+                    # the completed hop must not finalize a surviving producer.
+                    following_redirects = True
+                    source = None
+                    response = self._follow_redirect(
+                        response, request, hooks=per_request_hooks, **kwargs
+                    )
 
                 # Dispatch after_request hooks
                 dispatching_hooks = True
                 response = self._dispatch_response_hooks(response, per_request_hooks)
 
                 self.response = response
+                if (
+                    exhausted_status
+                    and not following_redirects
+                    and retry.raise_on_status
+                    and retry.is_retryable_status(response.status_code)
+                ):
+                    response.close()
+                    raise MaxRetriedException(
+                        f"Max retries ({retry.total}) exceeded, last status: {response.status_code}"
+                    )
+                keep_redirect_source = redirect_chain and response.is_redirected
                 return response
 
             except (ConnectionError, OSError) as err:
                 if response is not None:
                     response.close()
-                if dispatching_hooks:
+                # Each redirect destination owns its retries; this hop is done.
+                if dispatching_hooks or following_redirects:
                     raise
                 if isinstance(err, (InvalidData, StreamConsumedError)):
                     raise
@@ -576,34 +619,11 @@ class Session(BaseSession):
             finally:
                 # Intermediate attempts keep replay state. A final streaming
                 # response owns cleanup until its upload worker has stopped.
-                if source is not None and not retrying:
+                if source is not None and not retrying and not keep_redirect_source:
                     if upload_owner is not None:
                         upload_owner.finalize_source()
                     else:
                         source.close_owned()
-
-        # All retries exhausted
-        if last_response is not None:
-            # Return the last response even if status was retryable
-            allow_redirects = kwargs.get("allow_redirects", True)
-            if allow_redirects and last_response.is_redirected:
-                location = last_response.location
-                last_response.close()
-                last_response = self.resolve_redirects(location, request, **kwargs)
-            last_response = self._dispatch_response_hooks(
-                last_response, per_request_hooks
-            )
-            self.response = last_response
-            if (
-                retry
-                and retry.raise_on_status
-                and retry.is_retryable_status(last_response.status_code)
-            ):
-                last_response.close()
-                raise MaxRetriedException(
-                    f"Max retries ({retry.total}) exceeded, last status: {last_response.status_code}"
-                )
-            return last_response
 
         if last_error is not None:
             raise MaxRetriedException(
@@ -612,10 +632,24 @@ class Session(BaseSession):
 
         raise MaxRetriedException("Max retries exceeded")
 
+    def _follow_redirect(self, response, request, **kwargs):
+        """Stop the completed upload before handing its source to the next hop."""
+        source = request.data if isinstance(request.data, UploadSource) else None
+        try:
+            response.close()
+            return self.resolve_redirects(
+                response.location, request, status_code=response.status_code, **kwargs
+            )
+        except BaseException:
+            if source is not None:
+                source.close_owned()
+            raise
+
     def resolve_redirects(
         self,
         url: str,
         request: Optional[BaseRequest] = None,
+        status_code: Optional[int] = None,
         **kwargs: Unpack[SendOptions],
     ) -> Response:
         """
@@ -629,71 +663,103 @@ class Session(BaseSession):
             urlparse,
         )  # pylint: disable=import-outside-toplevel
 
-        send_kwargs = dict(kwargs, allow_redirects=False)
+        send_kwargs = dict(kwargs, allow_redirects=False, _redirect_chain=True)
         # Get the original URL to resolve relative redirects
         request = request if request is not None else self.Request.request()
         original_url = request.url
 
-        for _ in range(DEFAULT_REDIRECT_LIMIT):
-            # Handle relative URLs by joining with the original URL
-            if not urlparse(url).scheme:
-                url = urljoin(original_url, url)
+        try:
+            for _ in range(DEFAULT_REDIRECT_LIMIT):
+                # Handle relative URLs by joining with the original URL
+                if not urlparse(url).scheme:
+                    url = urljoin(original_url, url)
 
-            target = urlparse(url)
-            target_origin = (
-                target.scheme.lower(),
-                (target.hostname or '').lower(),
-                target.port or (443 if target.scheme == 'https' else 80),
-            )
-            source = urlparse(original_url)
-            source_origin = (
-                source.scheme.lower(),
-                (source.hostname or '').lower(),
-                source.port or (443 if source.scheme == 'https' else 80),
-            )
-            # Sync redirects become bodyless GETs, so drop the old entity headers.
-            body_headers = {'content-length', 'content-type', 'transfer-encoding'}
-            headers = {
-                k: v
-                for k, v in request.headers.items()
-                if k.lower() not in body_headers
-            }
-            # Automatic cookies must be selected again for the next path/origin.
-            if request._cookie_header_managed:
-                headers.pop('Cookie', None)
-            with self._cookie_lock:
-                cookies = Ja3RequestsCookieJar()
-                merge_cookies(cookies, self._cookies)
-            if target_origin != source_origin:
-                sensitive = {'authorization', 'proxy-authorization', 'cookie', 'host'}
+                target = urlparse(url)
+                target_origin = (
+                    target.scheme.lower(),
+                    (target.hostname or '').lower(),
+                    target.port or (443 if target.scheme == 'https' else 80),
+                )
+                source = urlparse(original_url)
+                source_origin = (
+                    source.scheme.lower(),
+                    (source.hostname or '').lower(),
+                    source.port or (443 if source.scheme == 'https' else 80),
+                )
+                preserve_body = status_code in (307, 308)
+                upload_source = (
+                    request.data if isinstance(request.data, UploadSource) else None
+                )
+                body_headers = {'content-length', 'content-type', 'transfer-encoding'}
                 headers = {
-                    k: v for k, v in headers.items() if k.lower() not in sensitive
+                    k: v
+                    for k, v in request.headers.items()
+                    if (preserve_body or k.lower() not in body_headers)
+                    and not (
+                        upload_source is not None and k.lower() == 'transfer-encoding'
+                    )
                 }
-            elif not request._cookie_header_managed:
-                # Preserve an explicit header removal, as well as replacement.
-                cookies = None
+                if request._cookie_header_managed:
+                    headers.pop('Cookie', None)
+                with self._cookie_lock:
+                    cookies = Ja3RequestsCookieJar()
+                    merge_cookies(cookies, self._cookies)
+                if target_origin != source_origin:
+                    sensitive = {
+                        'authorization',
+                        'proxy-authorization',
+                        'cookie',
+                        'host',
+                    }
+                    headers = {
+                        k: v for k, v in headers.items() if k.lower() not in sensitive
+                    }
+                elif not request._cookie_header_managed:
+                    cookies = None
 
-            req = Request(
-                method="GET",
-                url=url,
-                headers=headers,
-                cookies=cookies,
-                proxies=self.Request.proxies,
-                timeout=self.Request.timeout,
-                tls_config=self.Request.tls_config,
-            ).request()
+                req = Request(
+                    method=request.method if preserve_body else "GET",
+                    url=url,
+                    headers=headers,
+                    cookies=cookies,
+                    proxies=request._proxy_routes,
+                    timeout=request.timeout,
+                    tls_config=request.tls_config,
+                    h2_headers_priority=request.h2_headers_priority,
+                ).request()
 
-            response = self.send(req, **send_kwargs)
-            if 400 <= response.status_code or response.status_code < 300:
-                break
+                if preserve_body:
+                    # Prepared buffered values never reread borrowed multipart files.
+                    req._data, req._json, req._files = (
+                        request.data,
+                        request.json,
+                        request.files,
+                    )
+                    req._redirect_body = request._redirect_body
+                    req._redirect_body_inputs = request._redirect_body_inputs
+                elif upload_source is not None:
+                    upload_source.close_owned()
+                response = self.send(
+                    req,
+                    _redirect_replay=upload_source if preserve_body else None,
+                    **send_kwargs,
+                )
+                if not getattr(response, 'is_redirected', False):
+                    break
 
-            # Update URL for next redirect and original_url for relative resolution
-            if response.is_redirected and response.location:
-                request = response.request
-                original_url = url
-                url = response.location
-                response.close()
-        else:
-            raise MaxRetriedException("Too many redirects")
+                if response.location:
+                    request = response.request
+                    original_url = request.url
+                    url = response.location
+                    status_code = response.status_code
+                    response.close()
+            else:
+                raise MaxRetriedException("Too many redirects")
+        except BaseException:
+            # A hook may have selected a different source on a completed hop.
+            # Parsing/constructing the next hop must finalize that current source.
+            if isinstance(request.data, UploadSource):
+                request.data.close_owned()
+            raise
 
         return response

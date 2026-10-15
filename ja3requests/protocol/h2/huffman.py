@@ -338,6 +338,8 @@ def huffman_encode(data: Union[str, Iterable[int]]) -> bytes:
         while bits_left >= 8:
             bits_left -= 8
             result.append((bits >> bits_left) & 0xFF)
+        # Retain only the unconsumed tail, independent of input length.
+        bits &= (1 << bits_left) - 1
 
     # Pad with EOS prefix (all 1s)
     if bits_left > 0:

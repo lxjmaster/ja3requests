@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import struct
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple, Union
+from ja3requests._typing import H2HeadersPriority
 
 
 # Frame types (RFC 7540 Section 6)
@@ -165,6 +166,21 @@ def normalize_priority_frames(
     return tuple(result)
 
 
+def normalize_headers_priority(
+    priority: Optional[H2HeadersPriority],
+) -> Optional[H2HeadersPriority]:
+    """Snapshot request priority; the dependency is always connection root 0."""
+    if priority is None:
+        return None
+    if not isinstance(priority, (tuple, list)) or len(priority) != 2:
+        raise ValueError('HTTP/2 HEADERS priority must be (weight, exclusive)')
+    weight, exclusive = priority
+    _integer(weight, 1, 256, 'HEADERS weight')
+    if not isinstance(exclusive, bool):
+        raise ValueError('HTTP/2 HEADERS exclusivity must be bool')
+    return weight, exclusive
+
+
 class H2Frame:
     """Represents an HTTP/2 frame."""
 
@@ -301,6 +317,7 @@ def build_headers_frame(
     header_block: bytes,
     end_stream: bool = False,
     end_headers: bool = True,
+    priority: Optional[H2HeadersPriority] = None,
 ) -> H2Frame:
     """
     Build a HEADERS frame.
@@ -316,6 +333,14 @@ def build_headers_frame(
         flags |= FLAG_END_STREAM
     if end_headers:
         flags |= FLAG_END_HEADERS
+    priority = normalize_headers_priority(priority)
+    if priority is not None:
+        weight, exclusive = priority
+        flags |= FLAG_PRIORITY
+        header_block = (
+            struct.pack('!IB', 0x80000000 if exclusive else 0, weight - 1)
+            + header_block
+        )
     return H2Frame(FRAME_HEADERS, flags, stream_id, header_block)
 
 

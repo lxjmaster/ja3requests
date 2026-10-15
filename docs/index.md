@@ -9,10 +9,11 @@ support; Python `ssl` supplies the default CA roots. See the
 
 ## Which version does this site describe?
 
-This site describes [2.3.0](https://github.com/lxjmaster/ja3requests/releases/tag/v2.3.0),
+This site describes [2.4.0](https://github.com/lxjmaster/ja3requests/releases/tag/v2.4.0),
 including incremental response streaming, native async, streaming request bodies,
 async multipart/files, async Cookie files, buffered async prepared requests,
-exact H2 fingerprint controls, public typing and transport maintenance.
+exact H2 fingerprint controls, optional Huffman/indexing policies, per-request
+HEADERS priority, synchronous 307/308 body replay and public typing.
 The generated API reference reads the checkout's source and docstrings.
 Dated acceptance records in the existing guides remain historical. Building
 these docs locally does not deploy a public documentation site.

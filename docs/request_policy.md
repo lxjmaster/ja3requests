@@ -56,6 +56,11 @@ HTTP attempts or exhaustion exception is wanted.
 low-level connection helper can make up to three socket connection attempts;
 the HTTP policy is not the only possible source of multiple connection attempts.
 Its retry loop handles connection/OS errors raised during request execution.
+Each redirect destination uses its own HTTP retry budget. An exhausted
+destination error propagates without retrying a completed earlier hop or
+reusing an upload source that the redirect chain has already finalized.
+Status exhaustion also belongs to the current hop: the method selected by its
+request hooks determines whether retry and `raise_on_status` apply there.
 Failures while consuming a returned streaming response are not retried behind
 the caller's back. Application retries must account for method semantics and
 already delivered bytes.
@@ -100,6 +105,16 @@ one object. Returning `None` preserves it; returning a value replaces the object
 passed onward. Session callbacks run before any request-level callbacks for the
 same event. Request hooks use the same dictionary shape via `hooks=...`.
 
+Synchronous hooks may edit a prepared request's method and URL, but its URL
+scheme must match its transport type. Changing an `HttpRequest` URL to `https://`
+in place (or the reverse) raises `NotAllowedScheme` before source or connection
+work. To change scheme, return a newly prepared `Request(...).request()` from
+the hook, with the desired TLS/proxy/timeout settings. Native async hooks use
+metadata and select their transport from the final URL.
+The synchronous client revalidates the supported method set after hooks and
+on direct prepared sends; an invalid method raises `NotAllowedRequestMethod`
+before sending. Valid method changes and replacements remain supported.
+
 An `after_request` replacement must be a `Response` (or `None` to retain the
 current response). Replacing it closes the previous independent response. A
 new wrapper around the same underlying body takes ownership instead; the old
@@ -113,3 +128,49 @@ mode: headers for `stream=True`, the loaded body for eager requests. Reading
 therefore removes its streaming benefit. Hooks execute synchronously, and their
 exceptions propagate. Redirects involve additional request processing; do not
 use callback counts as an application transaction count.
+
+Synchronous redirects inherit proxy routes, timeout and TLS configuration from
+the current prepared transport request, including replacements returned by hooks.
+This also applies to direct `Session.send()` calls without a prior high-level
+`request()` call. Both destination schemes in the proxy mapping are retained
+when a redirect changes the URL scheme.
+
+For synchronous HTTPS, `Session.send()` fills an omitted `tls_config` from the
+Session policy after `before_request` hooks and before upload preparation or
+connection work. This covers newly prepared requests and hooks that clear the
+configuration. An explicit request configuration retains precedence. Calling
+the prepared transport's `send()` directly without a configuration uses the
+verified `TlsConfig()` defaults; direct and proxy HTTPS still perform TLS.
+
+Synchronous 307/308 redirects preserve the current method and actual prepared
+body, matching the async replay contract. This changes the former bodyless-GET
+default: callers relying on that behavior should follow the redirect explicitly
+with a GET instead. `allow_redirects=False` disables automatic following.
+Buffered form/JSON/multipart bodies reuse their encoded bytes while the body
+inputs remain unchanged. Next-hop hook edits invalidate that replay; clearing
+or replacing a buffered body removes inherited length framing and computes
+framing for the new body or upload source, including through CONNECT tunnels.
+The inherited length reflects the encoded byte count, including UTF-8 text set
+by first-hop hooks. Different lengths declared for replacement uploads survive.
+In-place JSON edits use the serialized representation, including numeric types,
+nested values and dictionary order.
+Multipart file-field order also participates in replay validation. Removing
+files while retaining form fields produces a multipart body with those remaining
+fields, including empty values. Removing form data while retaining files produces
+a file-only multipart body; clearing both sends an empty body. Prepared file
+contents are reused without rereading or closing caller files.
+On synchronous POST/PUT, a final non-empty `files` mapping selects multipart
+encoding and its Content-Type. First-hop hooks can edit `data` and `files` in
+either order; an earlier form Content-Type does not discard those files.
+Multipart field names and filenames reject CR, LF and NUL with `InvalidData`,
+including edits made by next-hop hooks. Quoted part parameters escape quotes and
+backslashes and encode non-ASCII text as UTF-8.
+When hooks replace or clear a streaming source, inherited length headers are
+removed regardless of casing or whether the old length was declared explicitly.
+Different lengths set by hooks and explicit lengths on replacement request
+objects remain available for the new source.
+Consumed seekable upload sources rewind to their initial offset after the prior
+producer stops;
+consumed non-replayable sources raise `StreamConsumedError` before destination I/O.
+Next-hop hooks select the source before replay. The synchronous 301/302/303
+method/body policy is unchanged; complete redirect-policy parity is not claimed.

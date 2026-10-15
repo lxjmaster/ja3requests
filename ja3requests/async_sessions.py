@@ -45,6 +45,7 @@ from ja3requests._typing import (
     Params,
     PathInput,
     Proxies,
+    H2HeadersPriority,
 )
 from ja3requests._typing import Timeout as TimeoutInput
 from ja3requests.async_pool import AsyncConnectionPool, _Entry
@@ -72,6 +73,8 @@ from ja3requests.exceptions import (
 )
 from ja3requests.protocol.exceptions import ProxyError
 from ja3requests.protocol.h2.async_connection import AsyncH2Connection
+from ja3requests.protocol.h2.frame import normalize_headers_priority
+from ja3requests.protocol.h2.hpack import normalize_indexing_exclusions
 from ja3requests.protocol.tls.config import TlsConfig, _validate_http_alpn
 from ja3requests.protocol.tls.session_cache import TLSSessionCache
 from ja3requests.retry import HTTPRetry
@@ -104,6 +107,7 @@ class _RequestMetadata:
     _cookie_from_jar: Optional[str] = None
     _cookie_header_managed: bool = True
     _auto_length: Optional[str] = None
+    h2_headers_priority: Optional[H2HeadersPriority] = None
 
 
 @dataclass(frozen=True)
@@ -160,6 +164,11 @@ class AsyncPreparedRequest:
         """Encoded buffered request body."""
         assert isinstance(self._request.body, bytes)
         return self._request.body
+
+    @property
+    def h2_headers_priority(self) -> Optional[H2HeadersPriority]:
+        """Frozen request HEADERS priority, preserved by with_headers()."""
+        return self._request.h2_headers_priority
 
     def with_headers(self, headers: Headers) -> AsyncPreparedRequest:
         """Derive a copy with replacement headers, preserving URL/body/context.
@@ -233,6 +242,7 @@ def _upload_length(headers):
 def _freeze(request: _RequestMetadata) -> _RequestMetadata:
     if not isinstance(request, _RequestMetadata):
         raise TypeError('before_request hooks must return request metadata or None')
+    priority = normalize_headers_priority(request.h2_headers_priority)
     method = request.method.upper()
     if method not in ('GET', 'HEAD', 'OPTIONS', 'POST', 'PUT', 'PATCH', 'DELETE'):
         raise NotAllowedRequestMethod(method)
@@ -272,6 +282,7 @@ def _freeze(request: _RequestMetadata) -> _RequestMetadata:
         generated_cookie,
         managed_cookie,
         auto_length,
+        priority,
     )
 
 
@@ -587,12 +598,14 @@ class AsyncSession:
         allow_redirects: bool = True,
         hooks: Optional[AsyncHooks] = None,
         h1: bool = False,
+        h2_headers_priority: Optional[H2HeadersPriority] = None,
     ) -> AsyncResponse:
         """Return headers for stream=True; otherwise await and cache the body."""
         self._bind()
         if self._closed:
             raise RuntimeError('AsyncSession is closed')
         budgets = timeout_pair(timeout)
+        priority = normalize_headers_priority(h2_headers_priority)
         config = tls_config or self._tls_config
         cache = config.session_cache
         config = copy.deepcopy(config, {id(cache): cache})
@@ -608,6 +621,7 @@ class AsyncSession:
         request = _prepare(
             method, url, params, data, json, headers, auth, jar, files=files
         )
+        request.h2_headers_priority = priority
         return await self._submit(
             request,
             config,
@@ -635,6 +649,7 @@ class AsyncSession:
         verify: Optional[bool] = None,
         tls_config: Optional[TlsConfig] = None,
         h1: bool = False,
+        h2_headers_priority: Optional[H2HeadersPriority] = None,
     ) -> AsyncPreparedRequest:
         """Encode a buffered request for inspection/signing without network I/O.
 
@@ -647,6 +662,7 @@ class AsyncSession:
             raise RuntimeError('AsyncSession is closed')
         if isinstance(data, UploadSource) or is_upload(data, allow_async=True):
             raise InvalidData('Prepared requests require a buffered body')
+        priority = normalize_headers_priority(h2_headers_priority)
         config = tls_config or self._tls_config
         cache = config.session_cache
         config = copy.deepcopy(config, {id(cache): cache})
@@ -663,6 +679,7 @@ class AsyncSession:
         if cookies is not None:
             merge_cookies(jar, cookies)
         request = _prepare(method, url, params, data, json, headers, auth, jar)
+        request.h2_headers_priority = priority
         parsed = urlsplit(request.url)
         scheme, host, port = _origin(request.url)
         if scheme == 'https':
@@ -815,6 +832,7 @@ class AsyncSession:
                 _validated_header_items(request.headers)
                 if _origin(request.url)[0] == 'https':
                     _validate_http_alpn(config.alpn_protocols)
+                    normalize_indexing_exclusions(config.h2_indexing_exclusions)
                 if not isinstance(request.body, bytes):
                     length = _upload_length(request.headers)
                     if not isinstance(request.body, UploadSource):
@@ -945,6 +963,7 @@ class AsyncSession:
                             _auto_length=(
                                 request._auto_length if body is request.body else None
                             ),
+                            h2_headers_priority=request.h2_headers_priority,
                         )
                     )
                     _refresh_cookie_header(jar, request)
@@ -1054,6 +1073,8 @@ class AsyncSession:
                         settings=config.h2_settings,
                         pseudo_header_order=config.h2_pseudo_header_order,
                         priority_frames=config.h2_priority_frames,
+                        huffman=config.h2_huffman,
+                        indexing_exclusions=config.h2_indexing_exclusions,
                     )
                     await h2.initiate(config.h2_window_update)
                     remaining = (
@@ -1114,6 +1135,7 @@ class AsyncSession:
                     body=request.body,
                     scheme=scheme,
                     timeout=read_timeout,
+                    headers_priority=request.h2_headers_priority,
                 )
                 headers = await entry.h2.receive_headers(
                     stream_id, timeout=read_timeout

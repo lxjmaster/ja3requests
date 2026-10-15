@@ -1,5 +1,71 @@
 # Release Notes
 
+## 2.4.0 — H2 encoding controls and synchronous request correctness
+
+- Always perform destination TLS for synchronous HTTPS over CONNECT/SOCKS,
+  including prepared requests without a TLS configuration. After hooks,
+  `Session.send()` fills an omitted configuration from the Session policy,
+  while explicit request configurations retain precedence.
+- Save synchronous redirect bodies and byte lengths from the context actually
+  encoded by the socket, including CONNECT's copied context and UTF-8 text set
+  by first-hop hooks. Clear inherited lengths when 307/308 hooks remove a
+  buffered body or replace it with an upload source, preserving new declarations.
+- Select synchronous POST/PUT multipart encoding from the final file mapping,
+  preserving files when first-hop hooks change form data or set data and files
+  in either order. Preserve prepared file contents and keep caller files open.
+
+- Revalidate synchronous methods after hooks and on direct prepared sends,
+  rejecting request-line injection before source or connection work. Reject
+  in-place URL scheme changes that disagree with the prepared transport;
+  hooks can still return a new HTTP/HTTPS prepared request to change scheme.
+- Omit `Proxy-Authorization` from direct and SOCKS destination requests across
+  HTTP1, TLS HTTP1/H2 and streaming uploads. Keep caller metadata and HTTP
+  CONNECT authentication intact.
+- Close synchronous SOCKS sockets on handshake rejection, timeout, truncation
+  and other exceptions, preserving the original protocol error contract.
+- Preserve buffered `data=bytes` without UTF-8 decoding or form validation,
+  including non-UTF-8 binary payloads and 307/308 replay. Keep text/form and
+  multipart encoding behavior.
+
+- Reject CR, LF and NUL in synchronous multipart field names and filenames,
+  including redirect-hook edits, and escape quotes/backslashes in part parameters.
+  Preserve empty form fields and file-only bodies when hooks clear form data,
+  without rereading or closing caller files.
+- Clear inherited streaming-body lengths across header spellings and explicit
+  declarations when redirect hooks replace or remove the source, while retaining
+  changed lengths and replacement-request declarations. Honor multipart file-field
+  order, preserve form fields when files are removed, and keep status exhaustion
+  within the redirect hop whose method is eligible for retry.
+- Keep failed redirect destinations within their own HTTP retry budget, preserving
+  the network error and upload cleanup without repeating completed hops.
+  Invalidate buffered replay by serialized JSON changes and synchronize length
+  framing after hooks clear or replace a body, including streaming replacements.
+- Add per-request `h2_headers_priority=(weight, exclusive)` across synchronous,
+  native async, prepared and upload paths. Dependency is fixed to 0; priorities
+  preserve connection reuse and do not implement a scheduler.
+- Add copied `TlsConfig.h2_indexing_exclusions` for insertion-free HPACK literals,
+  independent of Huffman encoding and isolated by connection policy.
+- Add independent installed-wheel H2 acceptance using retained browser vectors
+  without requiring a Chrome executable.
+
+- Preserve synchronous 307/308 methods and actual encoded bodies, including
+  multipart and replayable uploads. Stop each previous producer before replay,
+  reject consumed non-replayable sources before the next request, and keep
+  caller files open. This changes the previous bodyless-GET default for those
+  statuses; 301/302/303 behavior is unchanged.
+- Fix synchronous `h1=True` to select HTTP/1.1 through ALPN and isolate it from
+  pooled H2 connections. Direct prepared sends and redirects inherit the current
+  request's proxy routes, timeout and TLS policy rather than Session history.
+- Share direct/CONNECT/SOCKS TLS initialization, preserving caller SNI settings
+  and applying the configured handshake timeout without mutating Session policy.
+- Add optional `TlsConfig.h2_huffman` for synchronous/native async HTTP/2
+  requests, prepared sends and uploads. Enable Huffman for literal strings only
+  when strictly shorter; preserve raw defaults, sensitive-field indexing and
+  compression-table state, and partition pooled connections by this policy.
+- Add an independent real-browser/installed-client TLS/H2 capture tool, retained
+  Chrome 155/macOS samples and received-byte comparison. Unsupported browser
+  fields remain explicit; no complete browser impersonation is claimed.
+
 ## 2.3.0 — async prepared requests and exact H2 controls
 
 - Validate H2 response fields before exposure, including interim responses and

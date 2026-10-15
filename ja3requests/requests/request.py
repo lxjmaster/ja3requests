@@ -11,7 +11,7 @@ import os
 import warnings
 from io import IOBase
 from http.cookiejar import CookieJar
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse
 from typing import TYPE_CHECKING, Optional, Tuple, Union
 from ja3requests._typing import (
     Auth,
@@ -23,13 +23,15 @@ from ja3requests._typing import (
     Params,
     Proxies,
     Timeout,
+    H2HeadersPriority,
 )
 from ja3requests.requests.https import HttpsRequest
 from ja3requests.requests.http import HttpRequest
 from ja3requests._upload import is_upload
+from ja3requests.protocol.h2.frame import normalize_headers_priority
 from ja3requests.sockets._upload import upload_length
+from ja3requests.utils import _validated_request_method
 from ja3requests.exceptions import (
-    NotAllowedRequestMethod,
     MissingScheme,
     NotAllowedScheme,
     InvalidParams,
@@ -60,6 +62,7 @@ class Request:
         proxies: Optional[Proxies] = None,
         timeout: Timeout = None,
         tls_config: Optional[TlsConfig] = None,
+        h2_headers_priority: Optional[H2HeadersPriority] = None,
     ) -> None:
         self.method = method
         self.url = url
@@ -73,6 +76,7 @@ class Request:
         self.proxies = proxies
         self.timeout = timeout
         self.tls_config = tls_config
+        self.h2_headers_priority = normalize_headers_priority(h2_headers_priority)
 
     def __repr__(self) -> str:
         return f"<Request [{self.method}]>"
@@ -95,6 +99,7 @@ class Request:
 
         if schema == "http":
             req = HttpRequest()
+            req.h2_headers_priority = self.h2_headers_priority
             req.set_payload(
                 method=method,
                 url=url,
@@ -107,11 +112,13 @@ class Request:
                 json=_json,
                 proxy=proxies,
                 timeout=self.timeout,
+                tls_config=self.tls_config,
             )
             return req
 
         if schema == "https":
             req = HttpsRequest()
+            req.h2_headers_priority = self.h2_headers_priority
             req.set_payload(
                 method=method,
                 url=url,
@@ -136,19 +143,7 @@ class Request:
         :return:
         """
 
-        method = self.method.upper()
-        if method == "" or method not in [
-            "GET",
-            "OPTIONS",
-            "HEAD",
-            "POST",
-            "PUT",
-            "PATCH",
-            "DELETE",
-        ]:
-            raise NotAllowedRequestMethod(method)
-
-        return method
+        return _validated_request_method(self.method)
 
     def __ready_url(self) -> Tuple[str, str]:
         """
@@ -262,12 +257,6 @@ class Request:
                 raise InvalidData(
                     f"Invalid data: {data!r}. The data parameter item of iterable type must be a tuple"
                 )
-
-        if isinstance(data, (bytes, str)):
-            try:
-                parse_qs(data)
-            except AttributeError as err:
-                raise InvalidData(f"Invalid data: {data!r}") from err
 
         return data
 

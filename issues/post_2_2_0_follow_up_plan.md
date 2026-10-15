@@ -2,9 +2,11 @@
 
 Prepared: 2026-10-08
 
-Status: **CANDIDATE ROADMAP**. A3 buffered preparation/send is complete locally.
-Current acceptance is recorded only in the linked execution plan; remaining
-candidates are references, not new implementation obligations.
+Status: **SUPERSEDED ROADMAP**. Buffered A3 and the subsequent TLS/H2 fixes
+are released in 2.3.0. Use the
+[post-2.3.0 roadmap](post_2_3_0_follow_up_plan.md) for current baseline and task
+selection. The 2.2.0 baseline, local-only labels and candidate order below are
+dated historical context; remaining candidates are not new obligations.
 
 The detailed execution sequence is recorded in the
 [post-2.2.0 execution plan](post_2_2_0_execution_plan.md).

@@ -11,6 +11,7 @@ import time
 from ja3requests._upload import UploadSource
 from ja3requests.sockets._upload import UploadExchange, upload_headers
 from ja3requests.base import BaseSocket
+from ja3requests.contexts.context import HTTPSContext
 from ja3requests.utils import _encode_http1_headers, _validated_header_items
 from ja3requests.protocol.exceptions import (
     SocketException,
@@ -160,8 +161,8 @@ class ProxySocket(BaseSocket):
         :return:
         """
         self.conn.settimeout(getattr(self.context, 'read_timeout', None))
-        # Check if this is an HTTPS request through proxy
-        if hasattr(self.context, 'tls_config') and self.context.tls_config:
+        # The transport type requires TLS even when no config was supplied.
+        if isinstance(self.context, HTTPSContext):
             # For HTTPS through proxy, we need to do TLS handshake through the tunnel
             return self._send_https_through_proxy()
         # For HTTP through proxy, send directly
@@ -195,63 +196,11 @@ class ProxySocket(BaseSocket):
         from ja3requests.sockets.https import (
             HttpsSocket,
         )  # pylint: disable=import-outside-toplevel
-        from ja3requests.protocol.tls import (
-            TLS,
-        )  # pylint: disable=import-outside-toplevel
 
-        # Create a proxy-wrapped context that uses the tunnel connection
-        class TunnelContext:
-            """Context wrapper that routes through a proxy tunnel connection."""
-
-            def __init__(self, original_context, tunnel_conn):
-                self.original_context = original_context
-                self.tunnel_conn = tunnel_conn
-
-            def __getattr__(self, name):
-                # Delegate lazily: enumerating properties eagerly evaluates
-                # message/body and can consume a streaming upload.
-                return getattr(self.original_context, name)
-
-        tunnel_context = TunnelContext(self.context, self.conn)
-
-        # Create an HTTPS socket that uses the tunnel connection
-        class TunnelHttpsSocket(HttpsSocket):
-            """HTTPS socket that performs TLS handshake through a proxy tunnel."""
-
-            def __init__(self, context, tunnel_conn):
-                super().__init__(context)
-                self.tunnel_conn = tunnel_conn
-
-            def new_conn(self):
-                # Instead of creating a new connection, use the tunnel connection
-                self.conn = self.tunnel_conn
-
-                # Now perform TLS handshake through the tunnel
-                tls = TLS(
-                    self.conn,
-                    server_host=self.context.destination_address,
-                    server_port=self.context.port,
-                )
-
-                # Set up TLS configuration
-                tls_config = getattr(self.context, 'tls_config', None)
-                if tls_config and not getattr(tls_config, 'server_name', None):
-                    tls_config.server_name = self.context.destination_address
-
-                tls.set_payload(tls_config=tls_config)
-                handshake_success = tls.handshake()
-
-                if not handshake_success:
-                    self.conn.close()
-                    raise ConnectionError("TLS handshake failed through proxy tunnel")
-
-                # Store TLS instance
-                self.tls = tls
-                return self
-
-        # Create the tunnel HTTPS socket and establish connection
-        tunnel_https_socket = TunnelHttpsSocket(tunnel_context, self.conn)
-        tunnel_https_socket.new_conn()
-
-        # Send the request through the TLS connection
-        return tunnel_https_socket.send()
+        sock = HttpsSocket(self.context)
+        sock.conn = self.conn
+        sock.tls = sock._create_tls()
+        if not sock.tls.handshake():
+            self.conn.close()
+            raise ConnectionError("TLS handshake failed through proxy tunnel")
+        return sock.send()

@@ -43,6 +43,9 @@ credentials for HTTP CONNECT. Pass a complete field value such as `Basic <token>
 the legacy bare Base64 token is also accepted. The field is sent only in CONNECT
 and is removed from the destination's HTTP1/H2 request, including streaming
 uploads. Caller headers remain intact so retry attempts can authenticate again.
+Direct and SOCKS routes also omit this HTTP proxy field from destination
+requests, while retaining its original value in request metadata. SOCKS
+authentication continues to use the credentials in the proxy value.
 Final fields are validated before opening the proxy connection.
 CONNECT reads the complete response header block, including fragmented status
 and fields, with a 64 KiB limit and one handshake timeout budget. It leaves
@@ -92,6 +95,11 @@ CONNECT/SOCKS first creates a tunnel. The project then emits its own ClientHello
 and performs TLS to the destination through it. `tls_config` and `verify` have
 the same destination-authentication meaning as direct HTTPS. A custom SNI does
 not replace the destination used for certificate identity verification.
+The HTTPS transport always performs this handshake, including synchronous
+prepared requests without `tls_config`; omitting it never selects plaintext.
+An omitted SNI override is derived from each request's destination without
+writing it back to the shared configuration. Synchronous tunneled TLS handshakes
+use the request's connect timeout, just like direct HTTPS handshakes.
 
 ## Reuse, timeouts and close
 
@@ -110,6 +118,8 @@ their pool; an explicitly supplied pool is borrowed and remains the caller's
 responsibility. See [async pooling and close](async.md#pools-concurrent-tasks-and-close).
 
 For synchronous routes, proxy errors include `ProxyError` and `ProxyTimeoutError`.
+SOCKS handshake rejection, timeout, truncation or another exception closes its
+socket before propagating the error, even when the caller retains the traceback.
 Async proxy negotiation is part of the connect budget: negotiation failures can
 raise `ProxyError`, expiry raises `ja3requests.Timeout`, and caller cancellation
 remains `asyncio.CancelledError`. See the [protocol error reference](api/response.md)

@@ -35,12 +35,14 @@ response.raise_for_status()
 | `iter_content(decode_unicode=True)` | This API yields bytes and has no `decode_unicode` argument |
 | Re-reading a response after streaming iteration | Uncached iteration is single-use and raises `StreamConsumedError` on replay |
 | Requests/urllib3 exception hierarchy | Catch ja3requests errors and actual protocol/OS errors as described in the error guide |
-| Requests' exact redirect method/history behavior | Current redirect follow-ups use GET; do not assume Requests' 307/308 body replay or a compatible `history` API |
+| Requests' exact redirect method/history behavior | 307/308 preserve the method and body with the upload replay rules; 301/302/303 retain bodyless GET follow-ups. A compatible `history` API is not promised |
 | Session close always owns the pool | Default pool is shared; supply a dedicated pool for Session-scoped shutdown |
 
 The redirect implementation has a limit of eight and strips sensitive headers
-on a cross-origin redirect. If an API relies on preserving a method/body across
-307/308, set `allow_redirects=False` and implement its required policy explicitly.
+on a cross-origin redirect. Synchronous and native async 307/308 preserve the
+method and body; consumed non-replayable sources raise `StreamConsumedError`.
+To retain the former synchronous bodyless GET behavior for 307/308, disable
+automatic following with `allow_redirects=False` and send an explicit GET.
 HTTP status, TLS authentication and application authentication are separate
 checks; a successful fingerprint match does not authenticate a server.
 

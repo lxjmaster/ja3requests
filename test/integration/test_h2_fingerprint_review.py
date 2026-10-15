@@ -647,7 +647,9 @@ def test_alpn_rejection_stops_actual_handshake_before_http_and_pool(
 
 
 @pytest.mark.parametrize('entry', ['sync', 'async'])
-@pytest.mark.parametrize('control', ['settings', 'pseudo', 'priority', 'window'])
+@pytest.mark.parametrize(
+    'control', ['settings', 'pseudo', 'priority', 'window', 'huffman', 'indexing']
+)
 def test_changed_h2_controls_create_distinct_real_connections(
     trusted_certificates,
     monkeypatch,
@@ -666,6 +668,10 @@ def test_changed_h2_controls_create_distinct_real_connections(
             config.h2_pseudo_header_order = ORDER
         elif control == 'priority':
             config.h2_priority_frames = PRIORITIES
+        elif control == 'huffman':
+            config.h2_huffman = True
+        elif control == 'indexing':
+            config.h2_indexing_exclusions = [':path']
         else:
             config.h2_window_update = 123
 
@@ -726,3 +732,92 @@ def test_changed_h2_controls_create_distinct_real_connections(
                 assert session.get(url, timeout=2).status_code == 200
     assert [request[0] for request in seen['requests']] == [1, 1]
     assert len(h2_readers) + len(async_h2_connections) == 2
+
+
+@pytest.mark.parametrize('version', [12, 13])
+@pytest.mark.parametrize('enabled', [False, True])
+@pytest.mark.parametrize(
+    'entry',
+    ['sync', 'sync-unpooled', 'sync-upload', 'async', 'async-prepared', 'async-upload'],
+)
+def test_real_tls_outbound_huffman_and_reuse(
+    trusted_certificates,
+    monkeypatch,
+    h2_readers,
+    async_h2_connections,
+    version,
+    enabled,
+    entry,
+):
+    config, context = trusted_h2_peer(trusted_certificates, monkeypatch, version)
+    config.h2_huffman = enabled
+    seen = []
+    count = 1 if entry == 'sync-unpooled' else 2
+    needle = (
+        bytes.fromhex('8cf1e3c2e5f23a6ba0ab90f4ff')
+        if enabled
+        else b'\x0fwww.example.com'
+    )
+
+    def peer(conn):
+        start_h2(conn)
+        decoder = HPACKDecoder()
+        current = None
+        while len(seen) < count:
+            kind, flags, stream, payload = receive_frame(conn)
+            if kind == 1:
+                assert flags & 4
+                headers = decoder.decode_headers(payload)
+                assert dict(headers)['x-vector'] == 'www.example.com'
+                if not seen:
+                    # Independent RFC literal bytes in the actual received block.
+                    assert needle in payload
+                current = stream
+            if kind in (0, 1) and flags & 1:
+                seen.append(current)
+                conn.sendall(h2_frame(1, 5, current, b'\x88'))
+        await_transport_close(conn)
+
+    headers = {'x-vector': 'www.example.com'}
+
+    async def run(url):
+        async with AsyncSession(tls_config=config) as session:
+            for _ in range(count):
+                if entry == 'async-prepared':
+                    prepared = await session.prepare_request(
+                        'GET', url, headers=headers
+                    )
+                    response = await session.send(prepared, timeout=3)
+                else:
+                    response = await session.post(
+                        url,
+                        headers=headers,
+                        data=(
+                            iter([b'payload'])
+                            if entry == 'async-upload'
+                            else b'payload'
+                        ),
+                        timeout=3,
+                    )
+                assert response.status_code == 200
+
+    with LocalServer(peer, context) as server:
+        url = 'https://127.0.0.1:%d/' % server.port
+        if entry.startswith('async'):
+            asyncio.run(run(url))
+        else:
+            with ConnectionPool() as pool, Session(
+                tls_config=config, pool=pool, use_pooling=entry != 'sync-unpooled'
+            ) as session:
+                for _ in range(count):
+                    response = session.post(
+                        url,
+                        headers=headers,
+                        data=(
+                            iter([b'payload']) if entry == 'sync-upload' else b'payload'
+                        ),
+                        timeout=3,
+                    )
+                    assert response.status_code == 200
+    assert seen == [1, 3][:count]
+    assert len(h2_readers) + len(async_h2_connections) == 1

@@ -126,7 +126,7 @@ def upload_headers(context, h2=False):
     return (
         context.start_line.encode('utf-8')
         + b'\r\n'
-        + _encode_http1_headers(headers)
+        + _encode_http1_headers(context._destination_headers())
         + b'\r\n\r\n'
     )
 

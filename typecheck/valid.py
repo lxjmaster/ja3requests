@@ -58,11 +58,13 @@ async def prepared_calls(session: AsyncSession, url: str) -> None:
         verify=True,
         tls_config=TlsConfig.secure(),
         h1=True,
+        h2_headers_priority=(183, True),
     )
     assert_type(prepared, AsyncPreparedRequest)
     assert_type(prepared.method, str)
     assert_type(prepared.url, str)
     assert_type(prepared.body, bytes)
+    assert_type(prepared.h2_headers_priority, Optional[Tuple[int, bool]])
     assert_type(prepared.headers, Mapping[str, Union[str, bytes]])
     assert_type(prepared.headers['X-Input'], Union[str, bytes])
     byte_value = prepared.headers['X-Input']
@@ -131,6 +133,8 @@ def public_calls(url: str, cookie_path: Path) -> None:
         assert_type(config.h2_settings, List[Tuple[int, int]])
     config.h2_pseudo_header_order = (':method', ':path', ':authority', ':scheme')
     config.h2_priority_frames = [(3, 0, 256, True)]
+    config.h2_huffman = True
+    assert_type(config.h2_huffman, bool)
     assert_type(config.h2_pseudo_header_order, Optional[List[str]])
     assert_type(config.h2_priority_frames, List[Tuple[int, int, int, bool]])
     config.client_cert = 'client.pem'

@@ -37,6 +37,7 @@ def rejects(url: str, response: Response, session: Session) -> None:
     ja3requests.post(url, files={'body': ('name.bin', BytesIO())})  # E: dict-item
     ja3requests.post(url, json=[1, 2])  # E: arg-type
     session.get(url, timeout='slow')  # E: arg-type
+    session.get(url, h2_headers_priority=('183', True))  # E: arg-type
     session.request('GET', url, verify='false')  # E: arg-type
     session.post(url, auth=('one', 'two', 'three'))  # E: arg-type
     session.get(url, unknown_option=True)  # E: call-arg
@@ -59,6 +60,8 @@ def rejects(url: str, response: Response, session: Session) -> None:
     config.h2_pseudo_header_order = [1, 2, 3, 4]  # E: list-item
     config.h2_priority_frames = [(3, 0, '256', False)]  # E: list-item
     config.h2_priority_frames = [(3, 0, 256)]  # E: list-item
+    config.h2_huffman = 'yes'  # E: assignment
+    config.h2_indexing_exclusions = [42]  # E: list-item
     jar = Ja3RequestsCookieJar()
     jar.set('name', 42)  # E: arg-type
     jar.save(42)  # E: arg-type

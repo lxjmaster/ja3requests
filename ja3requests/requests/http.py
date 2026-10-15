@@ -51,9 +51,11 @@ class HttpRequest(BaseRequest):
         return sock.new_conn()
 
     def send(self, **kwargs: Any) -> HTTPResponse:
+        self._validate_send(DEFAULT_HTTP_SCHEME)
         pool = kwargs.pop('pool', None)
 
         context = HTTPContext()
+        context.h2_headers_priority = self.h2_headers_priority
         context._upload_register = kwargs.pop('_upload_register', None)
         context.set_payload(
             method=self.method,
@@ -67,9 +69,11 @@ class HttpRequest(BaseRequest):
             proxy=self.proxy,
             cookies=self.cookies,
         )
+        self._restore_redirect_body(context)
         sock = self.create_connection(context, pool=pool)
         try:
             conn = sock.send()
+            self._remember_redirect_body(sock.context)
             response = HTTPResponse(
                 conn, method=self.method, release=sock.release_response
             )

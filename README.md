@@ -34,10 +34,11 @@ groups are not implemented. Implicit Chrome selection remains at version 124.
 
 Ja3Requests supports HTTP/1.1 over HTTP and HTTPS. HTTPS connections can also
 negotiate HTTP/2 with ALPN. Version 2.0 defaults to verified TLS 1.3 with TLS 1.2 ECDHE/GCM fallback.
-Version 2.3.0 release links: [PyPI](https://pypi.org/project/ja3requests/2.3.0/)
-and [GitHub](https://github.com/lxjmaster/ja3requests/releases/tag/v2.3.0).
-This release adds streaming request bodies, async multipart/files and async
-Cookie-file helpers; see [release notes](CHANGELOG.md) for scope and limits.
+Version 2.4.0 release links: [PyPI](https://pypi.org/project/ja3requests/2.4.0/)
+and [GitHub](https://github.com/lxjmaster/ja3requests/releases/tag/v2.4.0).
+This release adds optional H2 Huffman encoding, indexing exclusions and per-request
+HEADERS priority. It also corrects synchronous 307/308 body replay, hook edits and
+proxy/TLS policy handling; see [release notes](CHANGELOG.md) for scope and limits.
 
 ## Installing Ja3Requests and Supported Versions
 

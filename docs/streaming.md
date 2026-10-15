@@ -112,6 +112,14 @@ HTTP/2 and the existing supported proxy routes. `stream=True` controls the
 | `AsyncIterator[bytes]` | Unsupported | Stream on the owning event loop |
 | A list/tuple of chunks | Existing form interpretation; use `iter(chunks)` | Same |
 
+Buffered `data=bytes` is sent unchanged, including NUL and non-UTF-8 bytes;
+it is not decoded or validated as a form. Text is UTF-8 encoded, and mappings
+or pairs retain form encoding. Synchronous 307/308 replay preserves the same
+encoded body bytes. For raw binary bodies, set an explicit `Content-Type`, such
+as `application/octet-stream`; synchronous buffered `data` retains its legacy
+form Content-Type default. Combining form data with `files` still uses multipart
+encoding rather than sending the form bytes as a separate raw body.
+
 ```python
 from ja3requests import Session
 
@@ -171,8 +179,14 @@ Only the existing retry policy authorizes a retry. A consumed seekable file is
 rewound to its captured initial offset. A consumed iterator or non-seekable file
 raises `StreamConsumedError` when replay is required. Invalid chunks, read failures
 and length errors raise `InvalidData` and are not network retry triggers.
-Async 307/308 redirects preserve the body with these replay rules. The synchronous
-client retains its existing bodyless GET follow-up, including for 307/308.
+Both synchronous and async 307/308 redirects retain the method and body with
+these replay rules. The synchronous client now preserves its actual encoded
+buffered body, including multipart bytes, and stops the previous upload before
+rewinding a surviving source. A next-hop hook can replace the body or request;
+only the source that survives that hook is rewound. Caller-owned files stay open.
+This changes the previous synchronous bodyless-GET behavior for 307/308.
+Synchronous 301/302/303 follow-ups retain their existing bodyless-GET behavior;
+`allow_redirects=False` continues to return the original response.
 
 The response can arrive before the source finishes. Final HTTP/1 headers stop
 new body pulls; an unfinished upload makes that connection non-reusable. H2
@@ -245,7 +259,10 @@ reuse the boundary, reopen paths and rewind seekable handles. Any consumed part
 that cannot be replayed prevents replay of the whole form. Length is known when
 all parts have known lengths; otherwise normal unknown-length framing applies.
 The existing synchronous `files=` encoder retains its buffered behavior; raw
-synchronous `data=file` is the streaming option.
+synchronous `data=file` is the streaming option. Its multipart names and filenames
+use the same control-character rejection and quote/backslash escaping rules.
+Empty form fields and file-only forms are retained, including after redirect-hook
+edits, and prepared file contents are reused without rereading caller files.
 
 The [upload loopback example](examples.md#streaming-upload-example) exercises the
 public sync/async interfaces and multipart without an external service.
