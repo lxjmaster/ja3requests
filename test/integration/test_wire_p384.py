@@ -1,10 +1,11 @@
 """Independent OpenSSL P-384 peer, project-owned client and wire observation."""
 
+import asyncio
 import ssl
 
 import pytest
 
-from ja3requests import Session, TlsConfig
+from ja3requests import AsyncSession, Session, TlsConfig
 from ja3requests.pool import ConnectionPool
 from ja3requests.protocol.tls import TLS
 from ja3requests.protocol.tls.client_hello_info import inspect_client_hello
@@ -92,7 +93,11 @@ def test_p384_handshake_and_retry(
 
 
 @pytest.mark.parametrize('version', ['TLSv1.2', 'TLSv1.3'])
-def test_chrome154_subset_interoperates(trusted_certificates, monkeypatch, version):
+@pytest.mark.parametrize('profile_version', [154, 155])
+@pytest.mark.parametrize('entry', ['sync', 'async'])
+def test_chrome_subset_interoperates(
+    trusted_certificates, monkeypatch, version, profile_version, entry
+):
     from test.mock_servers.local import tls12_context
 
     monkeypatch.setenv('SSL_CERT_FILE', str(trusted_certificates.ca_path))
@@ -109,10 +114,15 @@ def test_chrome154_subset_interoperates(trusted_certificates, monkeypatch, versi
         conn.sendall(b'HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok')
 
     with LocalServer(handler, context) as server:
-        with Session(
-            tls_config=TlsConfig.from_browser('chrome', 154), use_pooling=False
-        ) as session:
-            assert (
-                session.get('https://127.0.0.1:%s/' % server.port, timeout=3).content
-                == b'ok'
-            )
+        config = TlsConfig.from_browser('chrome', profile_version)
+        url = 'https://127.0.0.1:%s/' % server.port
+
+        async def run():
+            async with AsyncSession(tls_config=config) as session:
+                assert (await session.get(url, timeout=3)).content == b'ok'
+
+        if entry == 'async':
+            asyncio.run(run())
+        else:
+            with Session(tls_config=config, use_pooling=False) as session:
+                assert session.get(url, timeout=3).content == b'ok'

@@ -686,7 +686,11 @@ class Session(BaseSession):
                     (source.hostname or '').lower(),
                     source.port or (443 if source.scheme == 'https' else 80),
                 )
-                preserve_body = status_code in (307, 308)
+                preserve_body = (
+                    status_code in (307, 308)
+                    or (status_code in (301, 302) and request.method != 'POST')
+                    or (status_code == 303 and request.method == 'HEAD')
+                )
                 upload_source = (
                     request.data if isinstance(request.data, UploadSource) else None
                 )

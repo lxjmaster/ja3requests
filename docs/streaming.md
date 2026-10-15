@@ -179,14 +179,17 @@ Only the existing retry policy authorizes a retry. A consumed seekable file is
 rewound to its captured initial offset. A consumed iterator or non-seekable file
 raises `StreamConsumedError` when replay is required. Invalid chunks, read failures
 and length errors raise `InvalidData` and are not network retry triggers.
-Both synchronous and async 307/308 redirects retain the method and body with
-these replay rules. The synchronous client now preserves its actual encoded
+Both clients retain method/body for 307/308, non-POST 301/302 and HEAD 303,
+using these replay rules. Synchronous 301/302/303 alignment ships in **2.5.0**.
+POST 301/302 and non-HEAD 303 become empty-body GET requests and release the old
+upload source without replay. The synchronous client preserves its actual encoded
 buffered body, including multipart bytes, and stops the previous upload before
 rewinding a surviving source. A next-hop hook can replace the body or request;
 only the source that survives that hook is rewound. Caller-owned files stay open.
 This changes the previous synchronous bodyless-GET behavior for 307/308.
-Synchronous 301/302/303 follow-ups retain their existing bodyless-GET behavior;
-`allow_redirects=False` continues to return the original response.
+To retain the previous synchronous bodyless-GET behavior for any changed status,
+use `allow_redirects=False` and follow explicitly with GET. Disabling redirects
+continues to return the original response.
 
 The response can arrive before the source finishes. Final HTTP/1 headers stop
 new body pulls; an unfinished upload makes that connection non-reusable. H2

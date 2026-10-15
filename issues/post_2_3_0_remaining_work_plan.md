@@ -1,5 +1,10 @@
 # Remaining work: solution and execution plan
 
+Current entry, 2026-10-15: use the [post-2.4.0 advancement plan](post_2_4_0_plan.md).
+R/H1/H2 and Huffman have shipped in 2.4.0. Local/unpublished status and authority
+statements below belong to their dated historical snapshots. Preserve their
+contracts/evidence; select future work from the new plan.
+
 Prepared: 2026-10-13. Status: **PLANNING COMPLETE / SELECTED IMPLEMENTATION COMPLETE**.
 
 Execution selected: 2026-10-13. R, H1, H2 and their D acceptance are now authorized;

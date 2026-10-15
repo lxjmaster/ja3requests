@@ -142,10 +142,24 @@ configuration. An explicit request configuration retains precedence. Calling
 the prepared transport's `send()` directly without a configuration uses the
 verified `TlsConfig()` defaults; direct and proxy HTTPS still perform TLS.
 
-Synchronous 307/308 redirects preserve the current method and actual prepared
-body, matching the async replay contract. This changes the former bodyless-GET
-default: callers relying on that behavior should follow the redirect explicitly
-with a GET instead. `allow_redirects=False` disables automatic following.
+Both clients use this redirect method/body policy. The 301/302/303 correction
+for synchronous requests ships in **2.5.0**; 307/308 preservation shipped in 2.4.0.
+
+| Status | Follow-up |
+| --- | --- |
+| 301/302 | POST becomes GET with no body; other methods retain method/body |
+| 303 | HEAD retains method/body; other methods become GET with no body |
+| 307/308 | Retain method/body |
+
+For example, synchronous PUT -> 302 now resends PUT and its body, and HEAD ->
+303 retains HEAD and its body. Previously both became empty-body GET requests.
+Rewritten GET follow-ups remove Content-Length, Content-Type and Transfer-Encoding.
+To keep the previous behavior, use `allow_redirects=False` and follow explicitly
+with a GET. A newly preserved one-shot body can now raise `StreamConsumedError`
+rather than silently dropping its data.
+
+Preserved synchronous redirects reuse the actual prepared body, matching the
+async replay contract.
 Buffered form/JSON/multipart bodies reuse their encoded bytes while the body
 inputs remain unchanged. Next-hop hook edits invalidate that replay; clearing
 or replacing a buffered body removes inherited length framing and computes
@@ -172,5 +186,5 @@ objects remain available for the new source.
 Consumed seekable upload sources rewind to their initial offset after the prior
 producer stops;
 consumed non-replayable sources raise `StreamConsumedError` before destination I/O.
-Next-hop hooks select the source before replay. The synchronous 301/302/303
-method/body policy is unchanged; complete redirect-policy parity is not claimed.
+Next-hop hooks select the source before replay. Matching method/body policy does
+not imply identical response-history, timeout or pool-ownership APIs.
