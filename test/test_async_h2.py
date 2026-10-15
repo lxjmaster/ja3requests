@@ -323,14 +323,17 @@ async def test_peer_settings_waiter_cancel_and_none_deadline():
         await conn.aclose()
 
 
+@pytest.mark.parametrize('priority', [None, (183, True)])
 @async_test
-async def test_uncommitted_header_cancel_does_not_mutate_hpack():
+async def test_uncommitted_header_cancel_does_not_mutate_hpack(priority):
     async with connected() as (conn, wire):
         wire.block = lambda frame: frame.kind == 6
         wire.feed(h2_frame(6, 0, 0, b"gateping"))
         await wire.blocked.wait()
         pending = asyncio.create_task(
-            request(conn, headers=[("x-cancelled", "hidden")])
+            request(
+                conn, headers=[("x-cancelled", "hidden")], headers_priority=priority
+            )
         )
         await asyncio.sleep(0)
         assert conn._streams[1].request_committed is False
@@ -347,11 +350,30 @@ async def test_uncommitted_header_cancel_does_not_mutate_hpack():
 
 
 @async_test
-async def test_committed_header_block_finishes_before_reset_and_next_header():
+async def test_invalid_priority_keeps_other_streams_and_table_usable():
+    async with connected() as (conn, wire):
+        first = await request(conn, headers_priority=(256, True))
+        sent = list(wire.sent)
+        table = list(conn._encoder.dynamic_table)
+        with pytest.raises(ValueError, match='weight'):
+            await request(conn, headers_priority=(True, True))
+        assert wire.sent == sent and conn._encoder.dynamic_table == table
+        assert conn._next_stream_id == 3 and not conn.failed
+        following = await request(conn, headers_priority=(183, True))
+        wire.feed(headers(first, end=True), headers(following, end=True))
+        assert await conn.receive_headers(first) == [(':status', '200')]
+        assert await conn.receive_headers(following) == [(':status', '200')]
+
+
+@pytest.mark.parametrize('priority', [None, (183, True)])
+@async_test
+async def test_committed_header_block_finishes_before_reset_and_next_header(priority):
     async with connected() as (conn, wire):
         wire.block = lambda frame: frame.kind == 1 and frame.stream == 1
         value = "long-field-" * 5000
-        pending = asyncio.create_task(request(conn, headers=[("x-large", value)]))
+        pending = asyncio.create_task(
+            request(conn, headers=[("x-large", value)], headers_priority=priority)
+        )
         await wire.blocked.wait()
         pending.cancel()
         with pytest.raises(asyncio.CancelledError):
@@ -376,8 +398,13 @@ async def test_committed_header_block_finishes_before_reset_and_next_header():
         assert committed[-1].flags & 4
         assert frames[first_reset].stream == 1
         decoder = HPACKDecoder()
+        prefix = 5 if priority is not None else 0
+        if priority is not None:
+            assert committed[0].payload[:5] == b'\x80\x00\x00\x00\xb6'
+            assert committed[0].flags & 32
         assert ("x-large", value) in decoder.decode_headers(
-            b"".join(frame.payload for frame in committed)
+            committed[0].payload[prefix:]
+            + b"".join(frame.payload for frame in committed[1:])
         )
         following = [frame for frame in frames[first_reset + 1 :] if frame.stream == 3]
         assert ("x-large", value) in decoder.decode_headers(

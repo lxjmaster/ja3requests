@@ -1,9 +1,11 @@
 """Wire regressions for entity headers on synchronous bodyless redirects."""
 
 import pytest
+from types import SimpleNamespace
 
-from ja3requests import Session
+from ja3requests import Session, TlsConfig
 from ja3requests.contexts.context import HTTPContext
+from ja3requests.requests.request import Request
 from test.mock_servers.local import LocalServer, read_headers
 
 
@@ -98,7 +100,7 @@ def test_sync_multihop_redirect_clears_mixed_case_entity_headers_only():
         )
         changed.append(response.request.url)
 
-    redirects = [(307, '/middle'), (308, '/final')]
+    redirects = [(302, '/middle'), (303, '/final')]
     with LocalServer(_redirect_peer(observed, redirects), connections=3) as peer:
         with Session(use_pooling=False, hooks={'after_request': [after]}) as session:
             response = session.post(
@@ -174,6 +176,68 @@ def test_sync_context_formats_bracketed_ipv6_authority():
     assert context.destination_address == '::1'
     assert context.start_line == 'GET /path HTTP/1.1'
     assert context.headers['Host'] == '[::1]:8080'
+
+
+@pytest.mark.parametrize('stale_request', [False, True])
+@pytest.mark.parametrize('status', [302, 307, 308])
+def test_direct_send_redirects_use_current_request_policy(stale_request, status):
+    observed = []
+    with LocalServer(
+        _redirect_peer(observed, [(status, '/middle'), (status, '/final')]),
+        connections=3,
+    ) as peer, Session(use_pooling=False) as session:
+        if stale_request:
+            session.Request = Request(
+                'GET',
+                'http://unused.invalid/',
+                proxies={'http': 'http://127.0.0.1:1'},
+                timeout=0,
+            )
+        ready = Request(
+            'GET',
+            'http://127.0.0.1:%d/start' % peer.port,
+            headers={'X-Trace': 'current'},
+            timeout=2,
+        ).request()
+        response = session.send(ready, allow_redirects=True)
+        assert response.content == b'ok'
+        assert response.request.timeout == 2
+    assert [item[0] for item in observed] == [
+        'GET /start HTTP/1.1',
+        'GET /middle HTTP/1.1',
+        'GET /final HTTP/1.1',
+    ]
+    assert all(item[1]['x-trace'] == 'current' for item in observed)
+
+
+def test_redirect_retains_current_proxy_routes_across_scheme_change(monkeypatch):
+    proxies = {
+        'http': 'http://first.proxy:8080',
+        'https': 'socks5://second.proxy:1080',
+    }
+    config = TlsConfig.secure()
+    ready = Request(
+        'GET',
+        'http://first.invalid/start',
+        proxies=proxies,
+        timeout=(1, 3),
+        tls_config=config,
+    ).request()
+    proxies['https'] = 'http://changed.proxy:9999'
+    captured = []
+    with Session(use_pooling=False) as session:
+        monkeypatch.setattr(
+            session,
+            'send',
+            lambda request, **kwargs: (
+                captured.append(request),
+                SimpleNamespace(status_code=200, is_redirected=False),
+            )[1],
+        )
+        session.resolve_redirects('https://second.invalid/next', ready)
+    assert captured[0].proxy == 'socks5://second.proxy:1080'
+    assert captured[0].timeout == (1, 3)
+    assert captured[0].tls_config is config
 
 
 @pytest.mark.parametrize(

@@ -16,6 +16,7 @@ from ja3requests.protocol.h2.frame import (
     FRAME_RST_STREAM,
     build_data_frame,
     build_rst_stream_frame,
+    normalize_headers_priority,
 )
 from ja3requests.protocol.h2.stream_state import (
     H2StreamError,
@@ -37,11 +38,12 @@ class _AsyncStream(_Stream):
 
 
 class _RequestWrite:
-    def __init__(self, stream_id, stream, headers, body):
+    def __init__(self, stream_id, stream, headers, body, headers_priority):
         self.stream_id = stream_id
         self.stream = stream
         self.headers = headers
         self.body = body
+        self.headers_priority = headers_priority
         self.headers_sent = False
         self.offset = 0
         self.source = body if isinstance(body, UploadSource) else None
@@ -65,12 +67,16 @@ class AsyncH2Connection(H2StreamState):
         settings=None,
         pseudo_header_order=None,
         priority_frames=None,
+        huffman=False,
+        indexing_exclusions=(),
     ) -> None:
         super().__init__(
             self._queue_control,
             settings=settings,
             pseudo_header_order=pseudo_header_order,
             priority_frames=priority_frames,
+            huffman=huffman,
+            indexing_exclusions=indexing_exclusions,
         )
         self._send_func = send_func
         self._recv_func = recv_func
@@ -336,7 +342,10 @@ class AsyncH2Connection(H2StreamState):
             block = self._encoder.encode_headers(request.headers)
             stream.request_committed = True
             for frame in self._header_frames(
-                stream_id, block, end_stream=not request.body
+                stream_id,
+                block,
+                end_stream=not request.body,
+                headers_priority=request.headers_priority,
             ):
                 await self._send_func(frame.serialize())
                 stream.send_progress += 1
@@ -402,11 +411,19 @@ class AsyncH2Connection(H2StreamState):
         body: Optional[bytes] = None,
         scheme: str = "https",
         timeout: Optional[float] = None,
+        headers_priority=None,
     ) -> int:
         if body is not None and not isinstance(body, bytes):
             raise TypeError("HTTP/2 request body must be bytes")
         stream_id, stream, _ = await self._reserve_request(
-            method, authority, path, headers, body or b'', scheme, timeout
+            method,
+            authority,
+            path,
+            headers,
+            body or b'',
+            scheme,
+            timeout,
+            headers_priority,
         )
         try:
             while not stream.send_done:
@@ -426,8 +443,17 @@ class AsyncH2Connection(H2StreamState):
             raise
 
     async def _reserve_request(
-        self, method, authority, path, headers, body, scheme, timeout
+        self,
+        method,
+        authority,
+        path,
+        headers,
+        body,
+        scheme,
+        timeout,
+        headers_priority=None,
     ):
+        headers_priority = normalize_headers_priority(headers_priority)
         h2_headers = self._prepare_request_headers(
             method, authority, path, headers, scheme
         )
@@ -446,7 +472,7 @@ class AsyncH2Connection(H2StreamState):
         self._next_stream_id += 2
         stream = _AsyncStream(self._peer_settings[4], self._local_settings[4])
         self._streams[stream_id] = stream
-        request = _RequestWrite(stream_id, stream, h2_headers, body)
+        request = _RequestWrite(stream_id, stream, h2_headers, body, headers_priority)
         self._outbound[stream_id] = request
         self._notify()
         return stream_id, stream, request
@@ -460,14 +486,16 @@ class AsyncH2Connection(H2StreamState):
         body: Optional[UploadSource] = None,
         scheme: str = 'https',
         timeout: Optional[float] = None,
+        headers_priority=None,
     ) -> int:
         """Reserve a stream; let its producer and response progress independently."""
         self._bind_loop()
         if not isinstance(body, UploadSource):
             raise TypeError('Streaming HTTP/2 uploads require an UploadSource')
+        headers_priority = normalize_headers_priority(headers_priority)
         await self._source_phase(body.aprepare(), timeout, 'upload preparation')
         stream_id, _, request = await self._reserve_request(
-            method, authority, path, headers, body, scheme, timeout
+            method, authority, path, headers, body, scheme, timeout, headers_priority
         )
         # Unlike the shared reader/writer, a producer belongs to one request.
         # Keep its caller context and run every source pull in this same task.

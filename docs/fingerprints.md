@@ -52,9 +52,12 @@ config.h2_settings = [(1, 65536), (2, 0), (4, 6291456), (6, 262144)]
 config.h2_window_update = 15663105
 config.h2_pseudo_header_order = [":method", ":path", ":authority", ":scheme"]
 config.h2_priority_frames = [(3, 0, 201, False), (5, 3, 101, True)]
+config.h2_huffman = True
+config.h2_indexing_exclusions = [":path"]
 config.validate(strict=True)
 with Session(tls_config=config, pool=ConnectionPool()) as session:
-    response = session.get("https://example.com/", timeout=5)
+    response = session.get("https://example.com/", h2_headers_priority=(256, True), timeout=5)
+    image = session.get("https://example.com/pixel.png", h2_headers_priority=(183, True), timeout=5)
 ```
 
 Those explicit numbers are an illustrative configuration, not a claim about a
@@ -94,8 +97,42 @@ tuples. Stream IDs are nonzero 31-bit integers; dependencies may be zero but
 cannot reference the same stream; weights are 1–256; `exclusive` is a bool.
 These legacy PRIORITY frames follow initial SETTINGS and any WINDOW_UPDATE,
 once per connection. They signal priority without opening streams or implementing
-a scheduler; the first request still uses stream 1. All H2 controls participate
-in pool identity, and apply to synchronous and native async clients.
+a scheduler; the first request still uses stream 1. Connection-level H2 controls
+participate in pool identity and apply to synchronous and native async clients.
+
+`h2_headers_priority=None | (weight, exclusive)` is request metadata. `None`
+keeps HEADERS without priority fields; a tuple writes dependency 0, the exclusive
+bit and weight 1–256. Boolean weights and non-boolean exclusivity are rejected
+before source consumption or network I/O. The five priority bytes count toward
+the first frame's limit and are absent from CONTINUATION frames. Priorities do
+not split connection pools: weights 256 and 183 can share streams 1 and 3.
+Retries/redirects retain the metadata unless a request hook replaces it. It has
+no wire effect with HTTP/1.1. Native async `prepare_request()` snapshots it;
+`AsyncPreparedRequest.h2_headers_priority` is read-only and `with_headers()`
+preserves it. These legacy fields control the wire fingerprint, not scheduling.
+
+`h2_indexing_exclusions` defaults to `()`. Assignment copies, lowercases and
+deduplicates valid field names into an immutable tuple, including pseudo-header
+names such as `:path`. Matching new literals use the HPACK representation without
+dynamic-table insertion; existing exact static/dynamic index references remain
+usable. Sensitive literals retain never-indexed handling. For example, `/` can
+use its static index while a new `/pixel.png` is sent without insertion.
+This policy is independent of Huffman encoding. Changed exclusions select a
+different pooled connection; an unchanged policy preserves its dynamic table.
+
+`h2_huffman` is a boolean, default `False`. Setting it to `True` uses HPACK
+Huffman coding for each outbound literal name/value only when the encoded
+octets are strictly shorter. Equal-length or larger results retain raw encoding.
+The same rule applies to both clients, including prepared sends and streaming
+uploads, and a changed policy selects a separate pooled connection. Sensitive
+fields still use never-indexing; dynamic-table/indexing choices are unchanged.
+Header inputs remain valid UTF-8, while the low-level `encode_string` primitive
+can encode arbitrary octets. Existing presets keep their raw default.
+
+The policy matches the literal choices in the retained Chrome 155/macOS two-request
+capture, and its first request's HPACK block matches under equivalent supplied
+headers. A complete browser fingerprint also depends on HEADERS priority, indexing
+policy and TLS fields; enabling this option does not assert full browser identity.
 
 The peer must
 negotiate `h2` via ALPN (application-layer protocol negotiation). HTTP client
@@ -105,6 +142,11 @@ and must be implemented by the client, or the connection closes before HTTP
 transmission or pooling. Raw `ClientHello`/`ALPNExtension` encoding can still
 represent other names for packet inspection. There is no h2c
 upgrade API in this guide.
+
+On both clients, a request's `h1=True` offers only `http/1.1` through a separate
+configuration copy. It cannot reuse a pooled H2 connection and does not change
+the Session's ALPN settings for later requests. This applies to direct and proxy
+routes.
 
 The H2 implementation owns frames, HPACK, flow control, stream lifecycle and
 multiplexing. Streaming uses per-stream consumption-driven credit, while the

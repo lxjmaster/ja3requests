@@ -10,6 +10,10 @@ from __future__ import annotations
 import struct
 from typing import TYPE_CHECKING, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 from ja3requests.protocol.tls.cipher_suites import CipherSuite
+from ja3requests.protocol.h2.hpack import (
+    validate_huffman,
+    normalize_indexing_exclusions,
+)
 from ja3requests.protocol.h2.frame import (
     H2Settings,
     H2Priority,
@@ -119,6 +123,8 @@ class TlsConfig:
         self._h2_window_update: Optional[int] = None
         self._h2_pseudo_header_order: Optional[List[str]] = None
         self._h2_priority_frames: Optional[List[H2Priority]] = None
+        self._h2_huffman = False
+        self._h2_indexing_exclusions: Tuple[str, ...] = ()
 
         # Client certificate for mutual TLS
         self._client_cert: Optional[CertificateInput] = None  # PEM bytes or file path
@@ -368,6 +374,25 @@ class TlsConfig:
         self._h2_priority_frames = None if frames is None else list(normalized)
 
     @property
+    def h2_huffman(self) -> bool:
+        """Use Huffman for outbound HPACK literals only when strictly shorter."""
+        return self._h2_huffman
+
+    @h2_huffman.setter
+    def h2_huffman(self, value: bool) -> None:
+        validate_huffman(value)
+        self._h2_huffman = value
+
+    @property
+    def h2_indexing_exclusions(self) -> Tuple[str, ...]:
+        """Names whose new literals do not enter the connection's HPACK table."""
+        return self._h2_indexing_exclusions
+
+    @h2_indexing_exclusions.setter
+    def h2_indexing_exclusions(self, names: Sequence[str]) -> None:
+        self._h2_indexing_exclusions = normalize_indexing_exclusions(names)
+
+    @property
     def client_cert(self) -> Optional[CertificateInput]:
         """Get client certificate path or PEM data."""
         return self._client_cert
@@ -532,6 +557,8 @@ class TlsConfig:
             (validate_initial_window, self._h2_window_update),
             (normalize_pseudo_header_order, self._h2_pseudo_header_order),
             (normalize_priority_frames, self._h2_priority_frames),
+            (validate_huffman, self._h2_huffman),
+            (normalize_indexing_exclusions, self._h2_indexing_exclusions),
         ):
             try:
                 check(value)

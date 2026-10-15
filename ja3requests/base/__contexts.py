@@ -6,6 +6,10 @@ Basic of Context.
 """
 
 from __future__ import annotations
+from ja3requests._multipart import (
+    _quoted as _multipart_quoted,
+    _text as _multipart_text,
+)
 from ja3requests._upload import UploadSource
 from ja3requests.exceptions import InvalidData
 
@@ -200,7 +204,13 @@ class BaseContext(ABC):
                 if isinstance(self.data, UploadSource):
                     self._headers = headers
                     return
-                if not headers.get("Content-Type", None):
+                if self.files:
+                    # Hooks can set data before or after files. The final file
+                    # list must take precedence over an earlier form default.
+                    headers.update(
+                        {"Content-Type": 'multipart/form-data;boundary="boundary"'}
+                    )
+                elif not headers.get("Content-Type", None):
                     if self.data:
                         headers.update(
                             {"Content-Type": "application/x-www-form-urlencoded"}
@@ -209,10 +219,6 @@ class BaseContext(ABC):
                     if self.json:
                         headers.update({"Content-Type": "application/json"})
 
-                    if self.files:
-                        headers.update(
-                            {"Content-Type": 'multipart/form-data;boundary="boundary"'}
-                        )
                 else:
                     content_type = headers["Content-Type"]
                     if "multipart/form-data" in content_type.lower():
@@ -237,8 +243,17 @@ class BaseContext(ABC):
         """
         return _validated_header_items(self.headers)
 
+    def _destination_headers(self) -> Dict[str, HeaderValue]:
+        """Keep proxy credentials in metadata, away from every target encoder."""
+        self._validated_header_items()
+        return {
+            name: value
+            for name, value in (self.headers or {}).items()
+            if name.lower() != 'proxy-authorization'
+        }
+
     @property
-    def data(self) -> Optional[str]:
+    def data(self) -> Optional[Union[str, bytes, UploadSource]]:
         """
         Context property data
         :return:
@@ -255,8 +270,6 @@ class BaseContext(ABC):
         data = attr
         if isinstance(data, (dict, list, tuple)):
             data = urlencode(data)
-        elif isinstance(data, bytes):
-            data = data.decode()
 
         self._data = data
 
@@ -321,29 +334,40 @@ class BaseContext(ABC):
             self.headers.get("Content-Type", "")
             == 'multipart/form-data;boundary="boundary"'
         ):
-            body_list = parse_qsl(body)
-            form_data = "--boundary"
+            body_list = parse_qsl(
+                body.decode() if isinstance(body, bytes) else body,
+                keep_blank_values=True,
+            )
+            form_data = b"--boundary"
             for name, value in body_list:
-                content = f'\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n--boundary'
+                content = (
+                    b'\r\nContent-Disposition: form-data; name="'
+                    + _multipart_quoted(_multipart_text(name, 'field name'))
+                    + b'"\r\n\r\n'
+                    + value.encode('utf-8')
+                    + b'\r\n--boundary'
+                )
                 form_data += content
 
             if self.files:
                 for name, file in self.files.items():
+                    name = _multipart_quoted(_multipart_text(name, 'field name'))
                     for f in file:
-                        mime_type, _ = mimetypes.guess_type(f["file_name"])
-                        file_name = f["file_name"]
-                        content = f'\r\nContent-Disposition: form-data; name="{name}"; filename="{file_name}"'.encode()
+                        file_name = _multipart_text(f["file_name"], 'filename')
+                        mime_type, _ = mimetypes.guess_type(file_name)
+                        content = (
+                            b'\r\nContent-Disposition: form-data; name="'
+                            + name
+                            + b'"; filename="'
+                            + _multipart_quoted(file_name)
+                            + b'"'
+                        )
                         if mime_type:
                             content += f"\r\nContent-Type: {mime_type}".encode()
 
                         content += b"\r\n\r\n"
                         content += f["content"]
                         content += b"\r\n--boundary"
-                        form_data = (
-                            form_data.encode()
-                            if isinstance(form_data, str)
-                            else form_data
-                        )
                         form_data += content
 
             form_data += b"--"
@@ -361,8 +385,8 @@ class BaseContext(ABC):
         """
         if isinstance(self.data, UploadSource):
             raise InvalidData('A streaming upload cannot be assembled as a message')
-        if self.data:
-            data = self.data
+        if self.data or self.files:
+            data = self.data or b""
             if isinstance(data, str):
                 data = data.encode()
             self.body = data
@@ -378,7 +402,7 @@ class BaseContext(ABC):
                 message += self.start_line.encode()
             if self.headers:
                 message += b"\r\n"
-                message += _encode_http1_headers(self.headers)
+                message += _encode_http1_headers(self._destination_headers())
 
             message += b"\r\n\r\n"
 

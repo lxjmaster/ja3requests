@@ -10,6 +10,7 @@ from ja3requests._upload import UploadSource
 from ja3requests.sockets._upload import UploadExchange, upload_headers
 import socket
 from ja3requests.base import BaseSocket
+from ja3requests.contexts.context import HTTPSContext
 from ja3requests.protocol.exceptions import (
     SocketException,
     ProxyError,
@@ -76,7 +77,11 @@ class SocksProxySocket(BaseSocket):
             else:
                 raise ProxyError(f"Unsupported SOCKS version: {self.socks_version}")
         except (TimeoutError, ConnectionRefusedError, OSError) as err:
+            self.close()
             raise ProxyTimeoutError("SOCKS proxy connection failed") from err
+        except BaseException:
+            self.close()
+            raise
 
         return self
 
@@ -221,8 +226,8 @@ class SocksProxySocket(BaseSocket):
         :return:
         """
         self.conn.settimeout(getattr(self.context, 'read_timeout', None))
-        # For HTTPS through SOCKS, TLS handshake happens after SOCKS connect
-        if hasattr(self.context, 'tls_config') and self.context.tls_config:
+        # The transport type requires TLS even when no config was supplied.
+        if isinstance(self.context, HTTPSContext):
             return self._send_https_through_socks()
 
         # For HTTP through SOCKS, send directly
@@ -242,32 +247,11 @@ class SocksProxySocket(BaseSocket):
         from ja3requests.sockets.https import (
             HttpsSocket,
         )  # pylint: disable=import-outside-toplevel
-        from ja3requests.protocol.tls import (
-            TLS,
-        )  # pylint: disable=import-outside-toplevel
 
-        tls = TLS(
-            self.conn,
-            server_host=self.context.destination_address,
-            server_port=self.context.port,
-        )
-        tls_config = self.context.tls_config
-        if tls_config and not getattr(tls_config, 'server_name', None):
-            tls_config.server_name = self.context.destination_address
-
-        tls.set_payload(tls_config=tls_config)
-        if not tls.handshake():
+        sock = HttpsSocket(self.context)
+        sock.conn = self.conn
+        sock.tls = sock._create_tls()
+        if not sock.tls.handshake():
             self.conn.close()
             raise ConnectionError("TLS handshake failed through SOCKS tunnel")
-
-        # Create an HttpsSocket wrapper to handle encrypted send
-        class SocksTLSSocket(HttpsSocket):
-            """HttpsSocket that uses an existing SOCKS tunnel connection."""
-
-            def __init__(self, context, conn, tls_ctx):
-                super().__init__(context)
-                self.conn = conn
-                self.tls = tls_ctx
-
-        sock = SocksTLSSocket(self.context, self.conn, tls)
         return sock.send()

@@ -1,0 +1,3 @@
+# Independent fingerprint capture tooling only; Python >=3.12.
+hpack==4.2.0
+psutil==7.0.0

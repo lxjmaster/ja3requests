@@ -9,11 +9,12 @@ from __future__ import annotations
 from ja3requests._upload import UploadSource, is_upload
 
 import os
+import copy
 from io import IOBase
 from abc import ABC, abstractmethod
 from http.cookiejar import CookieJar
 from urllib.parse import urlparse, urlencode, urlsplit, urlunsplit
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 from ja3requests._typing import (
     Auth,
     Cookies,
@@ -25,12 +26,15 @@ from ja3requests._typing import (
     Params,
     Proxies,
     Timeout,
+    H2HeadersPriority,
 )
+from ja3requests.protocol.h2.frame import normalize_headers_priority
 from ja3requests.const import DEFAULT_HTTP_SCHEME, DEFAULT_HTTP_PORT
-from ja3requests.exceptions import InvalidParams, InvalidData
+from ja3requests.exceptions import InvalidParams, InvalidData, NotAllowedScheme
 from ja3requests.utils import (
     default_headers,
     dict_from_cookie_string,
+    _validated_request_method,
 )
 from ja3requests.cookies import _copy_cookie_jar, _refresh_cookie_header
 
@@ -62,8 +66,82 @@ class BaseRequest(ABC):
         self._auth = None
         self._json = None
         self._proxy = None
+        self._proxy_routes: Proxies = {}
         self._timeout = None
         self._tls_config = None
+        self._h2_headers_priority: Optional[H2HeadersPriority] = None
+        self._redirect_body: Optional[bytes] = None
+        self._redirect_body_inputs: Optional[Tuple[Any, Any, Any]] = None
+
+    def _validate_send(self, scheme: Optional[str] = None) -> None:
+        """Reject final edits that cannot be sent by this prepared transport."""
+        _validated_request_method(self.method)
+        transport = scheme if scheme is not None else getattr(self, 'scheme', None)
+        if self.schema != transport or urlparse(self.url).scheme != transport:
+            raise NotAllowedScheme(
+                'URL scheme must match the prepared %s transport; '
+                'return a new Request(...).request() to change scheme' % transport
+            )
+
+    def _remember_redirect_body(self, context: Any) -> None:
+        self._redirect_body = context.body
+        if self._redirect_body is None:
+            self._redirect_body_inputs = None
+        else:
+            # CONNECT encodes a copied context. Keep inherited framing in sync
+            # without copying its filtered headers over proxy credentials.
+            self.headers['Content-Length'] = len(self._redirect_body)
+
+    def _remove_inherited_length(self, length: int) -> None:
+        """Drop old body lengths in every spelling; retain changed lengths."""
+        for name, value in tuple(self.headers.items()):
+            if name.lower() == 'content-length' and value in (
+                length,
+                str(length),
+                str(length).encode('ascii'),
+            ):
+                del self.headers[name]
+
+    def _invalidate_redirect_body(self) -> None:
+        if self._redirect_body is not None:
+            self._remove_inherited_length(len(self._redirect_body))
+        self._redirect_body = None
+
+    @property
+    def h2_headers_priority(self) -> Optional[H2HeadersPriority]:
+        """Request HEADERS weight/exclusivity, with dependency fixed to 0."""
+        return self._h2_headers_priority
+
+    @h2_headers_priority.setter
+    def h2_headers_priority(self, value: Optional[H2HeadersPriority]) -> None:
+        self._h2_headers_priority = normalize_headers_priority(value)
+
+    def _restore_redirect_body(self, context: Any) -> None:
+        """Replay encoded bytes without re-encoding a prepared multipart body."""
+        if isinstance(self.data, UploadSource):
+            return
+        # Use the context's actual JSON serialization: Python equality misses
+        # changes such as 1 -> True, 1 -> 1.0, or reordered dictionary keys.
+        # Multipart encoding also observes the order of its file fields.
+        files = tuple(self.files.items()) if self.files is not None else None
+        inputs = (self.data, context.json, files)
+        if self._redirect_body_inputs is not None:
+            if self._redirect_body_inputs != inputs:
+                self._redirect_body = None
+            if self._redirect_body is None:
+                for name in tuple(context.headers):
+                    if name.lower() in ('content-length', 'transfer-encoding'):
+                        del context.headers[name]
+        self._redirect_body_inputs = copy.deepcopy(inputs)
+        if self._redirect_body is not None:
+            context._data = context._json = context._files = None
+            context._body = self._redirect_body
+            for name in tuple(context.headers):
+                if name.lower() == 'transfer-encoding' or (
+                    name.lower() == 'content-length' and name != 'Content-Length'
+                ):
+                    del context.headers[name]
+            context.headers['Content-Length'] = len(self._redirect_body)
 
     @property
     def schema(self) -> Optional[str]:
@@ -199,15 +277,12 @@ class BaseRequest(ABC):
         :param attr:
         :return:
         """
+        self._invalidate_redirect_body()
         self._data = attr
         if isinstance(attr, UploadSource) or is_upload(attr):
             return
         if self._data:
-            if isinstance(self._data, str):
-                self._data = self._data
-            elif isinstance(self._data, bytes):
-                self._data = self._data.decode()
-            else:
+            if not isinstance(self._data, (str, bytes)):
                 try:
                     self._data = urlencode(self._data)
                 except TypeError as err:
@@ -237,6 +312,7 @@ class BaseRequest(ABC):
         :param attr:
         :return:
         """
+        self._invalidate_redirect_body()
         new_files = None
         files = attr
         if files:
@@ -404,6 +480,7 @@ class BaseRequest(ABC):
         :param attr:
         :return:
         """
+        self._invalidate_redirect_body()
         self._json = attr
 
     @property
@@ -421,13 +498,10 @@ class BaseRequest(ABC):
         :param attr:
         :return:
         """
-        self._proxy = attr
-        if self._proxy:
-            proxy = self._proxy.get(self.schema, None)
-        else:
-            proxy = None
-
-        self._proxy = proxy
+        # Retain both destination schemes for redirects; never depend on the
+        # Session's last high-level Request or the caller's mutable mapping.
+        self._proxy_routes = dict(attr or {})
+        self._proxy = self._proxy_routes.get(self.schema)
 
     @property
     def timeout(self) -> Timeout:

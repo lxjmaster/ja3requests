@@ -155,6 +155,7 @@ def test_failed_response_hook_releases_body_without_retry(status, error_type):
     raw.handle()
     request = HttpRequest()
     request.method = 'GET'
+    request.url = 'http://example.test/'
 
     def send(**_kwargs):
         sent.append(True)

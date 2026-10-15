@@ -10,6 +10,7 @@ from ja3requests.protocol.h2.frame import (
 from ja3requests.protocol.h2.stream_state import H2StreamError, H2StreamState, _Stream
 from ja3requests.protocol.h2.connection import H2GoAwayError
 from ja3requests.protocol.h2.hpack import HeaderLimitError
+from ja3requests.protocol.h2.frame import normalize_headers_priority
 from ja3requests._upload import UploadSource
 from ja3requests.sockets._upload import read_upload_piece
 
@@ -68,6 +69,8 @@ class H2MultiplexConnection(H2StreamState):
         close_transport=None,
         pseudo_header_order=None,
         priority_frames=None,
+        huffman=False,
+        indexing_exclusions=(),
     ):
         super().__init__(
             send_func,
@@ -75,6 +78,8 @@ class H2MultiplexConnection(H2StreamState):
             settings=settings,
             pseudo_header_order=pseudo_header_order,
             priority_frames=priority_frames,
+            huffman=huffman,
+            indexing_exclusions=indexing_exclusions,
         )
         self._condition = threading.Condition(threading.RLock())
         self._reader = None
@@ -164,7 +169,9 @@ class H2MultiplexConnection(H2StreamState):
         has_body=False,
         scheme="https",
         timeout=None,
+        headers_priority=None,
     ):
+        headers_priority = normalize_headers_priority(headers_priority)
         h2_headers = self._prepare_request_headers(
             method, authority, path, headers, scheme
         )
@@ -191,7 +198,10 @@ class H2MultiplexConnection(H2StreamState):
             try:
                 block = self._encoder.encode_headers(h2_headers)
                 for frame in self._header_frames(
-                    stream_id, block, end_stream=not has_body
+                    stream_id,
+                    block,
+                    end_stream=not has_body,
+                    headers_priority=headers_priority,
                 ):
                     self._send(frame.serialize(), timeout=timeout)
                 stream.send_done = not has_body
@@ -210,11 +220,19 @@ class H2MultiplexConnection(H2StreamState):
         body=None,
         scheme='https',
         timeout=None,
+        headers_priority=None,
     ):
         if body is not None and not isinstance(body, bytes):
             raise TypeError('HTTP/2 request body must be bytes')
         stream_id, stream = self._begin_request(
-            method, authority, path, headers, bool(body), scheme, timeout
+            method,
+            authority,
+            path,
+            headers,
+            bool(body),
+            scheme,
+            timeout,
+            headers_priority,
         )
 
         try:
@@ -268,13 +286,15 @@ class H2MultiplexConnection(H2StreamState):
         scheme='https',
         timeout=None,
         register=None,
+        headers_priority=None,
     ):
         """Reserve headers, then let one producer run beside response reading."""
         if not isinstance(body, UploadSource):
             raise TypeError('HTTP/2 streaming body requires an UploadSource')
+        headers_priority = normalize_headers_priority(headers_priority)
         body.prepare()
         stream_id, _ = self._begin_request(
-            method, authority, path, headers, True, scheme, timeout
+            method, authority, path, headers, True, scheme, timeout, headers_priority
         )
         upload = _UploadWorker(self, stream_id, body, timeout)
         with self._condition:

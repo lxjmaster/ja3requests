@@ -42,8 +42,9 @@ def read_frame(conn):
 @pytest.mark.parametrize("connection_type", [H2Connection, H2MultiplexConnection])
 @pytest.mark.parametrize("frame_size", [16384, 32768])
 @pytest.mark.parametrize("body", [None, b"upload"])
+@pytest.mark.parametrize('priority', [None, (183, True)])
 def test_large_request_headers_interoperate_with_frame_limited_peer(
-    connection_type, frame_size, body
+    connection_type, frame_size, body, priority
 ):
     observed = []
     decoded = []
@@ -79,7 +80,15 @@ def test_large_request_headers_interoperate_with_frame_limited_peer(
                 assert (kind, current_stream) == (9, stream)
                 assert not flags & 1
             observed.append(frames)
-            decoded.append(decoder.decode_headers(b"".join(part[3] for part in frames)))
+            prefix = 5 if priority is not None else 0
+            if priority is not None:
+                assert frames[0][1] & 32
+                assert frames[0][3][:5] == b'\x80\x00\x00\x00\xb6'
+            decoded.append(
+                decoder.decode_headers(
+                    frames[0][3][prefix:] + b"".join(part[3] for part in frames[1:])
+                )
+            )
             received_body = b""
             while not ended:
                 kind, flags, current_stream, fragment = read_frame(sock)
@@ -110,10 +119,15 @@ def test_large_request_headers_interoperate_with_frame_limited_peer(
                 "/",
                 headers=[("x-large", value), ("x-token", "reusable")],
                 body=body,
+                headers_priority=priority,
             )
             assert conn.receive_response(first) == ([(':status', '200')], b"")
             second = conn.send_request(
-                "GET", "example.test", "/", headers=[("x-token", "reusable")]
+                "GET",
+                "example.test",
+                "/",
+                headers=[("x-token", "reusable")],
+                headers_priority=priority,
             )
             assert conn.receive_response(second) == ([(':status', '200')], b"")
         finally:
@@ -135,7 +149,7 @@ def test_large_request_headers_interoperate_with_frame_limited_peer(
         len(observed[0]) - 1
     )
     assert len(observed[0]) > 1
-    assert observed[0][0][1] == (0 if body else 1)
+    assert observed[0][0][1] == (0 if body else 1) | (32 if priority is not None else 0)
     assert all(frame[1] == 0 for frame in observed[0][1:-1])
     assert observed[0][-1][1] == 4
     assert decoded[0] == [
@@ -162,7 +176,8 @@ def test_small_request_headers_keep_original_wire_bytes(connection_type):
     assert sent == [h2_frame(1, 5, 1, block)]
 
 
-def test_multiplex_header_block_excludes_other_writes_and_cancel():
+@pytest.mark.parametrize('priority', [None, (183, True)])
+def test_multiplex_header_block_excludes_other_writes_and_cancel(priority):
     started = threading.Event()
     resume = threading.Event()
     with connected(peer_settings={SETTINGS_INITIAL_WINDOW_SIZE: 0}) as (conn, wire):
@@ -196,6 +211,7 @@ def test_multiplex_header_block_excludes_other_writes_and_cancel():
                 "/",
                 headers=[("x-large", "x" * 60000)],
                 timeout=2,
+                headers_priority=priority,
             )
             try:
                 assert started.wait(2)
@@ -224,6 +240,8 @@ def test_multiplex_header_block_excludes_other_writes_and_cancel():
                 if frame.flags & FLAG_END_HEADERS
             )
             assert last > first
+            if priority is not None:
+                assert frames[first].payload[:5] == b'\x80\x00\x00\x00\xb6'
             assert all(
                 frame.type == FRAME_CONTINUATION and frame.stream_id == 3
                 for frame in frames[first + 1 : last + 1]

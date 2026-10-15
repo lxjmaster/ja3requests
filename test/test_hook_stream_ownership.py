@@ -48,6 +48,7 @@ def raw_responses():
 def request_for(raw, sent):
     request = HttpRequest()
     request.method = 'GET'
+    request.url = 'http://example.test/'
 
     def send(**_kwargs):
         sent.append(True)

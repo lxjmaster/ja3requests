@@ -34,6 +34,7 @@ from ja3requests.protocol.h2.frame import (
     validate_initial_window,
     normalize_pseudo_header_order,
     normalize_priority_frames,
+    normalize_headers_priority,
     data_payload,
     header_block_fragment,
     parse_settings_pairs,
@@ -81,6 +82,8 @@ class H2Connection:
         settings=None,
         pseudo_header_order=None,
         priority_frames=None,
+        huffman=False,
+        indexing_exclusions=(),
     ):
         """
         :param send_func: Callable to send bytes (e.g., tls.encrypt + socket.send)
@@ -89,7 +92,9 @@ class H2Connection:
         """
         self._send = send_func
         self._recv = recv_func
-        self._encoder = HPACKEncoder()
+        self._encoder = HPACKEncoder(
+            huffman=huffman, indexing_exclusions=indexing_exclusions
+        )
         self._next_stream_id = 1  # Client streams are odd-numbered
         self._wire_settings = normalize_settings(settings)
         self._pseudo_header_order = normalize_pseudo_header_order(pseudo_header_order)
@@ -209,7 +214,14 @@ class H2Connection:
         return result
 
     def send_request(
-        self, method, authority, path, headers=None, body=None, scheme="https"
+        self,
+        method,
+        authority,
+        path,
+        headers=None,
+        body=None,
+        scheme="https",
+        headers_priority=None,
     ):
         """
         Send an HTTP/2 request.
@@ -222,6 +234,7 @@ class H2Connection:
         :param scheme: URL scheme
         :return: Stream ID used for this request
         """
+        headers_priority = normalize_headers_priority(headers_priority)
         if body is not None and not isinstance(body, bytes):
             raise TypeError("HTTP/2 request body must be bytes")
         h2_headers = self._prepare_request_headers(
@@ -244,7 +257,10 @@ class H2Connection:
         # Send the complete header block before any DATA frames.
         end_stream = body is None or len(body) == 0
         for frame in self._header_frames(
-            stream_id, header_block, end_stream=end_stream
+            stream_id,
+            header_block,
+            end_stream=end_stream,
+            headers_priority=headers_priority,
         ):
             self._send(frame.serialize())
         debug(f"H2: Sent HEADERS on stream {stream_id}")
@@ -261,18 +277,22 @@ class H2Connection:
 
         return stream_id
 
-    def _header_frames(self, stream_id, block, end_stream):
+    def _header_frames(self, stream_id, block, end_stream, headers_priority=None):
         """Split an encoded block; callers serialize the entire frame sequence."""
         frame_size = self._peer_settings[SETTINGS_MAX_FRAME_SIZE]
-        for offset in range(0, max(1, len(block)), frame_size):
-            fragment = block[offset : offset + frame_size]
-            last = offset + frame_size >= len(block)
-            if offset == 0:
+        offset, first = 0, True
+        while first or offset < len(block):
+            capacity = frame_size - (5 if first and headers_priority is not None else 0)
+            fragment = block[offset : offset + capacity]
+            offset += len(fragment)
+            last = offset == len(block)
+            if first:
                 yield build_headers_frame(
                     stream_id,
                     fragment,
                     end_stream=end_stream,
                     end_headers=last,
+                    priority=headers_priority,
                 )
             else:
                 yield H2Frame(
@@ -281,6 +301,7 @@ class H2Connection:
                     stream_id,
                     fragment,
                 )
+            first = False
 
     def _await_peer_settings(self):
         """Apply the server's initial stream window before sending request DATA."""

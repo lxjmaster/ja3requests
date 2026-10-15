@@ -3,6 +3,59 @@
 import struct
 
 
+def reassemble(records):
+    """Reassemble plaintext ClientHellos across complete TLS records.
+
+    Original records remain the caller's evidence. Each result uses a canonical
+    single-record envelope only to reuse ``decode``; it is not a wire claim.
+    Encrypted records and compatibility CCS are not handshake message bytes.
+    """
+    pending = b''
+    result = []
+    offset = 0
+    versions = []
+    while offset < len(records):
+        if len(records) - offset < 5:
+            raise ValueError('Truncated TLS record header')
+        kind = records[offset]
+        version = records[offset + 1 : offset + 3]
+        size = int.from_bytes(records[offset + 3 : offset + 5], 'big')
+        end = offset + 5 + size
+        if end > len(records):
+            raise ValueError('Truncated TLS record payload')
+        if kind == 22:
+            versions.append(version.hex())
+            pending += records[offset + 5 : end]
+            while len(pending) >= 4:
+                length = 4 + int.from_bytes(pending[1:4], 'big')
+                if len(pending) < length:
+                    break
+                message, pending = pending[:length], pending[length:]
+                if message[0] == 1:
+                    if len(message) > 65535:
+                        raise ValueError('ClientHello exceeds decoder envelope')
+                    canonical = (
+                        b'\x16' + version + len(message).to_bytes(2, 'big') + message
+                    )
+                    decode(canonical)
+                    result.append(
+                        dict(
+                            handshake_hex=message.hex(),
+                            record_hex=canonical.hex(),
+                            record_versions=list(versions),
+                        )
+                    )
+                versions = []
+        elif pending:
+            raise ValueError('Interrupted plaintext handshake message')
+        offset = end
+    if pending:
+        raise ValueError('Truncated plaintext handshake message')
+    if not result:
+        raise ValueError('No complete ClientHello')
+    return result
+
+
 def decode(record):
     assert record[0] == 22
     assert len(record) == 5 + int.from_bytes(record[3:5], 'big')

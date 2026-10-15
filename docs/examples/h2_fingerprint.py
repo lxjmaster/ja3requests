@@ -137,6 +137,8 @@ def main():
                             read_exact(conn, 24) == b'PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n'
                         )
                         conn.sendall(frame(4, 0, 0))
+                        decoder = HPACKDecoder()
+                        received = 0
                         while True:
                             header = read_exact(conn, 9)
                             size = int.from_bytes(header[:3], 'big')
@@ -148,11 +150,13 @@ def main():
                                 conn.sendall(frame(4, 1, 0))
                             if kind == 1:
                                 assert flags & 5 == 5
+                                assert flags & 32
+                                assert payload[:5] == struct.pack(
+                                    '!IB', 0x80000000, 255 if stream == 1 else 182
+                                )
+                                payload = payload[5:]
                                 names = [
-                                    name
-                                    for name, _ in HPACKDecoder().decode_headers(
-                                        payload
-                                    )
+                                    name for name, _ in decoder.decode_headers(payload)
                                 ]
                                 assert names[:4] == [
                                     ':method',
@@ -160,9 +164,20 @@ def main():
                                     ':authority',
                                     ':scheme',
                                 ]
-                                assert stream == 1
+                                assert stream in (1, 3)
+                                if stream == 1:
+                                    # GET / are indexed; authority is a Huffman literal.
+                                    assert payload[:3] == b'\x82\x84\x41'
+                                    assert payload[3] & 0x80
+                                else:
+                                    assert payload[0:2] == b'\x82\x04'
+                                assert not any(
+                                    name == ':path' for name, _ in decoder.dynamic_table
+                                )
                                 conn.sendall(frame(1, 5, stream, b'\x88'))
-                                return
+                                received += 1
+                                if received == 2:
+                                    return
                 except Exception as error:
                     errors.append(error)
 
@@ -189,6 +204,7 @@ def main():
                     namespace,
                 )
                 assert namespace['response'].status_code == 200
+                assert namespace['image'].status_code == 200
             finally:
                 if previous_trust is None:
                     os.environ.pop('SSL_CERT_FILE', None)
@@ -212,7 +228,7 @@ def main():
         (2, 5, struct.pack('!IB', 0x80000003, 100)),
     ]
     print(
-        'PASS: guide snippet completed verified TLS 1.3, exact SETTINGS/window/PRIORITY/pseudo-header order'
+        'PASS: verified TLS 1.3, SETTINGS/window/PRIORITY/pseudo order, Huffman, per-request HEADERS priority and path insertion exclusion'
     )
 
 

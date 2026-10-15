@@ -57,6 +57,8 @@ class H2StreamState(H2Connection):
         settings=None,
         pseudo_header_order=None,
         priority_frames=None,
+        huffman=False,
+        indexing_exclusions=(),
     ):
         super().__init__(
             send_func,
@@ -64,6 +66,8 @@ class H2StreamState(H2Connection):
             settings=settings,
             pseudo_header_order=pseudo_header_order,
             priority_frames=priority_frames,
+            huffman=huffman,
+            indexing_exclusions=indexing_exclusions,
         )
         self._streams = {}
         self._failed = None

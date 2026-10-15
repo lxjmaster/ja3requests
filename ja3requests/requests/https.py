@@ -7,6 +7,7 @@ This module of HTTPS Request.
 
 from __future__ import annotations
 
+import copy
 from typing import Any, Optional, Union
 from ja3requests.const import DEFAULT_HTTPS_SCHEME, DEFAULT_HTTPS_PORT
 from ja3requests.base import BaseRequest
@@ -16,7 +17,7 @@ from ja3requests.sockets.proxy import ProxySocket
 from ja3requests.sockets.socks import SocksProxySocket
 from ja3requests.response import HTTPSResponse
 from ja3requests.pool import ConnectionPool
-from ja3requests.protocol.tls.config import _validate_http_alpn
+from ja3requests.protocol.tls.config import TlsConfig, _validate_http_alpn
 
 
 class HttpsRequest(BaseRequest):
@@ -55,12 +56,17 @@ class HttpsRequest(BaseRequest):
         return sock.new_conn()
 
     def send(self, **kwargs: Any) -> HTTPSResponse:
+        self._validate_send(DEFAULT_HTTPS_SCHEME)
         pool = kwargs.pop('pool', None)
 
+        tls_config = self.tls_config
         if kwargs.get("h1", False) is True:
-            context = HTTPSContext(protocol="HTTP/1.1")
-        else:
-            context = HTTPSContext()
+            tls_config = tls_config if tls_config is not None else TlsConfig()
+            cache = tls_config.session_cache
+            tls_config = copy.deepcopy(tls_config, {id(cache): cache})
+            tls_config.alpn_protocols = ['http/1.1']
+        context = HTTPSContext()
+        context.h2_headers_priority = self.h2_headers_priority
 
         context._upload_register = kwargs.pop('_upload_register', None)
 
@@ -75,11 +81,13 @@ class HttpsRequest(BaseRequest):
             json=self.json,
             proxy=self.proxy,
             cookies=self.cookies,
-            tls_config=self.tls_config,
+            tls_config=tls_config,
         )
+        self._restore_redirect_body(context)
         sock = self.create_connection(context, pool=pool)
         try:
             conn = sock.send()
+            self._remember_redirect_body(sock.context)
         except Exception:
             # HttpsSocket releases a failed H2 stream itself. Proxy tunnels
             # have no shared pool and still need closing on handshake failure.

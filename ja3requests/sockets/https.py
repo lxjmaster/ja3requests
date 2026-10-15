@@ -28,6 +28,10 @@ from ja3requests.exceptions import (
 )
 from ja3requests.protocol.tls import TLS
 from ja3requests.protocol.tls.config import _validate_http_alpn
+from ja3requests.protocol.h2.hpack import (
+    validate_huffman,
+    normalize_indexing_exclusions,
+)
 from ja3requests.protocol.tls.crypto import AESCipher, _decrypt_tls12_cbc_record
 from ja3requests.protocol.tls.debug import debug
 from ja3requests.protocol.tls.extensions import Extension
@@ -152,6 +156,7 @@ class HttpsSocket(BaseSocket):
             return None
         _validate_http_alpn(config.alpn_protocols)
         validate_initial_window(config.h2_window_update)
+        validate_huffman(config.h2_huffman)
         return (
             config.tls_version,
             tuple(
@@ -192,6 +197,8 @@ class HttpsSocket(BaseSocket):
             normalize_pseudo_header_order(config.h2_pseudo_header_order),
             normalize_priority_frames(config.h2_priority_frames),
             config.h2_window_update,
+            config.h2_huffman,
+            normalize_indexing_exclusions(config.h2_indexing_exclusions),
         )
 
     def new_conn(self):
@@ -247,19 +254,8 @@ class HttpsSocket(BaseSocket):
         debug(f"Connecting to {host}:{port}")
         try:
             self.conn = self._new_conn(host, port)
-            handshake_timeout = getattr(self.context, 'connect_timeout', None)
-            session_cache = (
-                getattr(tls_config, 'session_cache', None) if tls_config else None
-            )
-            tls = TLS(
-                self.conn,
-                handshake_timeout=handshake_timeout,
-                session_cache=session_cache,
-                server_host=host,
-                server_port=port,
-            )
+            tls = self._create_tls()
             tls._pool_policy_key = policy_key
-            tls.set_payload(tls_config=tls_config)
             handshake_success = tls.handshake()
             if handshake_success:
                 self._validate_negotiated_protocol(tls._negotiated_protocol)
@@ -279,6 +275,20 @@ class HttpsSocket(BaseSocket):
             self._release_h2_reservation()
         debug("TLS handshake completed, ready for encrypted HTTP communication")
         return self
+
+    def _create_tls(self):
+        """Configure project TLS identically on direct and tunneled sockets."""
+        config = getattr(self.context, 'tls_config', None)
+        tls = TLS(
+            self.conn,
+            handshake_timeout=getattr(self.context, 'connect_timeout', None),
+            session_cache=getattr(config, 'session_cache', None),
+            server_host=self.context.destination_address,
+            server_port=self.context.port,
+        )
+        # TLS derives SNI from server_host when no override was supplied.
+        tls.set_payload(tls_config=config)
+        return tls
 
     def _release_h2_reservation(self):
         if self._pool and self._h2_reservation is not None:
@@ -496,6 +506,10 @@ class HttpsSocket(BaseSocket):
                     priority_frames=(
                         tls_config.h2_priority_frames if tls_config else None
                     ),
+                    huffman=tls_config.h2_huffman if tls_config else False,
+                    indexing_exclusions=(
+                        tls_config.h2_indexing_exclusions if tls_config else ()
+                    ),
                     send_with_timeout=h2_send,
                     close_transport=self._h2_write_guard.close,
                 )
@@ -534,8 +548,7 @@ class HttpsSocket(BaseSocket):
                 body = body.encode('utf-8')
 
             # Validate field syntax without changing HPACK's UTF-8 byte input.
-            self.context._validated_header_items()
-            req_headers = list((self.context.headers or {}).items())
+            req_headers = list(self.context._destination_headers().items())
             host = next(
                 (value for name, value in req_headers if name.lower() == 'host'),
                 getattr(self.context, '_host_authority', None) or host,
@@ -551,6 +564,7 @@ class HttpsSocket(BaseSocket):
                     body=body,
                     timeout=read_timeout,
                     register=getattr(self.context, '_upload_register', None),
+                    headers_priority=getattr(self.context, 'h2_headers_priority', None),
                 )
                 upload_owner = h2._uploads.get(stream_id)
             else:
@@ -562,6 +576,7 @@ class HttpsSocket(BaseSocket):
                     headers=req_headers,
                     body=body,
                     timeout=read_timeout,
+                    headers_priority=getattr(self.context, 'h2_headers_priority', None),
                 )
             resp_headers = h2.receive_headers(stream_id, timeout=read_timeout)
             released = False

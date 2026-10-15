@@ -109,7 +109,7 @@ archive/sdist is not a substitute. See [the docs guide](../docs/contributing_doc
 ## Tool regression tests
 
 ```sh
-python -m pip install pytest packaging
+python -m pip install pytest packaging -r requirements.txt -r requirements-capture.txt
 python -m pytest tools/tests -q
 ```
 
@@ -117,3 +117,105 @@ The existing Python 3.12 wheel CI job runs these focused fixture-based tests in
 addition to its original wheel smoke. They remain outside the library's `test/`
 runtime matrix; they do not build/install the entire project for every negative
 case. Full artifact verification is run explicitly for the selected candidate.
+
+## Real TLS and HTTP/2 fingerprint capture
+
+For H2 control acceptance without Chrome, use the exact wheel from the local
+verifier and its report. The independent `hpack` decoder checks HEADERS weights
+256/183, dependency 0/exclusivity, `/pixel.png` insertion, the retained 20/21
+table-entry difference and a third reused stream. Raw/Huffman and empty/excluded
+policies run for both installed synchronous and native async clients:
+
+```sh
+python -m tools.verify_h2_controls \
+  --wheel dist/release-2.4.0/final-candidate/artifacts/ja3requests-2.4.0-py3-none-any.whl \
+  --wheel-sha256 <verified-wheel-sha256> \
+  --artifact-report dist/release-2.4.0/final-candidate/verification.json \
+  --client-profile chrome:154 \
+  --output dist/release-2.4.0/h2-controls
+```
+
+The output must be new. This reuses the collector's TLS peer, artifact identity,
+installed-origin checks and process cleanup. Reports, raw bytes and tool source
+hashes are retained; temporary CA keys and installations are removed. The peer
+exercises full TLS1.3/H2, not resumption or complete browser identity. Library
+runtime dependencies are unchanged; tools use `requirements-capture.txt`.
+
+`capture_fingerprint.py` is Python >=3.12 development tooling for the named
+Chrome 155/macOS target. It owns a loopback TLS 1.3 server, while the installed
+ja3requests probes use the package's own TLS engine. It neither builds packages
+nor publishes them. Install the tool dependencies as above; independent `hpack`
+and process observation `psutil` are not library runtime requirements.
+
+Use an explicit released wheel, checked before installation. A fresh checkout
+can acquire the baseline without any local release reports:
+
+```sh
+python -m pip download --index-url https://pypi.org/simple \
+  --only-binary=:all: --no-deps ja3requests==2.3.0 \
+  --dest dist/fingerprint-inputs/baseline-2.3.0
+python -m tools.capture_fingerprint \
+  --chrome "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+  --wheel dist/fingerprint-inputs/baseline-2.3.0/ja3requests-2.3.0-py3-none-any.whl \
+  --wheel-sha256 523fa1d13ebbdd46ba139e6609f3bc955a9ed9a6fb590c13aed7061fc4fc29d4 \
+  --client-profile chrome:154 \
+  --output dist/fingerprint-2.3.0/capture-local-01
+```
+
+The output path must be new. The initial feasibility trial can add
+`--browser-only --browser-samples 1`; it cannot replace the default three-browser,
+one-sync, one-async acceptance series. The executable's exact version is checked
+before every browser case. Chrome 154 is the explicit **client** starting subset;
+this does not assert that the installed browser is 154 or that TLS/H2 fully match.
+The collector derives SETTINGS/window/pseudo order and equivalent regular header
+inputs from the first browser case and records every override. Requests load HTML
+and its image on one connection, with both server body and browser DOM/probe checks.
+
+The server uses a short-lived private CA/leaf with localhost/IP SANs, no TLS
+tickets, empty server SETTINGS and small fixed bodies. Library certificate
+verification stays enabled using process-local `SSL_CERT_FILE`; the session
+cache is disabled **after** Session/AsyncSession construction. Chrome uses a
+private profile and a generated leaf SPKI exception, recorded as a distinct trust
+mode. Machine trust settings are untouched.
+
+Each case has an absolute 30-second request deadline (`--deadline` may select
+up to 60 seconds). Dependency preparation has a separate bounded timeout.
+Capture directions are limited to 1 MiB and decoded headers to 64 KiB. Failed
+attempts retain partial evidence. Owned process groups and observed descendants
+are reaped, including detached Chrome processes associated with the private
+profile; listeners, peer threads, profiles, keys and the installed-probe venv are
+cleaned. Extra queued preconnections are retained separately and excluded from
+calibration. A process cleanup failure makes the case fail.
+
+The manifest records wheel/report/module/tool hashes and dependency versions;
+`tool-source/` retains the exact parser/collector/test inputs. Case JSON retains
+both directions of TLS and plaintext H2 bytes, hashes, independently decoded
+ClientHellos, ordered headers, HPACK representations/table state, completion and
+cleanup. Comparison uses all browser samples, preserves GREASE slots and lengths,
+and distinguishes variability from missing behavior. Three samples establish
+observed variation, not a randomized-order distribution.
+
+Optional `--artifact-report PATH` consumes an existing passing verifier report;
+its version, wheel and module hashes must agree. For a selected F2/F3 extension,
+first run the existing verifier against the final source, then substitute that
+report's candidate wheel/hash and supply its report to this same command. Never
+reuse the baseline wheel as acceptance for new runtime behavior. The collector
+has no source-import fallback. Unknown profiles fail before live capture.
+
+For the selected benefit-based outbound Huffman increment, add `--h2-huffman`
+to the final candidate command. It sets the verified public `h2_huffman=True`
+option for both probes, including preflight; an older wheel without that public
+option is rejected. This mode requires three browser samples and both clients.
+The manifest's `huffman_acceptance` must pass: exact first-request HPACK block
+agreement under equivalent inputs, and independent Huffman/raw decisions and
+literal lengths across both requests. Dynamic indexing and HEADERS priority
+remain separate differences. The same CLI without this flag still captures the
+released raw baseline. Candidate acceptance requires the passing verifier report
+and exact candidate wheel/hash, as described above.
+
+The reviewed [Chrome 155 fixture](../test/fixtures/chrome155_macos_tls_h2.json)
+retains the accepted browser/sync/async bytes and compact identities. Runtime
+tests check hashes and project decoding without importing capture dependencies;
+tool tests independently re-decode raw bytes and check the declared comparison.
+See the [received-byte report](../issues/tls_h2_capture_results.md) for actual
+matches, remaining differences and conditional follow-up decisions.

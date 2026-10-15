@@ -23,6 +23,7 @@ from http.cookiejar import CookieJar
 
 
 Timeout = Optional[Union[float, Tuple[Optional[float], Optional[float]]]]
+H2HeadersPriority = Tuple[int, bool]
 Params = Union[
     str,
     bytes,
@@ -88,6 +89,7 @@ if TYPE_CHECKING:
         allow_redirects: bool
         hooks: Optional[AsyncHooks]
         h1: bool
+        h2_headers_priority: Optional[H2HeadersPriority]
 
     class Hooks(TypedDict, total=False):
         before_request: List[RequestHook]
@@ -98,6 +100,7 @@ if TYPE_CHECKING:
         allow_redirects: bool
         hooks: Optional[Hooks]
         h1: bool
+        h2_headers_priority: Optional[H2HeadersPriority]
 
     class CommonOptions(SendOptions, total=False):
         cookies: Optional[Cookies]

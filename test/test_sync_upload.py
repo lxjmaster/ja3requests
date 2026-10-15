@@ -376,7 +376,7 @@ def test_module_helper_closes_failed_session(monkeypatch):
 
 
 @pytest.mark.parametrize('status', [307, 308])
-def test_sync_body_preserving_status_keeps_existing_bodyless_get_policy(status):
+def test_sync_body_preserving_redirect_rejects_consumed_iterator(status):
     seen = []
 
     def serve(conn):
@@ -392,20 +392,18 @@ def test_sync_body_preserving_status_keeps_existing_bodyless_get_policy(status):
             seen.append(read_headers(conn))
             reply(conn)
 
-    with LocalServer(serve, connections=2) as peer, Session(
+    with LocalServer(serve, connections=1) as peer, Session(
         use_pooling=False
     ) as session:
-        response = session.post(
-            'http://127.0.0.1:%d/upload' % peer.port,
-            data=iter([b'body']),
-            timeout=2,
-        )
-        assert response.content == b'ok'
+        with pytest.raises(StreamConsumedError):
+            session.post(
+                'http://127.0.0.1:%d/upload' % peer.port,
+                data=iter([b'body']),
+                timeout=2,
+            )
         assert not session._uploads
     assert seen[0].startswith(b'POST /upload ')
-    assert seen[1].startswith(b'GET /next ')
-    assert b'Content-Length:' not in seen[1]
-    assert b'Transfer-Encoding:' not in seen[1]
+    assert len(seen) == 1
 
 
 def test_before_request_hook_selects_source_before_preparation():

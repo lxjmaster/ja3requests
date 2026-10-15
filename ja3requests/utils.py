@@ -10,7 +10,7 @@ from base64 import b64encode
 from typing import Union, AnyStr, List, Optional, Tuple
 from ._typing import Headers
 from .const import DEFAULT_MAX_RETRY_LIMIT
-from .exceptions import MaxRetriedException
+from .exceptions import MaxRetriedException, NotAllowedRequestMethod
 from .cookies import cookiejar_from_dict
 from .__version__ import __version__
 
@@ -19,6 +19,14 @@ ACCEPT_ENCODING = "gzip,deflate"
 _HEADER_TOKEN = frozenset(
     "!#$%&'*+-.^_`|~0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 )
+
+
+def _validated_request_method(method: str) -> str:
+    """Use the same supported methods at preparation and final sync sending."""
+    method = method.upper()
+    if method not in ('GET', 'OPTIONS', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'):
+        raise NotAllowedRequestMethod(method)
+    return method
 
 
 def _validated_header_items(headers: Optional[Headers]) -> List[Tuple[str, str]]:
