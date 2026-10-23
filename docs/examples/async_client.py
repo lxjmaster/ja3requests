@@ -78,6 +78,7 @@ class DemoPeer:
                 elif path == b'/cookie':
                     await self.reply(writer, headers.get(b'cookie', b''))
                 elif path == b'/prepared?page=1':
+                    assert headers[b'x-default'] == b'prepared'
                     payload = b'POST\n' + self.url.encode() + path + b'\n' + body
                     expected = (
                         hmac.new(b'local-demo-key', payload, hashlib.sha256)
@@ -182,12 +183,16 @@ async def run_demo():
                             base_url + '/cookie', timeout=3
                         )
                         assert await restored_cookie.text() == 'demo=kept'
+                session.request_defaults = {
+                    'headers': {'X-Default': 'prepared'},
+                    'params': {'page': '1'},
+                }
                 prepared = await session.prepare_request(
                     'POST',
                     base_url + '/prepared',
-                    params={'page': 1},
                     json={'message': 'prepared'},
                 )
+                session.request_defaults = None
                 payload = (
                     prepared.method.encode()
                     + b'\n'

@@ -33,6 +33,12 @@ from ja3requests.protocol.tls.session_cache import TLSSessionCache
 from ja3requests.retry import HTTPRetry
 from ja3requests._cookie_file import load_cookie_file, save_cookie_file
 from ja3requests._upload import UploadSource, is_upload
+from ja3requests._request_defaults import (
+    merge_default_headers,
+    merge_default_params,
+    normalize_request_defaults,
+    request_defaults_snapshot,
+)
 from ja3requests.sockets._upload import upload_length
 from ja3requests.utils import _validated_header_items
 from ja3requests.exceptions import InvalidData, StreamConsumedError
@@ -55,6 +61,7 @@ if TYPE_CHECKING:
         GetOptions,
         Hooks,
         PostOptions,
+        RequestDefaults,
         RequestOptions,
         SendOptions,
     )
@@ -84,6 +91,7 @@ class Session(BaseSession):
     ) -> None:
         super().__init__()
         self._request_local = threading.local()
+        self._request_defaults: Optional[Dict[str, Any]] = None
         self._cookie_lock = threading.RLock()
         self._cookie_view = None
         self._uploads = set()
@@ -133,6 +141,16 @@ class Session(BaseSession):
     def pool(self, pool: Optional[ConnectionPool]) -> None:
         """Set connection pool"""
         self._pool = pool
+
+    @property
+    def request_defaults(self) -> Optional[RequestDefaults]:
+        """Return a detached opt-in snapshot of default headers and params."""
+        return request_defaults_snapshot(self._request_defaults)
+
+    @request_defaults.setter
+    def request_defaults(self, value: Optional[RequestDefaults]) -> None:
+        """Atomically replace opt-in default headers and query parameters."""
+        self._request_defaults = normalize_request_defaults(value)
 
     @property
     def cookies(self) -> Ja3RequestsCookieJar:
@@ -241,6 +259,16 @@ class Session(BaseSession):
                        If omitted, use the session TLS configuration.
         :return:
         """
+
+        # Capture and merge the opt-in defaults before creating the prepared
+        # request. The private value is replaced atomically by the setter.
+        defaults = self._request_defaults
+        headers = merge_default_headers(
+            defaults.get('headers') if defaults else None, headers
+        )
+        params = merge_default_params(
+            defaults.get('params') if defaults else None, params
+        )
 
         # Apply verify to TLS config (deep copy to avoid mutating session config)
         tls_config = tls_config or self._tls_config

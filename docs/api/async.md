@@ -15,6 +15,7 @@ helpers are awaited; see [Cookie files](../cookie_persistence.md#native-async-fi
     options:
       members:
         - request
+        - request_defaults
         - prepare_request
         - send
         - get

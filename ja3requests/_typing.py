@@ -16,6 +16,7 @@ from typing import (
     List,
     Mapping,
     Optional,
+    Sequence,
     Tuple,
     Union,
 )
@@ -37,6 +38,7 @@ AsyncData = Union[Data, AsyncIterator[bytes]]
 JsonBody = Union[Dict[str, Any], str, bytes]
 HeaderValue = Union[str, bytes, int, float]
 Headers = Mapping[str, HeaderValue]
+DefaultParams = Union[Mapping[str, str], Sequence[Tuple[str, str]]]
 Cookies = Union[Dict[str, str], CookieJar, str, bytes]
 Auth = Tuple[str, str]
 Proxies = Dict[str, str]
@@ -72,6 +74,10 @@ if TYPE_CHECKING:
     class AsyncHooks(TypedDict, total=False):
         before_request: List[AsyncRequestHook]
         after_request: List[AsyncResponseHook]
+
+    class RequestDefaults(TypedDict, total=False):
+        headers: Optional[Headers]
+        params: Optional[DefaultParams]
 
     class AsyncRequestOptions(TypedDict, total=False):
         params: Optional[Params]

@@ -30,6 +30,12 @@ from urllib.parse import urldefrag, urlencode, urljoin, urlsplit, urlunsplit
 from ja3requests._async_utils import owner_task, phase_wait, timeout_pair
 from ja3requests._async_upload import HTTP1Upload
 from ja3requests._multipart import MultipartSource
+from ja3requests._request_defaults import (
+    merge_default_headers,
+    merge_default_params,
+    normalize_request_defaults,
+    request_defaults_snapshot,
+)
 from ja3requests._upload import UploadSource, is_upload
 from ja3requests._cookie_file import (
     _check_jar,
@@ -87,7 +93,12 @@ from ja3requests.utils import (
 
 if TYPE_CHECKING:
     from typing_extensions import Unpack
-    from ja3requests._typing import AsyncFiles, AsyncHooks, AsyncRequestOptions
+    from ja3requests._typing import (
+        AsyncFiles,
+        AsyncHooks,
+        AsyncRequestOptions,
+        RequestDefaults,
+    )
 
 
 _UploadBody = Union[
@@ -381,6 +392,7 @@ class AsyncSession:
         if pool is not None and not use_pooling:
             raise ValueError('An explicit pool requires use_pooling=True')
         self._tls_config = tls_config or TlsConfig()
+        self._request_defaults: Optional[Dict[str, Any]] = None
         if self._tls_config.session_cache is None:
             self._tls_config.session_cache = TLSSessionCache()
         self._pool = pool if pool is not None else AsyncConnectionPool()
@@ -412,6 +424,16 @@ class AsyncSession:
     @property
     def pool(self) -> AsyncConnectionPool:
         return self._pool
+
+    @property
+    def request_defaults(self) -> Optional[RequestDefaults]:
+        """Return a detached opt-in snapshot of default headers and params."""
+        return request_defaults_snapshot(self._request_defaults)
+
+    @request_defaults.setter
+    def request_defaults(self, value: Optional[RequestDefaults]) -> None:
+        """Atomically replace opt-in default headers and query parameters."""
+        self._request_defaults = normalize_request_defaults(value)
 
     def _bind(self) -> None:
         loop = asyncio.get_running_loop()
@@ -604,6 +626,13 @@ class AsyncSession:
         self._bind()
         if self._closed:
             raise RuntimeError('AsyncSession is closed')
+        defaults = self._request_defaults
+        headers = merge_default_headers(
+            defaults.get('headers') if defaults else None, headers
+        )
+        params = merge_default_params(
+            defaults.get('params') if defaults else None, params
+        )
         budgets = timeout_pair(timeout)
         priority = normalize_headers_priority(h2_headers_priority)
         config = tls_config or self._tls_config
@@ -660,6 +689,13 @@ class AsyncSession:
         self._bind()
         if self._closed:
             raise RuntimeError('AsyncSession is closed')
+        defaults = self._request_defaults
+        headers = merge_default_headers(
+            defaults.get('headers') if defaults else None, headers
+        )
+        params = merge_default_params(
+            defaults.get('params') if defaults else None, params
+        )
         if isinstance(data, UploadSource) or is_upload(data, allow_async=True):
             raise InvalidData('Prepared requests require a buffered body')
         priority = normalize_headers_priority(h2_headers_priority)

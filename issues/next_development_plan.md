@@ -1,13 +1,42 @@
 # Next Development Plan
 
-## 2.4.0 release scope (2026-10-15)
+## Repository delivery selection (2026-10-23)
 
-Version 2.4.0 includes the selected outbound Huffman, per-request HEADERS
-priority and indexing-exclusion controls, synchronous 307/308 body replay, and
-the subsequent transport/hook/body correctness fixes. See the
+The user selected the follow-up plan: deliver the accepted opt-in request
+defaults increment through a scoped commit, push to the existing `master`, and
+verification of that exact commit's CI. Reuse the unchanged local runtime,
+test and user-documentation acceptance; first reconcile the two historical
+planning records that differ from the frozen candidate. Read the original
+requirements of Issues #36, #37, #40, #41 and #42 and record their remaining
+acceptance boundaries without changing their remote state.
+
+The [implementation record](post_2_5_0_execution_plan.md) retains the completed
+local acceptance and delivery-intake readback. Repository history and GitHub
+Actions provide the subsequent commit/push/CI evidence; the historical test
+counts below are not new CI results. Version 2.5.0 remains the published baseline
+and request defaults remain Unreleased. A new package version/publication,
+Issue closure, hosting and a new capability batch remain conditional and are
+not selected by this delivery step.
+
+## Completed local post-2.5.0 work (2026-10-16)
+
+The original order and fixed scope are recorded in the
+[bounded execution plan](post_2_5_0_execution_plan.md): synchronize current release
+documentation, implement opt-in headers/params defaults, then inspect remaining
+sync/async differences. The implementation is Unreleased; 2.5.0 is the published
+baseline. Conditional protocol/client/hosting candidates remain unselected.
+That original batch excluded commits, pushes and releases; the later repository
+delivery selection above adds commit/push/CI, but not another release.
+
+## 2.5.0 release scope (2026-10-15)
+
+Version 2.5.0 includes the explicit Chrome 155/macOS supported subset, aligned
+synchronous 301/302/303 method and body handling, the selected outbound Huffman,
+per-request HEADERS priority and indexing-exclusion controls, synchronous 307/308
+body replay, and the subsequent transport/hook/body correctness fixes. See the
 [release notes](../CHANGELOG.md) and current user guides for implemented behavior.
 The planning and candidate-acceptance records below are dated history; their
-pending-task and local-only labels do not describe the 2.4.0 release scope.
+pending-task and local-only labels do not describe the 2.5.0 release scope.
 Full browser identity and the unselected conditional packages remain outside it.
 
 ## Post-2.3.0 planning snapshot (2026-10-13)

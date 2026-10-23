@@ -74,6 +74,7 @@ def check_html(site):
             "ja3requests.get",
             "ja3requests.sessions.Session",
             "ja3requests.sessions.Session.request",
+            "ja3requests.sessions.Session.request_defaults",
             "ja3requests.sessions.Session.save_cookies",
         },
         "api/response/index.html": {
@@ -93,6 +94,7 @@ def check_html(site):
         "api/async/index.html": {
             "ja3requests.async_sessions.AsyncSession",
             "ja3requests.async_sessions.AsyncSession.request",
+            "ja3requests.async_sessions.AsyncSession.request_defaults",
             "ja3requests.async_sessions.AsyncSession.prepare_request",
             "ja3requests.async_sessions.AsyncSession.send",
             "ja3requests.async_sessions.AsyncPreparedRequest",
