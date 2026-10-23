@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 2.6.0 — opt-in session request defaults
+
 - Add opt-in `Session.request_defaults` and `AsyncSession.request_defaults`
   assignment for headers and string query pairs. Validate and copy assignments,
   merge before initial preparation, and retain snapshots across hooks, retries,

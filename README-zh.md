@@ -7,7 +7,7 @@ TLS 握手和记录层由本项目实现，密码学基础运算使用 `cryptogr
 浏览器预设不保证完整模拟浏览器。显式选择的
 `TlsConfig.from_browser("chrome", 154)` 只实现已支持的子集，JA3 与抓包浏览器不同；
 尚未实现加密客户端问候（ECH）和后量子组。显式的 Chrome 155/macOS
-支持子集是 2.5.0 的当前预设；未指定版本的 Chrome 预设仍选择 124。
+支持子集从 2.5.0 起提供；未指定版本的 Chrome 预设仍选择 124。
 
 [English Document](README.md)
 
@@ -27,13 +27,12 @@ TLS 握手和记录层由本项目实现，密码学基础运算使用 `cryptogr
 
 Ja3Requests 支持 HTTP 和 HTTPS 上的 HTTP/1.1；HTTPS 连接也可以通过 ALPN
 协商 HTTP/2。2.0 默认验证证书，优先使用 TLS 1.3，并允许 TLS 1.2 ECDHE/GCM 回退。
-2.5.0 版本链接：[PyPI](https://pypi.org/project/ja3requests/2.5.0/)
-和 [GitHub](https://github.com/lxjmaster/ja3requests/releases/tag/v2.5.0)。
+2.6.0 版本链接：[PyPI](https://pypi.org/project/ja3requests/2.6.0/)
+和 [GitHub](https://github.com/lxjmaster/ja3requests/releases/tag/v2.6.0)。
 
-当前源码新增可显式启用的 Session headers/params `request_defaults`
-（Unreleased，已发布的 2.5.0 不包含此功能），详见
-[配置指南](docs/configuration.md#opt-in-request-defaults-unreleased)。
-本版本新增显式 Chrome 155/macOS 支持子集，并使同步 301/302/303 的方法与正文
+2.6.0 为 `Session` 和 `AsyncSession` 新增可显式启用的 headers/params
+`request_defaults`，详见[配置指南](docs/configuration.md#opt-in-request-defaults)。
+2.5.0 已新增显式 Chrome 155/macOS 支持子集，并使同步 301/302/303 的方法与正文
 处理策略和原生异步一致。H2 霍夫曼编码、索引排除、逐请求 HEADERS 优先级、同步
 307/308 正文重放及传输策略修复仍然可用；范围及限制见[发布说明](CHANGELOG.md)。
 

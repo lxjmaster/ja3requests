@@ -1,9 +1,9 @@
 # ja3requests 当前能力与后续改进
 
-当前版本为 2.5.0：保留自行实现的 TLS 握手、密钥派生和加密记录传输，
+当前版本为 2.6.0：保留自行实现的 TLS 握手、密钥派生和加密记录传输，
 提供同步及原生异步客户端、流式上传/下载和可配置的 HTTP/2。
-版本见 [PyPI 2.5.0](https://pypi.org/project/ja3requests/2.5.0/)
-与 [GitHub v2.5.0](https://github.com/lxjmaster/ja3requests/releases/tag/v2.5.0)。
+版本见 [PyPI 2.6.0](https://pypi.org/project/ja3requests/2.6.0/)
+与 [GitHub v2.6.0](https://github.com/lxjmaster/ja3requests/releases/tag/v2.6.0)。
 未发布改动单独记录在 [CHANGELOG](CHANGELOG.md) 的 Unreleased 中。
 
 ## 已实现
@@ -38,9 +38,9 @@
 额外 GREASE 向量、Session 默认 headers/params 不在 2.5.0 发布范围内。
 对应版本的安装包验收与 CI 才是发布证据；推进计划中的开发候选报告保留为历史记录。
 
-当前源码新增（Unreleased）：同步/异步 `request_defaults` 可显式配置 headers/params，
+2.6.0 新增：同步/异步 `request_defaults` 可显式配置 headers/params，
 在初始准备时合并一次；异步预备请求保留准备时的快照，重试和重定向不重新读取。
-字段限制、空值及合并顺序见[配置指南](docs/configuration.md#opt-in-request-defaults-unreleased)。
+字段限制、空值及合并顺序见[配置指南](docs/configuration.md#opt-in-request-defaults)。
 
 ## 已知限制与后续事项
 
@@ -52,7 +52,7 @@
 6. **HTTP/2 扩展能力**：当前 HTTPS 请求路径支持并发流，可接收并忽略旧式优先级信号，但不按优先级调度。客户端不消费服务端推送，默认禁用推送，显式开启推送的 SETTINGS 配置会被拒绝。
 7. **会话恢复与客户端认证**：无扩展主密钥或带客户端证书的 TLS 1.2 会话不提供 Session ID 恢复；配置客户端证书的 TLS 1.3 会话不使用 PSK 票据恢复。TLS 1.3 握手后客户端认证需显式声明扩展。
 8. **响应流式读取**：2.1.0 实现 HTTP/1.1、TLS1.2/1.3 和 HTTP/2 的增量读取与压缩解码。迭代不缓存整包，提前关闭 HTTP/1 响应会丢弃连接，HTTP/2 则仅取消相应流。内存还包括 TLS 记录、H2 窗口及解码状态，不等于 `chunk_size`；完整契约见[流式指南](docs/streaming.md)。
-9. **客户端一致性**：异步文件上传、Cookie 文件接口和缓冲预备请求已实现；2.5.0 对齐了同步/异步的重定向方法与正文策略。源码中的显式 headers/params 默认值尚未发布。异步模块级便捷函数、流式预备请求仍未实现。两者的 `timeout=None`、代理解析和空 headers 行为也有差异，详见[请求策略](docs/request_policy.md)、[代理指南](docs/proxies.md)及[默认值设计](issues/session_defaults_design.md)。
+9. **客户端一致性**：异步文件上传、Cookie 文件接口和缓冲预备请求已实现；2.5.0 对齐了同步/异步的重定向方法与正文策略，2.6.0 提供显式 headers/params 默认值。异步模块级便捷函数、流式预备请求仍未实现。两者的 `timeout=None`、代理解析和空 headers 行为也有差异，详见[请求策略](docs/request_policy.md)、[代理指南](docs/proxies.md)及[默认值设计](issues/session_defaults_design.md)。
 10. **文档与性能**：提供公共类型支持、可本地构建的文档站及同步/异步性能套件。历史性能数据描述其指定源码和环境，不代表所有运行环境；公共文档站部署仍是独立事项。
 
 后续协议能力应按实际使用需求排序，并针对协商、认证和失败边界补充本地集成验证。

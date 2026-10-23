@@ -222,9 +222,9 @@ cross-loop pools are not added by this implementation.
 ## Prepare, inspect and send buffered requests
 
 Buffered prepared requests are available starting with **2.3.0**.
-The source checkout additionally supports opt-in
-[`request_defaults`](configuration.md#opt-in-request-defaults-unreleased)
-for headers/params (Unreleased). Preparation snapshots those defaults before
+Version **2.6.0** adds opt-in
+[`request_defaults`](configuration.md#opt-in-request-defaults)
+for headers/params. Preparation snapshots those defaults before
 its first await; later `send()` calls, retries and redirects never merge the
 Session's current defaults into the prepared request.
 Use `await session.prepare_request()` to encode a request without connecting,

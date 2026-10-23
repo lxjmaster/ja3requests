@@ -36,12 +36,12 @@ Cookie state, constructor TLS/pool/retry settings and registered hooks are
 persistent Session settings. Do not assume that assigning Requests-style
 `session.headers`, `session.auth`, `session.params` or `session.proxies` merges
 those values into each request: `Session.request()` currently uses its own
-arguments for them. For headers/params, the source checkout adds the explicit
+arguments for them. For headers/params, version 2.6.0 adds the explicit
 opt-in API below; other fields remain per-request.
 
-## Opt-in request defaults (Unreleased)
+## Opt-in request defaults
 
-This API is available in the current source checkout, **not in published 2.5.0**.
+This API is available starting with **2.6.0**.
 Assign `request_defaults` on either `Session` or `AsyncSession`. It starts as
 `None`; `None` or `{}` clears it. There is no constructor argument. Only
 `headers` and `params` are accepted, and each field opts in independently.
