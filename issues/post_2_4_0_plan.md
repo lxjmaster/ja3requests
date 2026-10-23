@@ -1,8 +1,11 @@
-# Post-2.4.0 advancement plan
+# Post-2.4.0 advancement plan (historical source record)
 
 Prepared: 2026-10-15. Status: **B0 / B1 / B4 COMPLETE (2.5.0 SOURCE)**.
 
-This is the current planning entry point after the published 2.4.0 release.
+This is the historical execution record for the source batch that became 2.5.0.
+The current entry point is [the next development plan](next_development_plan.md);
+do not interpret the 2.4.0 baseline and local-only labels below as current
+publication status.
 The original planning delivery is linked from the previous roadmaps. The active
 implementation scope is fixed below; other batches remain proposals. Completing
 the selected work does not select the remaining register.

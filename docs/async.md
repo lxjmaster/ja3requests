@@ -166,8 +166,9 @@ shared H2 connection.
 Async redirects preserve method/body for 307/308, change POST to GET for 301/302,
 and use GET for 303 except HEAD. The limit is eight redirects. Cross-origin hops
 strip authorization, proxy authorization and manually supplied Cookie headers.
-`head()` defaults to `allow_redirects=False`. This redirect behavior differs
-from the current synchronous GET-based follow-up path.
+`head()` defaults to `allow_redirects=False`. Synchronous method/body selection
+is aligned with this policy starting with 2.5.0; hook dispatch and Cookie
+snapshot behavior retain their API-specific contracts.
 
 Hooks use `before_request` and `after_request`, with session registrations before
 request registrations. Callbacks may return synchronously or return an awaitable.
@@ -221,6 +222,11 @@ cross-loop pools are not added by this implementation.
 ## Prepare, inspect and send buffered requests
 
 Buffered prepared requests are available starting with **2.3.0**.
+The source checkout additionally supports opt-in
+[`request_defaults`](configuration.md#opt-in-request-defaults-unreleased)
+for headers/params (Unreleased). Preparation snapshots those defaults before
+its first await; later `send()` calls, retries and redirects never merge the
+Session's current defaults into the prepared request.
 Use `await session.prepare_request()` to encode a request without connecting,
 running hooks or sending anything. Inspect its normalized `method`, `url`,
 read-only `headers` and bytes `body`. To add a signature, derive new headers:

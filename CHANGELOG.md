@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add opt-in `Session.request_defaults` and `AsyncSession.request_defaults`
+  assignment for headers and string query pairs. Validate and copy assignments,
+  merge before initial preparation, and retain snapshots across hooks, retries,
+  redirects and async prepared sends. Explicit empty/raw inputs retain their
+  native bypass behavior; legacy Session observation properties remain unchanged.
+
 ## 2.5.0 — Chrome 155 subset and redirect policy alignment
 
 - Add explicit `TlsConfig.from_browser('chrome', 155)` for the measured macOS

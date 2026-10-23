@@ -44,6 +44,10 @@ def rejects(url: str, response: Response, session: Session) -> None:
     session.post(url, data=StringIO('text'))  # E: arg-type
     session.put(url, data=iter((1, 2)))  # E: arg-type
     session.post(url, data=async_bytes())  # E: arg-type
+    session.request_defaults = []  # E: assignment
+    session.request_defaults = {'timeout': 1}  # E: assignment
+    session.request_defaults = {'headers': {'X-Bad': None}}  # E: assignment
+    session.request_defaults = {'params': {'page': 1}}  # E: assignment
     ja3requests.post(url, data=async_bytes())  # E: arg-type
     response.iter_content('1024')  # E: arg-type
     response.iter_lines(delimiter='\n')  # E: arg-type
@@ -95,6 +99,10 @@ async def async_rejects(
     await session.post(url, data=StringIO('text'))  # E: arg-type
     await session.put(url, data=iter((1, 2)))  # E: arg-type
     await session.post(url, data=async_text())  # E: arg-type
+    session.request_defaults = 'invalid'  # E: assignment
+    session.request_defaults = {'auth': ('u', 'p')}  # E: assignment
+    session.request_defaults = {'headers': {1: 'bad'}}  # E: assignment
+    session.request_defaults = {'params': [('page', 1)]}  # E: assignment
     await session.get(url, unknown_option=True)  # E: call-arg
     await session.save_cookies(42)  # E: arg-type
     await session.save_cookies('cookies.json', include_session='yes')  # E: arg-type

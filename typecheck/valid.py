@@ -2,7 +2,17 @@
 
 from io import BytesIO
 from pathlib import Path
-from typing import AsyncIterator, Dict, Iterator, List, Mapping, Optional, Tuple, Union
+from typing import (
+    TYPE_CHECKING,
+    AsyncIterator,
+    Dict,
+    Iterator,
+    List,
+    Mapping,
+    Optional,
+    Tuple,
+    Union,
+)
 
 from typing_extensions import assert_type
 
@@ -30,6 +40,9 @@ from ja3requests.protocol.h2.huffman import huffman_decode, huffman_encode
 from ja3requests.protocol.tls.client_hello_info import inspect_client_hello
 from ja3requests.requests.request import Request
 
+if TYPE_CHECKING:
+    from ja3requests._typing import RequestDefaults
+
 
 def before(request: BaseRequest) -> Optional[BaseRequest]:
     request.headers['X-Trace'] = 'typed-consumer'
@@ -47,6 +60,12 @@ async def upload_chunks() -> AsyncIterator[bytes]:
 
 
 async def prepared_calls(session: AsyncSession, url: str) -> None:
+    assert_type(session.request_defaults, Optional[RequestDefaults])
+    session.request_defaults = {
+        'headers': {'X-Default': b'value'},
+        'params': [('tag', 'one'), ('tag', 'two')],
+    }
+    assert_type(session.request_defaults, RequestDefaults)
     prepared = await session.prepare_request(
         'POST',
         url,
@@ -155,6 +174,14 @@ def public_calls(url: str, cookie_path: Path) -> None:
             hooks={'before_request': [before], 'after_request': [after]},
         ) as session:
             assert_type(session, Session)
+            assert_type(session.request_defaults, Optional[RequestDefaults])
+            session.request_defaults = {
+                'headers': {'X-Default': 'value'},
+                'params': {'page': '1'},
+            }
+            assert_type(session.request_defaults, RequestDefaults)
+            session.request_defaults = {}
+            session.request_defaults = None
             session.cookies = {'session': 'value'}
             assert_type(session.cookies, Ja3RequestsCookieJar)
             assert_type(session.response, Optional[Response])
@@ -230,6 +257,13 @@ async def native_async_calls(url: str) -> None:
             pool=pool, hooks={'after_request': [async_after]}
         ) as session:
             assert_type(session, AsyncSession)
+            assert_type(session.request_defaults, Optional[RequestDefaults])
+            session.request_defaults = {
+                'headers': {'X-Number': 2},
+                'params': (('page', '1'),),
+            }
+            assert_type(session.request_defaults, RequestDefaults)
+            session.request_defaults = None
             async with await session.get(
                 url, timeout=(1, None), stream=True
             ) as response:

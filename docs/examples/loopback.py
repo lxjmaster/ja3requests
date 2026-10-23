@@ -51,6 +51,8 @@ class DemoHandler(BaseHTTPRequestHandler):
             self.reply(status, b"retry complete")
         elif self.path == "/cookie":
             self.reply(200, self.headers.get("Cookie", "").encode("ascii"))
+        elif self.path == "/defaults?existing=kept&page=1&tag=x&tag=y":
+            self.reply(200, self.headers.get("X-Client", "").encode("ascii"))
         elif self.path == "/stream":
             self.send_response(200)
             self.send_header("Content-Length", "11")
@@ -149,6 +151,19 @@ def run_demo():
                 with Session(use_pooling=False) as restarted:
                     assert restarted.load_cookies(path, include_session=True) == 1
                     assert restarted.cookies.get("demo") == "kept"
+
+            session.request_defaults = {
+                "headers": {"X-Client": "worker"},
+                "params": [("tag", "a"), ("tag", "b"), ("page", "1")],
+            }
+            response = session.get(
+                base_url + "/defaults?existing=kept",
+                headers={"x-client": "caller"},
+                params=[("tag", "x"), ("tag", "y")],
+                timeout=3,
+            )
+            assert response.status_code == 200 and response.text == "caller"
+            session.request_defaults = None
 
         assert ("request", "POST") in events
         assert ("response", 200) in events

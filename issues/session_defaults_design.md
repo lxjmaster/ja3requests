@@ -1,12 +1,13 @@
-# Session defaults: current behavior and opt-in design
+# Session defaults: bounded implementation contract
 
-Prepared: 2026-10-08. S1 / C17 design deliverable only. This document adds no
-runtime behavior, public attribute, constructor argument or release commitment.
-`request_defaults` below is a **proposed API**, not an available feature.
+Prepared: 2026-10-08 as the S1 / C17 design-only deliverable. Refreshed:
+2026-10-16 for the selected [post-2.5.0 implementation](post_2_5_0_execution_plan.md).
+`request_defaults` is implemented in the source checkout (Unreleased), not in
+published 2.5.0. The original design acceptance at the end is historical.
 
 ## 1. Decision and implementation boundary
 
-Recommend a later, separately selected increment that adds one explicit
+The selected increment adds one explicit
 `session.request_defaults` assignment for **headers and query parameters only**,
 with the same contract on `Session` and `AsyncSession`. Its initial value is
 `None` (disabled); assigning a validated nonempty configuration opts in, and
@@ -26,33 +27,34 @@ properties or `Session.Request`. It does not create those properties on async.
 
 This is deliberately smaller than complete Requests compatibility. Authentication,
 proxy routes, timeout defaults, TLS defaults beyond the existing `tls_config`,
-Cookie replacement/removal APIs, new deletion sentinels, prepared requests,
-environment proxy discovery and sync redirect corrections are not selected.
-An implementation must be separately authorized; U0 upload design can retain
-today's request preparation and does not depend on this proposal being implemented.
+Cookie replacement/removal APIs, new deletion sentinels, streaming prepared
+requests, environment proxy discovery and further redirect changes are not
+selected. The existing buffered async prepared API captures these defaults;
+standalone sync preparation and direct `send()` do not add a merge step.
 
 ## 2. Current implementation anchors
 
-Line references describe the inspected source; symbols are the stable anchors.
+Symbols are the stable anchors; line numbers from the old design are omitted.
 
 | Evidence | Relevant behavior |
 | --- | --- |
-| [Session](../ja3requests/sessions.py), `__init__`, `request` (72-100, 183-261) | Constructor accepts TLS/pool/hooks/retry only; request uses its arguments directly except stored Cookies and TLS fallback |
-| [BaseSession](../ja3requests/base/__sessions.py), `headers`, `auth`, `proxies`, `params` (66-85, 136-198) | Falsy stored values may be populated by reading the latest `Request`; those fields are not consumed by `Session.request` |
-| [AsyncSession](../ja3requests/async_sessions.py), `__init__`, `request` (191-218, 289-360) | No declared headers/params/auth/proxies/timeout defaults; per-call Cookie, TLS, hooks, retry and proxy snapshots |
-| [Sync preparation](../ja3requests/requests/request.py), `request`, `__ready_headers`, `__ready_auth` (78-127, 194-217, 283-308) | Header mapping copied; Basic auth prepared before constructing the ready request |
-| [BaseRequest](../ja3requests/base/__requests.py), `params`, `headers`, `proxy` (154-184, 273-296, 417-430) | Query encoding, default headers for falsy mappings, title-case normalization and route selection |
-| [Async preparation](../ja3requests/async_sessions.py), `_headers`, `_prepare`, `_freeze` (80-181) | `None` headers differ from `{}`; query `doseq=True`; validation and request framing |
-| [Cookie operations](../ja3requests/cookies.py), `get_cookie_header`, `_refresh_cookie_header`, `merge_cookies` (215-249, 722-747) | Scope filtering, explicit-header precedence and input-dependent merge behavior |
-| [Sync policy](../ja3requests/sessions.py), `send`, `resolve_redirects` (419-627) | Hook/retry order, response Cookie extraction and GET-based redirects |
-| [Async policy](../ja3requests/async_sessions.py), `_request` (375-506) | Per-hop hooks, per-attempt retry, cross-origin stripping and final response hooks |
-| [Public types](../ja3requests/_typing.py) and [async timeout validation](../ja3requests/_async_utils.py), `timeout_pair` | Supported input types; no default/deletion sentinel; async timeout validation |
+| [Session](../ja3requests/sessions.py), `request_defaults`, `request` | Separate opt-in storage; merge once before initial preparation; constructor unchanged |
+| [BaseSession](../ja3requests/base/__sessions.py), `headers`, `auth`, `proxies`, `params` | Legacy observations/assignments remain unconsumed by request defaults |
+| [AsyncSession](../ja3requests/async_sessions.py), `request_defaults`, `request`, `prepare_request`, `send` | Merge before first await in request/preparation; prepared sends clone captured state |
+| [Default helpers](../ja3requests/_request_defaults.py) | Shared atomic validation, snapshots and bounded merges |
+| [Sync preparation](../ja3requests/requests/request.py), `request`, `__ready_headers`, `__ready_auth` | Header mapping copied; Basic auth prepared before constructing the ready request |
+| [BaseRequest](../ja3requests/base/__requests.py), `params`, `headers`, `proxy` | Native query encoding, default headers for falsy mappings, name normalization and routes |
+| [Async preparation](../ja3requests/async_sessions.py), `_headers`, `_prepare`, `_freeze` | `None` differs from `{}`; query `doseq=True`; byte headers retained; framing validated |
+| [Cookie operations](../ja3requests/cookies.py), `get_cookie_header`, `_refresh_cookie_header`, `merge_cookies` | Scope filtering, explicit-header precedence and input-dependent merging |
+| [Sync policy](../ja3requests/sessions.py), `send`, `resolve_redirects` | Existing hooks/retries and released 301/302/303/307/308 method/body policy |
+| [Async policy](../ja3requests/async_sessions.py), `_request` | Per-hop hooks, per-attempt retry, cross-origin stripping and final response hooks |
+| [Public types](../ja3requests/_typing.py), `RequestDefaults`, and [async validation](../ja3requests/_async_utils.py), `timeout_pair` | Typed headers/string pairs; timeout policy unchanged |
 
 Both request signatures currently use `None` as the default for every field in
 the following matrix. Omission and an explicit `None` cannot be distinguished
 inside these methods. S1 does not require adding a sentinel to distinguish them.
 
-## 3. Current request semantics matrix
+## 3. Unconfigured request semantics matrix
 
 “Empty” means a supported empty container/string where one exists, not `False`
 for a boolean. “No supported empty value” is a definite type boundary, not a
@@ -75,8 +77,9 @@ body framing, auth and Cookie headers can still be added later.
 
 - Both APIs normalize header names using `str.title()` and collapse differently
   cased duplicates with the last encountered value. Sync preparation warns about
-  duplicate case-insensitive input names. Async validates names and CR/LF in
-  values, decodes byte values as Latin-1, and stringifies other supported values.
+  duplicate case-insensitive input names. Both validate token names and C0/DEL
+  controls before sending. Byte values stay bytes; async stringifies numeric
+  values. HTTP1 writes byte values unchanged, while H2 requires UTF-8 bytes.
   `None` header values are not a deletion API and are outside `Headers` typing.
 - Explicit request headers replace the library header set today. They are not
   merged with `session.headers`. `default_headers()` returns a new mapping.
@@ -109,20 +112,20 @@ body framing, auth and Cookie headers can still be added later.
   concurrent use; do not promise identical live-mutation behavior.
 - `timeout=None` is not a new uniform “unlimited” contract for sync: for example,
   [the direct HTTPS HTTP/1 path](../ja3requests/sockets/https.py) uses a 15-second
-  read fallback when no read timeout is supplied (around line 360). Async `None`
+  read fallback when no read timeout is supplied. Async `None`
   means no deadline for the phase; its finite nonnegative scalar/pair validation
   remains unchanged. S1 selects no timeout correction or default.
 
-## 4. Proposed opt-in contract
+## 4. Selected opt-in contract
 
-The proposed configuration accepts only `headers` and `params` keys. Unknown
+The configuration accepts only `headers` and `params` keys. Unknown
 keys raise `TypeError` before replacing the previous configuration. Each field
 may be omitted or `None` to remain unconfigured. Empty fields also remain
 unconfigured. The setter validates the entire configuration before one storage
 replacement; failed assignment leaves the previous configuration intact.
 Invalid configuration/container/value types raise `TypeError`; duplicate or
 forbidden default header names raise `ValueError`. Header syntax follows the
-existing async header validator's name/CRLF checks in this new configuration
+shared header validator's token-name and C0/DEL checks in this new configuration
 boundary, with invalid syntax raising `ValueError` for both clients.
 
 - Default headers accept the existing string-name/`HeaderValue` mapping. Reject
@@ -175,7 +178,7 @@ mapping is empty. The supported removal scenario is an optional default header
 such as `X-Default` from an otherwise prepared request; removing every header or
 managed framing/Host fields has no new guarantee under this proposal.
 
-| Unselected field | Proposed omitted / `None` / empty / explicit handling |
+| Unselected field | Omitted / `None` / empty / explicit handling |
 | --- | --- |
 | auth, proxies, timeout | Exactly the current matrix; no storage slot in `request_defaults`; configuring these keys fails |
 | cookies | Existing Session jar + request overlay; no second Cookie-default store; configuring the key fails |
@@ -184,7 +187,7 @@ managed framing/Host fields has no new guarantee under this proposal.
 
 No omitted/`None` distinction is needed. No new constructor arguments, global
 mode, context variable, inheritance tree or general configuration engine is
-needed. The proposed feature can be implemented as a small validated assignment
+needed. The implementation uses a small validated assignment
 boundary and a merge step feeding existing preparation.
 
 ## 5. Snapshot, hooks, retries and origin boundaries
@@ -212,8 +215,13 @@ request. Hook code remains responsible for its own shared state.
 | Before preparation | Select TLS; combine stored/request Cookies; construct request | Validate timeout; snapshot TLS/Cookies/hooks/retry/proxies; construct metadata |
 | Before sending a hop | Session `before_request`, then per-request hooks; refresh generated Cookie header | Session `before_request`, then per-request hooks; freeze/validate; refresh generated Cookie header |
 | Retry | Reuse the prepared request; do not rerun before hooks; apply response Cookies before status retry and refresh generated Cookie header | Same preparation boundary; use captured retry policy; apply response Cookies to shared and request jars; refresh before status retry |
-| Redirect | Re-enters `send`; bodyless GET for all followed statuses; session hooks run for each hop | Re-enters the hop loop; 307/308 retain method/body, 301/302 change POST, 303 changes non-HEAD to GET; per-request hooks remain in the captured list |
-| After hooks | Nested redirected `send` calls run session after hooks; outer `send` runs session and original per-request after hooks. Original per-request hooks are popped before redirect kwargs are passed | Once for the final policy-selected response, session registrations then request registrations |
+| Redirect | Re-enters `send`; 307/308 retain method/body, 301/302 change POST, 303 changes non-HEAD to GET; session and per-request before hooks run for each hop | Same method/body selection; re-enters the hop loop; per-request hooks remain in the captured list |
+| After hooks | Each redirected `send` dispatches session then per-request after hooks; the outer `send` dispatches both again on the final response | Once for the final policy-selected response, session registrations then request registrations |
+
+For a successful sync request with one followed redirect and no hook replacements,
+session and per-request `before_request` hooks each run on both hops. Both sets of
+`after_request` hooks run twice on the final response: once in the redirected
+`send` and once in the outer `send`.
 
 Sync retry configuration is referenced rather than snapshotted, and sync hook
 lists are copied when dispatched. These differ from async snapshots and remain
@@ -241,9 +249,10 @@ or explicit per-request values. No automatic origin registry is selected.
 
 ## 6. Acceptance cases and migration advice
 
-The following are exact future assertions, not a claim that the proposal exists
-or its tests have passed. Use captured preparation for merge tests, existing
-local peers for policy tests, and no public network endpoints. Reuse
+The following are implementation acceptance cases. Results belong to the
+[execution record](post_2_5_0_execution_plan.md), not the historical design pass.
+Use captured preparation for merge tests, existing local peers for policy tests,
+and no public network endpoints. Reuse
 [Cookie policy tests](../test/test_cookie_policy_review.py),
 [async Session tests](../test/test_async_session.py),
 [hook tests](../test/test_hooks.py) and
@@ -267,8 +276,8 @@ local peers for policy tests, and no public network endpoints. Reuse
 | Origin and hook policy | Local cross-origin redirect with explicit auth/Cookie/proxy inputs | Existing stripping, route selection and the table's API-specific hook counts remain unchanged; default merge is not repeated |
 | TLS/timeout non-expansion | Attempt to configure unselected keys; separately pass valid request overrides | Configuration rejected; existing request override behavior and Session TLS state preserved |
 
-An implementation can express the header cases directly against captured
-prepared requests. This example is **future acceptance pseudocode**: `capture`
+Header cases can be expressed against captured prepared requests. This is
+**acceptance pseudocode**: `capture`
 is a test fixture returning the initial prepared request without network I/O.
 
 ```python
@@ -298,23 +307,23 @@ with Session(use_pooling=False) as session:
         assert "Authorization" not in second.headers
 ```
 
-Migration recommendation: retain existing behavior by default and document the
-new configuration as additive opt-in if implementation is selected. No release
-version is selected here. Do not describe this as full Requests parity, uniform
+Migration boundary: retain existing behavior by default and document the
+new configuration as additive opt-in. No release version is selected here.
+Do not describe this as full Requests parity, uniform
 sync/async semantics or a fix to existing observation properties. A later change
 to legacy getters, empty-header behavior, Cookie precedence, timeout policy or
-sync 307/308 semantics needs its own compatibility decision and migration notes.
+redirect method/body semantics needs its own compatibility decision and migration notes.
 
-## 7. Design acceptance boundary
+## 7. Historical design acceptance (2026-10-08)
 
-This deliverable is complete when the current behavior is supported by the code
+The original design deliverable was complete when behavior was supported by code
 anchors, every proposed precedence cell has a definite result, the auth
 observation case is covered, and the implementation exclusions remain explicit.
-Only this design document is changed by S1. Future runtime tests, typing consumers,
-documentation examples and installed acceptance belong to the separately selected
-implementation; static review of this document does not establish runtime support.
+Only this design document changed in S1. Runtime tests, typing consumers,
+documentation examples and installed acceptance now belong to the selected
+post-2.5.0 implementation; the old design pass does not establish runtime support.
 
-Verification for this design delivery: the current-source, network-free auth
+Verification retained for that design delivery: the then-current, network-free auth
 observation snippet above passed under `python3 -B`. All 17 relative file links
 resolved and the document had no trailing whitespace. No feature tests or
 installed-package acceptance are claimed for the proposed API.

@@ -37,6 +37,7 @@ for source ownership, framing and retries; synchronous `files=` remains buffered
     options:
       members:
         - request
+        - request_defaults
         - get
         - post
         - put

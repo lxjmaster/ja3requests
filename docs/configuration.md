@@ -32,11 +32,71 @@ and fresh configs/caches or restart the client; existing authentication cannot
 be invalidated by editing a CA file. `verify` supports booleans, not a CA-file
 path. See [trust configuration](tls.md).
 
-Cookie state, constructor TLS/pool/retry settings and registered hooks are the
-supported persistent Session settings. Do not assume that assigning Requests-style
+Cookie state, constructor TLS/pool/retry settings and registered hooks are
+persistent Session settings. Do not assume that assigning Requests-style
 `session.headers`, `session.auth`, `session.params` or `session.proxies` merges
 those values into each request: `Session.request()` currently uses its own
-arguments for them. Pass them explicitly or wrap the calls in application code.
+arguments for them. For headers/params, the source checkout adds the explicit
+opt-in API below; other fields remain per-request.
+
+## Opt-in request defaults (Unreleased)
+
+This API is available in the current source checkout, **not in published 2.5.0**.
+Assign `request_defaults` on either `Session` or `AsyncSession`. It starts as
+`None`; `None` or `{}` clears it. There is no constructor argument. Only
+`headers` and `params` are accepted, and each field opts in independently.
+
+```python
+from ja3requests import Session
+
+def fetch_page(url):
+    with Session(use_pooling=False) as session:
+        session.request_defaults = {
+            "headers": {"X-Client": "worker"},
+            "params": [("tag", "a"), ("tag", "b"), ("page", "1")],
+        }
+        response = session.get(
+            url, headers={"x-client": "caller"},
+            params=[("tag", "x"), ("tag", "y")], timeout=3,
+        )
+        return response
+```
+
+The example sends one `X-Client: caller` field and appends
+`page=1&tag=x&tag=y` after any existing URL query.
+
+| Per-request input | Configured headers | Configured params |
+| --- | --- | --- |
+| Omitted or `None` | Library headers, overlaid by configured headers | Configured ordered pairs |
+| Nonempty mapping / pairs | Explicit headers overlay library + configured headers, ignoring name case | Explicit keys remove all matching default pairs; remaining defaults precede all explicit pairs |
+| Empty supported value | `{}` bypasses configured headers; sync still adds library headers, async does not | `{}`, `[]`, `()`, `''`, `b''` bypass configured params |
+| Raw `str` / `bytes` query | Not a header mapping | Bypasses configured params; native query encoding applies |
+
+Default header values may be text, bytes or numbers. Default params must be a
+string-to-string mapping or an ordered sequence of two-string pairs; duplicates
+and order are retained. Explicit query inputs keep the existing encoding:
+sync does not expand mapping list values, while async does. A bytes key is
+distinct from a string key when replacing defaults. URL query keys are never
+removed by this merge.
+
+Assignments copy and validate all fields before replacement. The getter returns
+a detached snapshot; editing it or the original input does not change the
+configuration. Unknown fields and invalid types raise `TypeError`; duplicate
+case-insensitive default header names, forbidden names and invalid header syntax
+raise `ValueError`. `Authorization`, `Proxy-Authorization`, `Cookie`, `Host`,
+`Content-Length` and `Transfer-Encoding` are forbidden in defaults. Keep these
+in the existing auth, Cookie and explicit request APIs. Other custom values
+remain application-managed and apply to every initial destination on the Session.
+
+Defaults merge once before initial preparation. `before_request` may remove an
+optional field with `request.headers.pop("X-Client", None)`; retries and redirects
+do not merge again. No `None`-as-deletion syntax is provided. Async
+`prepare_request()` captures defaults when awaited, and `send()` uses the prepared
+snapshot even after configuration changes. Standalone sync prepared sends do not
+apply Session defaults. Async coroutines capture defaults when execution begins,
+before the first await; creating a coroutine does not capture them. Synchronize
+sync configuration assignments with concurrent requests, as with other Session
+configuration. Legacy Session observations never become defaults.
 
 ## Errors are not one normalized family
 

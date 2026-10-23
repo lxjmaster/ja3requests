@@ -20,6 +20,13 @@ read limits apply while waiting for the next network data; application processin
 between reads is not a total-response timer. A timeout can therefore occur
 inside `iter_content()` after the request call returned.
 
+`None` does not promise uniform unlimited waits across synchronous transports:
+the direct HTTPS HTTP/1 read path currently supplies a 15-second fallback when
+no read timeout is given. Async `None` has no phase deadline. Async also validates
+finite nonnegative values before network I/O; sync retains its existing
+transport-specific validation. Opt-in headers/params defaults do not change
+these timeout contracts.
+
 ## HTTP retries
 
 ```python
