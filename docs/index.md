@@ -9,15 +9,15 @@ support; Python `ssl` supplies the default CA roots. See the
 
 ## Which version does this site describe?
 
-The published baseline is [2.5.0](https://github.com/lxjmaster/ja3requests/releases/tag/v2.5.0),
+This site describes [2.6.0](https://github.com/lxjmaster/ja3requests/releases/tag/v2.6.0),
 including incremental response streaming, native async, streaming request bodies,
 async multipart/files, async Cookie files, buffered async prepared requests,
 exact H2 fingerprint controls, optional Huffman/indexing policies, per-request
 HEADERS priority, the explicit Chrome 155/macOS subset, aligned synchronous/async
 redirect method/body policy and public typing.
-The current checkout also documents opt-in
-[`request_defaults`](configuration.md#opt-in-request-defaults-unreleased), marked
-Unreleased and unavailable in published 2.5.0.
+Version 2.6.0 adds opt-in
+[`request_defaults`](configuration.md#opt-in-request-defaults)
+for headers/params on both synchronous and asynchronous sessions.
 The generated API reference reads the checkout's source and docstrings.
 Dated acceptance records in the existing guides remain historical. Building
 these docs locally does not deploy a public documentation site.

@@ -2,8 +2,8 @@
 
 Prepared: 2026-10-08 as the S1 / C17 design-only deliverable. Refreshed:
 2026-10-16 for the selected [post-2.5.0 implementation](post_2_5_0_execution_plan.md).
-`request_defaults` is implemented in the source checkout (Unreleased), not in
-published 2.5.0. The original design acceptance at the end is historical.
+`request_defaults` is available starting with 2.6.0; published 2.5.0 does not
+include it. The original design acceptance at the end is historical.
 
 ## 1. Decision and implementation boundary
 

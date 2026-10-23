@@ -1,6 +1,24 @@
 # Next Development Plan
 
+## 2.6.0 release scope (2026-10-23)
+
+The user approved publishing opt-in request defaults as 2.6.0 to official PyPI
+and the existing GitHub repository. This release adds headers/params defaults
+to both clients, with validation, detached snapshots and one initial merge.
+It preserves Python >=3.7 and the existing TLS/H2, retry and redirect contracts.
+Current behavior is described in the [release notes](../CHANGELOG.md) and
+[configuration guide](../docs/configuration.md#opt-in-request-defaults).
+
+The implementation commit `a29fc2e110194ac3cceb4a9aa1189f38d4366a9a` passed all
+five push workflows. Publication requires a separate final 2.6.0 commit,
+installed-artifact acceptance, exact-commit CI and public-download readback;
+the earlier 2.5.0 development candidates remain historical. Issue closure,
+public documentation hosting and further client/protocol work are not selected.
+
 ## Repository delivery selection (2026-10-23)
+
+This earlier repository-only selection is historical; the release selection
+above subsequently adds versioning and publication.
 
 The user selected the follow-up plan: deliver the accepted opt-in request
 defaults increment through a scoped commit, push to the existing `master`, and
@@ -13,8 +31,8 @@ acceptance boundaries without changing their remote state.
 The [implementation record](post_2_5_0_execution_plan.md) retains the completed
 local acceptance and delivery-intake readback. Repository history and GitHub
 Actions provide the subsequent commit/push/CI evidence; the historical test
-counts below are not new CI results. Version 2.5.0 remains the published baseline
-and request defaults remain Unreleased. A new package version/publication,
+counts below are not new CI results. At that stage, 2.5.0 was the published baseline
+and request defaults remained Unreleased. A new package version/publication,
 Issue closure, hosting and a new capability batch remain conditional and are
 not selected by this delivery step.
 
@@ -23,8 +41,8 @@ not selected by this delivery step.
 The original order and fixed scope are recorded in the
 [bounded execution plan](post_2_5_0_execution_plan.md): synchronize current release
 documentation, implement opt-in headers/params defaults, then inspect remaining
-sync/async differences. The implementation is Unreleased; 2.5.0 is the published
-baseline. Conditional protocol/client/hosting candidates remain unselected.
+sync/async differences. The implementation was Unreleased against the 2.5.0
+published baseline. Conditional protocol/client/hosting candidates remain unselected.
 That original batch excluded commits, pushes and releases; the later repository
 delivery selection above adds commit/push/CI, but not another release.
 
