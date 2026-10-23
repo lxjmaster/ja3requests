@@ -1,5 +1,85 @@
 # Next Development Plan
 
+## Typing repository delivery selection (2026-10-23)
+
+The user subsequently selected a scoped commit of the completed typing batch,
+push to the existing `origin/master`, and verification of that exact commit's
+GitHub Actions runs. The six-file scope is the response annotations, typing
+workflow, typing guide, Unreleased notes and two current-status records.
+Reuse the unchanged local acceptance below; do not repeat release acceptance
+or include unrelated untracked files. The main agent owns edits, commit, push
+and readback; an independent read-only lane checks workflow effects and gates.
+
+Delivery requires Tests, Coverage, Lint, Documentation and Public typing to
+succeed for the pushed commit. The full-package mypy step may fail as designed;
+the strict selected-module and installed-consumer steps must succeed. Commit
+history and the exact-commit workflow runs record execution and completion;
+this selection record does not predeclare their results. The local-only
+boundary below is historical and does not exclude this later repository step.
+No version change, tag, publication, Issue closure or hosted-docs deployment is
+selected. Preserve existing user files and release evidence; no new workspace
+or retained temporary resource is needed. Any recovery remains limited to this
+batch, without rewriting shared history or discarding unrelated changes.
+
+## Post-2.6.0 typing completion (2026-10-23)
+
+Local implementation and verification: **COMPLETE**. The next-stage request
+selects the two concrete remaining requirements from Issue #36: annotate the
+three response-parser helpers and add a non-blocking full-package mypy CI step.
+That local batch used `76f1e6b4fba91c8e53d500f6bc7832cf86ece0e8` as its baseline
+and did not commit, push, version, publish or change remote Issues. No new
+persistent workline was registered for this bounded batch; this section retains
+the cross-turn outcome and handoff.
+
+- [✅] Recheck the original Issue requirements independently. Public signatures
+  in the named base/session modules, request helpers, `py.typed`, mypy settings
+  and the existing structural `Protocol` already satisfy their respective items.
+- [✅] Annotate `_read_status_line`, `_read_headers` and `_parse_headers`,
+  preserving iterable byte-header inputs, exact returned bytes and runtime
+  parsing. Declare the local byte collections and optional content-encoding
+  state without changing their values or control flow.
+- [✅] Add `python -m mypy ja3requests/` with step-level `continue-on-error: true`.
+  Keep the strict seven-module check and installed-consumer checks required.
+  Update the typing guide, Unreleased notes and capability disposition.
+- [✅] Verify the changed boundaries and remove the task-owned temporary
+  snapshot, build artifacts and independent installation. Preserve all existing
+  user debug files, IDE state and historical release evidence.
+
+Acceptance on local Python 3.13.3:
+
+- Response/streaming/failure-state tests: **45 passed**. Network streaming and
+  streaming-policy tests: **34 passed**, including trailers/connection reuse.
+- Black, error-level Pylint and the configured strict seven-module mypy check
+  passed. Python 3.7 grammar passed; no new multi-version runtime CI is claimed.
+  Removing annotations and typing imports leaves the executable syntax tree
+  identical to the baseline. YAML readback confirms all pre-existing workflow
+  settings and mandatory steps are unchanged.
+- A tracked-source snapshot built an sdist and then its wheel. Both contain the
+  exact modified `response.py` and `py.typed`. A fresh independent installation
+  passed dependency checks and the existing valid consumer plus all **85 negative
+  markers**. Additional installed probes verified all three precise return types,
+  list/tuple/iterator inputs, rejection of text/raw-byte header inputs by mypy,
+  and runtime empty/missing/malformed/conflicting-header boundaries.
+- The full-package diagnostic command intentionally exits **1**: **2,296 errors
+  in 57 files**, checking 73 source files, versus **2,303** before this batch.
+  `response.py` has no remaining missing-method-signature diagnostics. More
+  precise types also expose existing implementation details such as byte-valued
+  debug formatting; the full implementation is not claimed to be type-clean.
+  These counts are local evidence, not a remote workflow result.
+
+The main agent owned all edits and acceptance; the delegated lane was read-only
+Issue/signature/CI auditing. No additional temporary resource is retained and
+no tracked user/concurrent edits were present at intake. Rollback, if later
+requested, is limited to this batch; unrelated files stay untouched.
+
+The subsequent repository-delivery selection above adds a scoped commit/push
+followed by exact-commit CI. Only then can the new CI step be described as
+running remotely. Closing #36 remains a separate remote action; package-wide
+typing cleanup is not required by its original allow-failure CI criterion.
+Issue #41 still needs an agreed memory measurement/acceptance contract before
+its original 1 GB / `chunk_size` criterion can be reconciled. No new release or
+other conditional capability is selected automatically.
+
 ## 2.6.0 release scope (2026-10-23)
 
 The user approved publishing opt-in request defaults as 2.6.0 to official PyPI

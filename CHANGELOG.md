@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Complete the remaining synchronous response-parser method annotations and
+  report full-package mypy diagnostics in a non-blocking CI step. Keep the
+  strict selected-module and installed-consumer checks required; runtime
+  response parsing is unchanged and the full package is not yet type-clean.
+
 ## 2.6.0 — opt-in session request defaults
 
 - Add opt-in `Session.request_defaults` and `AsyncSession.request_defaults`

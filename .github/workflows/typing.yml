@@ -30,6 +30,9 @@ jobs:
         run: python -m pip install -r requirements.txt -r requirements-typing.txt build
       - name: Check the typed facade
         run: python -m mypy
+      - name: Report full-package typing diagnostics
+        continue-on-error: true
+        run: python -m mypy ja3requests/
       - name: Build source distribution and wheel from it
         run: python -m build --outdir "$RUNNER_TEMP/typed-dist"
       - name: Install the wheel in an independent environment

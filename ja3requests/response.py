@@ -11,7 +11,18 @@ import json
 import gzip
 import zlib
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Callable, Dict, Iterator, List, Optional, Type
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Tuple,
+    Type,
+)
 import brotli
 from ja3requests.base import BaseResponse
 from ja3requests.cookies import Ja3RequestsCookieJar, extract_cookies_to_jar
@@ -141,7 +152,7 @@ class HTTPResponse(BaseResponse):
         self.fp = sock.makefile("rb")
         self._method = method
         self._chunked = False
-        self._content_encoding = None
+        self._content_encoding: Optional[bytes] = None
         self._content_length = None
         self._remaining = None
         self._chunk_remaining = 0
@@ -173,7 +184,7 @@ class HTTPResponse(BaseResponse):
             if release is not None:
                 release(reusable)
 
-    def _read_status_line(self):
+    def _read_status_line(self) -> Tuple[bytes, bytes, bytes]:
         line = self.fp.readline(MAX_LINE + 1)
         if len(line) > MAX_LINE:
             raise InvalidStatusLine(
@@ -201,8 +212,8 @@ class HTTPResponse(BaseResponse):
 
         return protocol_version, status_code, status_text
 
-    def _read_headers(self):
-        headers = []
+    def _read_headers(self) -> List[bytes]:
+        headers: List[bytes] = []
         while True:
             line = self.fp.readline(MAX_LINE + 1)
             if len(line) > MAX_LINE:
@@ -224,8 +235,10 @@ class HTTPResponse(BaseResponse):
 
         return headers
 
-    def _parse_headers(self, headers_list=None):
-        headers = {}
+    def _parse_headers(
+        self, headers_list: Optional[Iterable[bytes]] = None
+    ) -> Dict[bytes, bytes]:
+        headers: Dict[bytes, bytes] = {}
         headers_list = headers_list if headers_list is not None else self.headers
         if headers_list is None:
             raise ValueError("Required headers to parse.")
