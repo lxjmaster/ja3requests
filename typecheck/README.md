@@ -45,7 +45,7 @@ including `assert_type` checks that catch an accidental `Any` return. Every
 `# E:` line in `invalid.py` must produce its specific diagnostic; wrong URLs,
 timeouts, streaming options, upload tuples, callback returns, TLS configuration,
 Cookie values, and response return types are covered. The current consumers
-include 70 negative markers: async additions reject synchronous pools, incorrect
+include 85 negative markers: async additions reject synchronous pools, incorrect
 awaited return types, invalid budgets/iterators, text files and unsupported file tuples.
 Synchronous upload calls reject async iterators; async calls accept byte iterators
 and async byte iterators. Async multipart paths include `PathLike[str]`.
@@ -81,12 +81,16 @@ primitives continue to preserve arbitrary bytes.
 To inspect the non-gating internal migration backlog explicitly:
 
 ```sh
-python -m mypy ja3requests
+python -m mypy ja3requests/
 ```
 
 That command can report existing dynamic-state, optional-value, and override
-diagnostics in protocol internals and mutable compatibility classes. It is not
-the public-consumer acceptance gate. JSON results intentionally remain `Any`;
+diagnostics in protocol internals and mutable compatibility classes. The Public
+typing workflow also runs it in a separate `continue-on-error: true` step, so
+existing internal diagnostics remain visible without blocking the job. The
+configured strict source check and installed positive/negative consumer checks
+remain required; a successful job does not mean the full package is type-clean.
+JSON results intentionally remain `Any`;
 request JSON input matches the current `dict`/`str`/`bytes` implementation. Upload
 values in the synchronous API are paths or binary file objects (optionally lists),
 not the filename/file tuple convention of other HTTP clients. Raw `data=` uploads
