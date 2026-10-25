@@ -1,5 +1,67 @@
 # Next Development Plan
 
+## Cookie-file typing maintenance (2026-10-25)
+
+Status: **COMPLETE / UNREGISTERED**. Continue the existing internal-typing
+lane at the Cookie-file boundary, based on
+`35cf17f7169b15687eda85c6fba4d7a0ff166a8a`. Focused mypy reproduced **19
+diagnostics** in `_cookie_file.py`, the only selected runtime module.
+
+- [✅] Annotate validation hooks and persistence helpers; include this module
+  in the strict source gate, now thirteen modules. Preserve CookieJar inputs,
+  text/PathLike paths, boolean options and integer counts.
+- [✅] Verify unchanged executable AST, Python 3.7 grammar, formatting,
+  error-level lint and the existing Cookie persistence and policy tests.
+- [✅] Verify independent installed artifacts, positive consumers and 118
+  expected negative markers, full runtime tests and coverage.
+- [✅] Deliver scoped changes to existing master, read back the exact remote
+  commit and verify Tests, Coverage, Lint, Documentation and Public typing.
+
+Checker-only stdlib views describe private CookieJar storage/locks, Cookie
+metadata and its floating-point expiry clock. Narrow casts exist exclusively
+under TYPE_CHECKING; runtime validation, format, limits, atomic replacement,
+locking and all-or-nothing loading remain unchanged. Reuse existing runtime
+tests covering malformed documents, scope, merge and failed writes; add
+installed consumer cases for the newly annotated helper boundaries.
+
+Use this workspace with serial edits and independent checks in parallel;
+no subagents or new workspace is needed. Preserve unrelated user files and
+previous reports. The verifier owns and removes install/staging roots; retain
+`dist/post-2.6.0-cookie-file-typing/acceptance-01` reports, manifest, logs and
+unpublished candidate artifacts as development evidence. No release, version,
+tag, deployment or Issue mutation is selected. Use configured Git identity
+and scoped staging; recover within scope without rewriting history. Official
+plan-session binding remains unavailable from prior executions; retain
+UNREGISTERED without inventing a lifecycle transition or substitute identity.
+
+Local acceptance passed: thirteen strict modules; formatting for the three
+changed Python/consumer files; package-wide error-level Pylint; **211 Cookie
+persistence/policy tests**. Executable AST matches `35cf17f` after removing
+annotations, typing imports and checker-only views/casts; Python 3.7 grammar
+passed. The
+[independent artifact report](../dist/post-2.6.0-cookie-file-typing/acceptance-01/verification.json)
+passed all ten commands: sdist-to-wheel, metadata/inventory, independent install,
+dependencies, smoke, installed consumers and **4,764 tests + 118 subtests**,
+with **92.7623% statement coverage**, zero failures/errors/skips and the one
+existing collection warning. All **118 negative type markers** passed. Current
+73 runtime module hashes match the accepted snapshot. Command temporary roots
+and top-level staging were removed; retain reports, manifest, logs and both
+local candidate artifacts. The snapshot is based on `35cf17f` and retains
+development version 2.6.0; it is not a release.
+
+Source delivery completed as `b5d4bb9ca855a09cef0cd162ce750043d0883937`;
+remote master readback matches. All five exact-commit workflows passed:
+[Tests](https://github.com/lxjmaster/ja3requests/actions/runs/40168444874),
+[Coverage](https://github.com/lxjmaster/ja3requests/actions/runs/40168444849),
+[Lint](https://github.com/lxjmaster/ja3requests/actions/runs/40168444842),
+[Documentation](https://github.com/lxjmaster/ja3requests/actions/runs/40168444861),
+[Public typing](https://github.com/lxjmaster/ja3requests/actions/runs/40168444832).
+Tests includes Python 3.7-3.13 and the wheel job, all successful. A subsequent
+record-only commit carries this completion evidence and is identified by Git
+history and its own workflows. No required implementation, verification or
+temporary-resource work remains; prior user files and reports are preserved.
+No release, tag, deployment or Issue mutation was performed.
+
 ## TLS session-cache typing maintenance (2026-10-25)
 
 Status: **COMPLETE / UNREGISTERED**. The next continuation selects the
