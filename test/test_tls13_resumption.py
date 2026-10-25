@@ -88,7 +88,8 @@ def test_verified_request_does_not_offer_unverified_ticket(opaque_ticket):
     assert offset == len(encoded)
 
 
-def test_client_certificate_does_not_offer_cached_psk():
+@pytest.mark.parametrize("opaque_ticket", [b"", b"\x00\x29"])
+def test_client_certificate_does_not_offer_cached_psk(opaque_ticket):
     cache = TLSSessionCache()
     cache.put_tls13(
         "example.com",
@@ -105,10 +106,22 @@ def test_client_certificate_does_not_offer_cached_psk():
     config = TlsConfig.secure()
     config.client_cert = b"configured-client-certificate"
     config.client_key = b"configured-client-key"
+    if opaque_ticket:
+        config.extensions.append(SessionTicketExtension(opaque_ticket))
     tls = TLS(None, session_cache=cache, server_host="example.com", server_port=443)
     tls.set_payload(config)
     assert tls._tls13_psk is None
-    assert b"\x00\x29" not in tls.body.extensions
+    # Opaque payloads and random key shares can contain the type's raw bytes.
+    encoded = tls.body.extensions
+    assert int.from_bytes(encoded[:2], "big") == len(encoded) - 2
+    offset = 2
+    while offset < len(encoded):
+        assert offset + 4 <= len(encoded)
+        kind = int.from_bytes(encoded[offset : offset + 2], "big")
+        size = int.from_bytes(encoded[offset + 2 : offset + 4], "big")
+        assert kind != 0x0029
+        offset += 4 + size
+    assert offset == len(encoded)
 
 
 def test_ticket_requires_same_sni_and_offered_cipher():

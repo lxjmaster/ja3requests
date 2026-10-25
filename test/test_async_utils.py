@@ -61,6 +61,9 @@ def test_phase_expiry_records_phase_cause_and_finishes_cancellation():
             await phase_wait(task, 0, 'HTTP/2 write')
         assert caught.value.phase == 'HTTP/2 write'
         assert isinstance(caught.value.__cause__, asyncio.TimeoutError)
+        # Python 3.7's zero-budget wait requests cancellation before joining it.
+        with pytest.raises(asyncio.CancelledError):
+            await task
         assert task.cancelled() and stopped.is_set()
 
     asyncio.run(scenario())
