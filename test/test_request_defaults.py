@@ -170,6 +170,9 @@ def test_headers_precedence_and_native_empty_behavior(client, headers):
         ({'tag': 'x'}, 'page=1&tag=x'),
         ([('tag', 'x'), ('tag', 'y')], 'page=1&tag=x&tag=y'),
         ({b'tag': 'x'}, 'tag=a&tag=b&page=1&tag=x'),
+        ([(b'tag', 'x')], 'tag=a&tag=b&page=1&tag=x'),
+        ([('tag', 'x'), (b'tag', 'y')], 'page=1&tag=x&tag=y'),
+        (((b'tag', 'x'), ('tag', 'y')), 'page=1&tag=x&tag=y'),
     ],
 )
 def test_query_order_duplicates_raw_and_empty_inputs(client, params, expected):

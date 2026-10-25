@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from ja3requests._typing import Headers, Params
 from ja3requests.utils import _validated_header_items, default_headers
@@ -107,7 +107,7 @@ def merge_default_params(
         # Preserve existing rejection of unsupported inputs; do not consume
         # a caller's iterator while trying to merge configuration.
         return params
-    request_pairs = (
+    request_pairs: List[Tuple[Union[str, bytes], Any]] = (
         list(params.items()) if isinstance(params, Mapping) else list(params)
     )
     if not all(
@@ -116,7 +116,9 @@ def merge_default_params(
         return params
 
     request_keys = [pair[0] for pair in request_pairs]
-    inherited = tuple(pair for pair in defaults if pair[0] not in request_keys)
+    inherited: Tuple[Tuple[Union[str, bytes], Any], ...] = tuple(
+        pair for pair in defaults if pair[0] not in request_keys
+    )
     return inherited + tuple((pair[0], pair[1]) for pair in request_pairs)
 
 

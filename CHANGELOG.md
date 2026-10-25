@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add request-default merging to the strict source typing gate. Preserve existing
+  string/byte query keys in the pair annotations and annotate generated header
+  values; request preparation, validation and wire behavior are unchanged.
+
 - Complete the remaining synchronous response-parser method annotations and
   report full-package mypy diagnostics in a non-blocking CI step. Keep the
   strict selected-module and installed-consumer checks required; runtime

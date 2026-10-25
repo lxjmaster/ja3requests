@@ -139,6 +139,11 @@ On 2026-10-25 a byte-identical
 for the next delivery; the original reports and measured source/tools were
 unchanged. See the [current sequence](next_development_plan.md#current-sequence-2026-10-25)
 for that later preparation and its delivery boundary.
+The subsequent ordered execution delivered the tooling/report as `90b78e1`,
+verified all five workflows, and closed Issue 41 after explicitly recording the
+selected replacement criterion. The original local measurement boundary and
+JSON are unchanged; [the posted acceptance](https://github.com/lxjmaster/ja3requests/issues/41#issuecomment-6393601088)
+records the later remote action.
 Existing user debug scripts, IDE state, historical release records and other
 `dist` artifacts were left untouched. No commit, push, Issue mutation, release
 or deployment was performed. No required work remains for this selected local

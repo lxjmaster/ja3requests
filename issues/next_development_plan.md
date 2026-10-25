@@ -1,21 +1,44 @@
 # Next Development Plan
 
+## P3 repository delivery selection (2026-10-25)
+
+After the local P1 -> P2 -> P3 completion below, the user's next continuation
+selects repository delivery of the remaining P3 annotations, tests and related
+acceptance records. The 13 tracked modified files form this delivery batch;
+untracked user files and retained local artifact reports are excluded.
+
+Commit with the configured identity, push normally to the existing master,
+and require Tests, Coverage, Lint, Documentation and Public typing to succeed
+for the actual delivered commit. Reuse the passed local artifact acceptance
+only after confirming its runtime, test, consumer and configuration hashes
+still match. Git history and the exact-commit workflow runs record execution
+and completion; this selection record does not predeclare their results.
+
+The prior local-only scope and unstaged status below describe the earlier
+completion boundary. This later selection adds repository delivery without
+changing runtime behavior, package version, release/tag state or site hosting.
+Work remains serial, with scoped staging and no temporary workspace or new
+service. Preserve the existing reports and unrelated files. Any required CI
+failure is fixed within scope and verified without rewriting shared history.
+No new registry transition is claimed while official session binding remains
+unavailable.
+
 ## Selected execution: P1 -> P2 -> P3 (2026-10-25)
 
-Status: **IN PROGRESS / UNREGISTERED**. The user selected the ordered sequence
+Status: **COMPLETE / UNREGISTERED**. The user selected the ordered sequence
 with "continue in order" after reviewing the concrete preparation below.
 This supersedes the earlier planning-only selection for these three outcomes.
 
-- [ ] P1: commit the exact 12-file tooling/evidence batch below, push normally
+- [✅] P1: commit the exact 12-file tooling/evidence batch below, push normally
   to the existing master, and verify its five exact-commit workflows.
-- [ ] P2: refresh the five Issues, post the prepared evidence with delivered
+- [✅] P2: refresh the five Issues, post the prepared evidence with delivered
   commit permalinks, reconcile the async API mapping and explicitly record the
   selected replacement memory criterion in Issue 41 before closing it.
   Close the five original Issues with scoped acceptance evidence.
-- [ ] P3: resolve the two `_request_defaults.py` diagnostics plus directly
+- [✅] P3: resolve the two `_request_defaults.py` diagnostics plus directly
   required helper annotations, add the module to strict checking, and verify
   the existing default-merging/runtime/installed-consumer boundaries.
-- [ ] Reconcile remote readback, local verification, retention and cleanup.
+- [✅] Reconcile remote readback, local verification, retention and cleanup.
 
 P1's repository delivery covers the 12 listed files. P3 is a subsequent local
 implementation/acceptance batch; no package release, tag or deployment is
@@ -33,6 +56,75 @@ remove only this execution's owned temporary environments/files after use.
 
 The supported status command still lacks an official session binding. Keep
 this file UNREGISTERED; no registry transition or substitute identity is claimed.
+
+P1 completed: commit `90b78e1c5f418064ba3d4163a38413353a50968b`
+contains exactly the 12 selected files and was pushed normally to master.
+Remote master readback matches. All five exact-commit workflows succeeded:
+[Tests](https://github.com/lxjmaster/ja3requests/actions/runs/40163061134),
+[Coverage](https://github.com/lxjmaster/ja3requests/actions/runs/40163061213),
+[Lint](https://github.com/lxjmaster/ja3requests/actions/runs/40163061165),
+[Documentation](https://github.com/lxjmaster/ja3requests/actions/runs/40163061186),
+[Public typing](https://github.com/lxjmaster/ja3requests/actions/runs/40163061135).
+Original JSON equality and the measured source/tool hashes were confirmed
+before committing; unchanged local 206-test/large-matrix evidence was reused.
+
+P2 completed: all five original Issues were closed as completed on 2026-10-25.
+The posted comments exactly matched their prepared bodies after permalink
+substitution, and CLOSED/COMPLETED state and closure times were read back:
+[#36](https://github.com/lxjmaster/ja3requests/issues/36#issuecomment-6393595862),
+[#37](https://github.com/lxjmaster/ja3requests/issues/37#issuecomment-6393597796),
+[#40](https://github.com/lxjmaster/ja3requests/issues/40#issuecomment-6393598648),
+[#41](https://github.com/lxjmaster/ja3requests/issues/41#issuecomment-6393601088),
+[#42](https://github.com/lxjmaster/ja3requests/issues/42#issuecomment-6393601909).
+Issue 41's original memory goal is explicitly superseded by the selected
+bounded-streaming criterion; its entire revised body was read back before
+closure. API mapping and optional performance-CI/hosting boundaries were
+recorded without claiming the original chunk-size-only memory guarantee.
+
+P3 local implementation/acceptance completed:
+
+- Annotated the generated header helpers and request-default pair collections.
+  The existing byte-key mapping regression revealed that merged query pairs
+  may retain byte keys alongside text defaults. The shared `Params` alias now
+  describes those already accepted list/tuple values; homogeneous typed lists
+  retain their alternatives because lists are invariant. No casts, ignored
+  diagnostics, coercion or new request-validation behavior were introduced.
+- Added `_request_defaults.py` to the required strict set: **eight modules
+  pass**. Black on the five changed Python/test/consumer files and all-package
+  error-level Pylint passed. The two helper implementation files have identical
+  executable syntax to `90b78e1` after removing annotations/typing imports.
+  Changed runtime modules also passed Python 3.7 grammar; no new multi-version
+  runtime CI is claimed for these local edits.
+- Existing default-merging/integration/utility tests plus the missing byte/mixed
+  pair boundaries passed: **206 tests in 0.71 s**. The installed consumer adds
+  typed homogeneous/mixed query lists, byte-key tuples, async/buffered preparation
+  and generated-header return types. The existing 85 negative markers remain.
+- The [frozen local artifact verification](../dist/post-2.6.0-typing/acceptance-01/verification.json)
+  passed sdist-to-wheel build, inventory/metadata/module hashes, Python 3.7
+  grammar, independent installation/dependency smoke, consumer typing and
+  **4,749 installed tests + 118 passed subtests**, with **92.7568% statement
+  coverage**, zero failures/errors/skips and one existing collection warning.
+  All ten pipeline commands returned zero and removed their temporary roots;
+  top-level staging cleanup passed. The current 73 module hashes match the
+  accepted report. This is an unpublished worktree snapshot based on `90b78e1`,
+  not acceptance or publication of a new version.
+- Retain that verification directory, its manifest/logs and both candidate
+  artifacts as local evidence. The candidate wheel SHA-256 is
+  `ad6a5edb5e4a8f2a1cb615acf019f4f71e9a7ae7c513030173009f53a01222a0`;
+  the sdist SHA-256 is
+  `f9e6affd37ed3ff188f1165ced36792accfd064a60d5e7e7bb2acf15f65ee015`.
+  They retain version 2.6.0 only as local development artifacts; do not upload
+  them over the published release.
+
+Closeout: the task-owned `/tmp/ja3requests-next-sequence.yHct10` directory
+(prepared Issue bodies, annotation check and reproducible pytest fixtures) was
+removed and absence confirmed after remote readback/verification. The verifier
+removed its independent environments and command staging. Original memory JSON
+remains byte-identical; unrelated user files and historical evidence remain.
+P3 code/tests/docs and the P1/P2 completion records are local, unstaged changes;
+P1 alone was committed/pushed by the selected repository-delivery scope. No
+release/tag/site deployment was performed. No required work remains for this
+selected P1 -> P2 -> P3 execution. Optional capabilities remain proposals.
 
 ## Current sequence (2026-10-25)
 

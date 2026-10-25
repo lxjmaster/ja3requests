@@ -39,6 +39,7 @@ from ja3requests.protocol.h2.hpack import (
 from ja3requests.protocol.h2.huffman import huffman_decode, huffman_encode
 from ja3requests.protocol.tls.client_hello_info import inspect_client_hello
 from ja3requests.requests.request import Request
+from ja3requests.utils import default_headers, default_user_agent, make_headers
 
 if TYPE_CHECKING:
     from ja3requests._typing import RequestDefaults
@@ -103,6 +104,30 @@ async def prepared_calls(session: AsyncSession, url: str) -> None:
         assert_type(await response.read(), bytes)
     await session.prepare_request('PUT', url, data=b'bytes')
     await session.prepare_request('POST', url, data=[('name', 'value')])
+
+
+async def query_key_boundaries(
+    session: Session, async_session: AsyncSession, url: str
+) -> None:
+    text_pairs: List[Tuple[str, int]] = [('page', 1)]
+    byte_pairs: List[Tuple[bytes, int]] = [(b'page', 1)]
+    mixed_pairs: List[Tuple[Union[str, bytes], int]] = [('page', 1), (b'page', 2)]
+    assert_type(session.get(url, params=text_pairs), Response)
+    assert_type(session.get(url, params=byte_pairs), Response)
+    assert_type(session.get(url, params=mixed_pairs), Response)
+    assert_type(session.get(url, params=((b'page', 1), ('tag', 'one'))), Response)
+    assert_type(await async_session.get(url, params=byte_pairs), AsyncResponse)
+    assert_type(await async_session.get(url, params=mixed_pairs), AsyncResponse)
+    assert_type(
+        await async_session.prepare_request('GET', url, params=mixed_pairs),
+        AsyncPreparedRequest,
+    )
+
+
+def generated_header_types() -> None:
+    assert_type(default_user_agent(), str)
+    assert_type(default_headers(), Dict[str, Union[str, bytes]])
+    assert_type(make_headers(user_agent=b'custom'), Dict[str, Union[str, bytes]])
 
 
 def protocol_value_boundaries(record: bytes) -> None:

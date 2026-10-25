@@ -187,6 +187,14 @@ This is local evidence for the selected bounded-streaming interpretation. It
 does not satisfy or replace the remote Issue's literal `all memory <= chunk_size`
 wording, close that Issue, or establish acceptance of a published package.
 
+On 2026-10-25, the owner selected the proposed replacement memory criterion
+and ordered repository delivery and Issue reconciliation. The tools/report
+were delivered in `90b78e1` with five successful workflows. Issue 41's original
+memory goal was explicitly superseded before it was
+[closed with the scoped evidence](https://github.com/lxjmaster/ja3requests/issues/41#issuecomment-6393601088).
+This administrative acceptance leaves the original report and public memory
+guarantees unchanged.
+
 ## Evidence and cleanup
 
 The report retains parameters, package/tool hashes, runtime/dependency versions,

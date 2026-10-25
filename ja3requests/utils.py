@@ -7,7 +7,7 @@ This module provides utility functions.
 
 import platform
 from base64 import b64encode
-from typing import Union, AnyStr, List, Optional, Tuple
+from typing import Union, AnyStr, Dict, List, Optional, Tuple
 from ._typing import Headers
 from .const import DEFAULT_MAX_RETRY_LIMIT
 from .exceptions import MaxRetriedException, NotAllowedRequestMethod
@@ -74,7 +74,7 @@ def b(s: AnyStr):  # pylint: disable=C
     return s.encode("latin1")
 
 
-def default_user_agent(agent: AnyStr = "Ja3Requests"):
+def default_user_agent(agent: AnyStr = "Ja3Requests") -> str:
     """
     Return a string representing the default user agent.
     :param agent:
@@ -92,7 +92,7 @@ def make_headers(
     basic_auth: AnyStr = None,
     proxy_basic_auth: AnyStr = None,
     disable_cache: bool = None,
-):
+) -> Dict[str, Union[str, bytes]]:
     """
     Shortcuts for generating request headers.
     :param keep_alive:
@@ -103,7 +103,7 @@ def make_headers(
     :param disable_cache:
     :return: dict
     """
-    headers = {"Accept": "*/*"}
+    headers: Dict[str, Union[str, bytes]] = {"Accept": "*/*"}
     if accept_encoding:
         if isinstance(accept_encoding, str):
             pass
@@ -132,7 +132,7 @@ def make_headers(
     return headers
 
 
-def default_headers():
+def default_headers() -> Dict[str, Union[str, bytes]]:
     """
     Return default headers.
     :return:

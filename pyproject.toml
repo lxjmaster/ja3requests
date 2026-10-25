@@ -8,6 +8,7 @@ skip-string-normalization = true
 python_version = "3.9"
 files = [
     "ja3requests/_typing.py",
+    "ja3requests/_request_defaults.py",
     "ja3requests/__init__.py",
     "ja3requests/retry.py",
     "ja3requests/protocol/h2/frame.py",

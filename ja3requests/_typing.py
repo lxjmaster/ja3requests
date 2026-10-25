@@ -25,13 +25,16 @@ from http.cookiejar import CookieJar
 
 Timeout = Optional[Union[float, Tuple[Optional[float], Optional[float]]]]
 H2HeadersPriority = Tuple[int, bool]
+# Lists are invariant, so retain homogeneous callers alongside merged mixed keys.
 Params = Union[
     str,
     bytes,
     Dict[str, Any],
     Dict[bytes, Any],
     List[Tuple[str, Any]],
-    Tuple[Tuple[str, Any], ...],
+    List[Tuple[bytes, Any]],
+    List[Tuple[Union[str, bytes], Any]],
+    Tuple[Tuple[Union[str, bytes], Any], ...],
 ]
 Data = Union[Params, BinaryIO, Iterator[bytes]]
 AsyncData = Union[Data, AsyncIterator[bytes]]

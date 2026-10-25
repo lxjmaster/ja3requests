@@ -1,9 +1,25 @@
 # Historical Issue acceptance: proposed updates
 
-Prepared: 2026-10-25. Status: **LOCAL DRAFTS COMPLETE**.
-The original bodies and states of Issues 36, 37, 40, 41 and 42 were read from
-GitHub on this date. All five were OPEN, with no updates since 2026-04-17.
-No remote comment, checklist edit or closure was performed.
+Prepared and executed: 2026-10-25. Status: **EXECUTED / READBACK VERIFIED**.
+At preparation all five Issues were OPEN with no updates since 2026-04-17.
+The subsequent ordered-execution instruction selected these remote actions.
+After commit `90b78e1` passed its five workflows, all five acceptance comments
+were posted with that commit's permalinks and the Issues closed as completed.
+Exact comment bodies, CLOSED/COMPLETED states and closure times were read back.
+
+| Issue | Acceptance comment | Closed at UTC |
+| --- | --- | --- |
+| 36 | [Public typing](https://github.com/lxjmaster/ja3requests/issues/36#issuecomment-6393595862) | 2026-10-25 04:48:16 |
+| 37 | [Native async API mapping](https://github.com/lxjmaster/ja3requests/issues/37#issuecomment-6393597796) | 2026-10-25 04:48:31 |
+| 40 | [Performance suite](https://github.com/lxjmaster/ja3requests/issues/40#issuecomment-6393598648) | 2026-10-25 04:48:36 |
+| 41 | [Revised memory criterion](https://github.com/lxjmaster/ja3requests/issues/41#issuecomment-6393601088) | 2026-10-25 04:48:54 |
+| 42 | [Required documentation scope](https://github.com/lxjmaster/ja3requests/issues/42#issuecomment-6393601909) | 2026-10-25 04:49:01 |
+
+For Issue 41, the original literal memory goal was retained as superseded
+history and an accepted-criterion section added. Its revised body matched the
+prepared text before closure. The original report was not changed. The drafts
+below preserve the proposal history; the linked remote comments contain the
+final executed wording and permanent source links.
 
 These drafts support the [current delivery sequence](next_development_plan.md#current-sequence-2026-10-25).
 Local evidence links become available remotely only after their files are
