@@ -1,5 +1,71 @@
 # Next Development Plan
 
+## Shared utility typing maintenance (2026-10-25)
+
+Status: **COMPLETE / UNREGISTERED**. The next continuation selects the
+existing internal-typing lane's shared utility boundary. Baseline:
+`fe892cfb4beda4612ed798239d890c6ea04d4d60`. Focused mypy found **31 diagnostics**
+in `utils.py`; the utility module is the only selected runtime module.
+
+- [✅] Resolve those diagnostics and include utilities in the strict source
+  gate, now eleven modules. Preserve optional header inputs, byte User-Agent
+  values, existing encoding fallback, nullable Cookie values and jar identity.
+  Model the legacy retry callback result plus integer-zero sentinel without
+  changing its retry algorithm or replacing `HTTPRetry`.
+- [✅] Verify Python 3.7 grammar and unchanged executable AST after removing
+  annotations, overloads and generic type metadata; pass strict mypy, format
+  checks and 235 focused utility/default/Cookie tests.
+- [✅] Verify package-wide error-level lint and independent installed artifacts,
+  positive consumers, 98 negative type markers and full runtime acceptance.
+- [✅] Deliver the scoped source and records to existing master with configured
+  identity, read back the exact remote commit and require its five workflows.
+
+Header contracts correct the old `AnyStr` annotations: nonempty byte Basic
+credentials already fail at `.encode`, and byte encoding lists already fail
+at text joining. Preserve those failures instead of adding coercion. Text and
+byte User-Agent fields remain supported independently of other arguments.
+Generic legacy tasks retain callback result types and the existing failure
+sentinel. Forwarded callback argument types are not validated. Dynamic singleton
+storage is typed as objects; no new `Any`, ignores or casts were introduced.
+
+Use the existing workspace, scoped staging and serial edits; independent checks
+may run together. No subagents, extra workspace or retained service is needed.
+Keep unrelated untracked user files and prior reports. The independent verifier
+owns its temporary install/staging roots and must remove them. Retain the new
+report, manifest, candidate artifacts and logs under
+`dist/post-2.6.0-utils-typing/acceptance-01` as local unpublished development
+evidence. No version change, tag, package publication, Issue edit or hosted-site
+deployment is selected. Recover within the batch without rewriting history.
+The known missing official plan-session binding remains UNREGISTERED; no
+substitute identity or registry transition is claimed.
+
+Local acceptance passed: eleven strictly checked modules, formatting on the
+four changed Python/test/consumer files, package-wide error-level Pylint and
+235 focused tests. The
+[independent artifact report](../dist/post-2.6.0-utils-typing/acceptance-01/verification.json)
+passed sdist-to-wheel build, metadata/inventory, independent installation,
+dependencies, smoke and consumers: **4,764 installed tests + 118 subtests**,
+**92.7607% statement coverage**, zero failures/errors/skips and one existing
+collection warning. All **98 expected negative type markers** passed. Current
+hashes of all 73 runtime modules and changed test/consumer/configuration inputs
+match the accepted snapshot. All ten commands returned zero and removed their
+temporary roots; top-level staging cleanup passed. Retain the report, manifest,
+logs and candidate artifacts. This is a worktree snapshot based on `fe892cf`,
+not acceptance or publication of a new version.
+
+Repository delivery completed as `cd3f18d929c0077dec80396d137d7072c2409ba0`;
+remote master was read back at that commit. All five exact-commit workflows
+passed:
+[Tests](https://github.com/lxjmaster/ja3requests/actions/runs/40165918861),
+[Coverage](https://github.com/lxjmaster/ja3requests/actions/runs/40165918894),
+[Lint](https://github.com/lxjmaster/ja3requests/actions/runs/40165918876),
+[Documentation](https://github.com/lxjmaster/ja3requests/actions/runs/40165918883),
+[Public typing](https://github.com/lxjmaster/ja3requests/actions/runs/40165918870).
+The completion record follows in a documentation-only commit, identified by
+Git history and its own workflows. No implementation, acceptance or temporary
+resource obligation remains. Unrelated user files and historical reports were
+preserved; no release, tag, deployment or Issue mutation was performed.
+
 ## Async lifecycle typing maintenance (2026-10-25)
 
 Status: **COMPLETE / UNREGISTERED**. The next continuation advances the
