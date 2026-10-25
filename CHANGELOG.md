@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add TLS crypto helpers and logging to strict typing, preserving binary
+  secrets, EC/X25519 key objects, cipher metadata and optional parsed parameters.
+  Cryptographic operations, validation and failure behavior are unchanged.
+
 - Add Cookie-file persistence to strict typing, preserving CookieJar inputs,
   text/PathLike paths, boolean options and integer counts. File format,
   validation, atomic writes and merge behavior are unchanged.

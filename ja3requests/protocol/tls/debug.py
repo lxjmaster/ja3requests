@@ -28,7 +28,7 @@ elif _debug_env >= 1:
     tls_logger.setLevel(logging.DEBUG)
 
 
-def set_debug_level(level: int):
+def set_debug_level(level: int) -> None:
     """Set debug level programmatically (backward compat)."""
     if level >= 2:
         tls_logger.setLevel(logging.DEBUG)
@@ -45,12 +45,12 @@ def get_debug_level() -> int:
     return 0
 
 
-def debug(msg: str, level: int = 1):
+def debug(msg: str, level: int = 1) -> None:
     """Log a debug message. level=1 → DEBUG, level=2 → DEBUG (verbose)."""
     tls_logger.debug(msg)
 
 
-def debug_hex(label: str, data: bytes, level: int = 2, max_len: int = 50):
+def debug_hex(label: str, data: bytes, level: int = 2, max_len: int = 50) -> None:
     """Log hex dump of data."""
     hex_str = data[:max_len].hex()
     if len(data) > max_len:

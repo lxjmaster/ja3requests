@@ -45,7 +45,7 @@ including `assert_type` checks that catch an accidental `Any` return. Every
 `# E:` line in `invalid.py` must produce its specific diagnostic; wrong URLs,
 timeouts, streaming options, upload tuples, callback returns, TLS configuration,
 Cookie values, and response return types are covered. The current consumers
-include 118 negative markers: async additions reject synchronous pools, incorrect
+include 130 negative markers: async additions reject synchronous pools, incorrect
 awaited return types, invalid budgets/iterators, text files and unsupported file tuples.
 Synchronous upload calls reject async iterators; async calls accept byte iterators
 and async byte iterators. Async multipart paths include `PathLike[str]`.
@@ -67,7 +67,7 @@ while withholding diagnostics from implementation bodies. It does **not** use
 The source gate strictly checks the aliases, top-level facade, retry policy,
 HTTP/2 frame values, HPACK header and Huffman codecs, and the ClientHello
 inspection schema.
-The strict set also includes request-default validation and merging, for thirteen
+The strict set also includes request-default validation and merging, for fifteen
 source modules. Query-pair types preserve existing text-key, byte-key and mixed
 list/tuple inputs, including homogeneous typed lists; string-only configured
 default pairs keep their separate contract. Installed consumers cover those
@@ -104,6 +104,14 @@ still pass through the existing complete validation before Cookie construction.
 Installed consumers check these internal helpers without establishing a public
 API; eight negative cases reject invalid jars, paths, options and result types.
 File format, atomic replacement and all-or-nothing loading are unchanged.
+TLS crypto helpers and their logging dependency are strictly checked. Cipher
+metadata and parsed ECDHE parameters use checker-only field schemas, including
+the existing optional parse result. Key pairs retain EC/X25519 private-key
+unions and byte-valued public keys/secrets. PRF digest inputs retain the stdlib
+HMAC name, factory and module forms; selected suite hashes remain callable.
+Checker-only casts describe the existing RSA input and curve/key relationships;
+they add no runtime key validation or algorithm changes. Twelve negative
+consumer cases cover bytes, suite IDs, keys, parsed fields, digest and log inputs.
 The protocol modules are an incremental internal migration, not a claim that
 the full connection and TLS implementation is type-clean. Installed consumers
 also check precise protocol-value return types and eleven invalid protocol uses.

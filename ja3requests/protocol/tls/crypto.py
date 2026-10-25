@@ -5,10 +5,42 @@ ja3requests.protocol.tls.crypto
 This module provides cryptographic utilities for TLS implementation.
 """
 
+from __future__ import annotations
+
 import os
 import hashlib
 import hmac
-from typing import Tuple
+from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union
+
+if TYPE_CHECKING:
+    from _hashlib import _HashObject
+    from hmac import _DigestMod
+    from typing import Callable, cast
+
+    from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
+    from typing_extensions import TypedDict
+
+    _HashFactory = Callable[..., _HashObject]
+
+    class _CipherFields(TypedDict):
+        name: str
+        key_exchange: str
+        cipher: str
+        mac: str
+        key_size: int
+        iv_size: int
+        mac_size: int
+        is_aead: bool
+
+    class _CipherInfo(_CipherFields, total=False):
+        prf_hash: _HashFactory
+
+    class _ECDHEParams(TypedDict):
+        curve_type: int
+        curve_id: int
+        public_key: bytes
+        remaining_offset: int
+
 
 from cryptography.hazmat.primitives import serialization, padding as crypto_padding
 from cryptography.hazmat.primitives.asymmetric import ec, x25519, padding
@@ -60,7 +92,7 @@ class TLSCrypto:
         label: bytes,
         seed: bytes,
         length: int,
-        hash_algo=hashlib.sha256,
+        hash_algo: _DigestMod = hashlib.sha256,
     ) -> bytes:
         """
         TLS 1.2 PRF (Pseudo-Random Function) using the suite's HMAC hash.
@@ -81,7 +113,7 @@ class TLSCrypto:
         return p_hash(secret, labeled_seed, length)
 
     @staticmethod
-    def prf_hash_for_cipher_suite(cipher_suite: int):
+    def prf_hash_for_cipher_suite(cipher_suite: int) -> _HashFactory:
         """Return the TLS 1.2 PRF hash associated with a cipher suite."""
         return get_cipher_info(cipher_suite).get("prf_hash", hashlib.sha256)
 
@@ -151,7 +183,7 @@ class TLSCrypto:
         )
 
     @staticmethod
-    def derive_keys(key_block: bytes, cipher_suite: int) -> dict:
+    def derive_keys(key_block: bytes, cipher_suite: int) -> Dict[str, bytes]:
         """
         Derive individual keys from key block based on cipher suite
         """
@@ -322,6 +354,10 @@ class RSAKeyExchange:
             public_key = serialization.load_der_public_key(
                 public_key_der, backend=default_backend()
             )
+            if TYPE_CHECKING:
+                # The documented DER input is RSA; other key types retain the
+                # existing wrapped encryption failure at runtime.
+                public_key = cast(RSAPublicKey, public_key)
 
             # Encrypt the premaster secret using RSA PKCS#1 v1.5 padding
             encrypted = public_key.encrypt(premaster_secret, padding.PKCS1v15())
@@ -393,7 +429,7 @@ class ECDHEKeyExchange:
     SUPPORTED_CURVES = {CURVE_SECP256R1, CURVE_SECP384R1, CURVE_SECP521R1, CURVE_X25519}
 
     @staticmethod
-    def get_curve(curve_id: int):
+    def get_curve(curve_id: int) -> Union[ec.EllipticCurve, str]:
         """
         Get the cryptography curve object for the given curve ID.
 
@@ -421,7 +457,9 @@ class ECDHEKeyExchange:
         )
 
     @staticmethod
-    def generate_keypair(curve_id: int = 23) -> Tuple[any, bytes]:
+    def generate_keypair(
+        curve_id: int = 23,
+    ) -> Tuple[Union[ec.EllipticCurvePrivateKey, x25519.X25519PrivateKey], bytes]:
         """
         Generate ECDHE keypair for given curve.
 
@@ -438,7 +476,9 @@ class ECDHEKeyExchange:
         """
         if curve_id == ECDHEKeyExchange.CURVE_X25519:
             # X25519 curve
-            private_key = x25519.X25519PrivateKey.generate()
+            private_key: Union[ec.EllipticCurvePrivateKey, x25519.X25519PrivateKey] = (
+                x25519.X25519PrivateKey.generate()
+            )
             public_key_bytes = private_key.public_key().public_bytes(
                 encoding=serialization.Encoding.Raw,
                 format=serialization.PublicFormat.Raw,
@@ -447,6 +487,9 @@ class ECDHEKeyExchange:
 
         # NIST curves (secp256r1, secp384r1, secp521r1)
         curve = ECDHEKeyExchange.get_curve(curve_id)
+        if TYPE_CHECKING:
+            # X25519 returned above; get_curve raises for unsupported IDs.
+            curve = cast(ec.EllipticCurve, curve)
         private_key = ec.generate_private_key(curve, default_backend())
         public_key_bytes = private_key.public_key().public_bytes(
             encoding=serialization.Encoding.X962,
@@ -456,7 +499,9 @@ class ECDHEKeyExchange:
 
     @staticmethod
     def compute_shared_secret(
-        private_key, peer_public_key: bytes, curve_id: int = 23
+        private_key: Union[ec.EllipticCurvePrivateKey, x25519.X25519PrivateKey],
+        peer_public_key: bytes,
+        curve_id: int = 23,
     ) -> bytes:
         """
         Compute ECDH shared secret.
@@ -473,20 +518,26 @@ class ECDHEKeyExchange:
             ImportError: If cryptography library is not available
             ValueError: If curve_id is not supported or key exchange fails
         """
+        peer_public: Union[ec.EllipticCurvePublicKey, x25519.X25519PublicKey]
         if curve_id == ECDHEKeyExchange.CURVE_X25519:
             # X25519 curve
+            if TYPE_CHECKING:
+                private_key = cast(x25519.X25519PrivateKey, private_key)
             peer_public = x25519.X25519PublicKey.from_public_bytes(peer_public_key)
             return private_key.exchange(peer_public)
 
         # NIST curves - load peer public key from uncompressed point
         curve = ECDHEKeyExchange.get_curve(curve_id)
+        if TYPE_CHECKING:
+            curve = cast(ec.EllipticCurve, curve)
+            private_key = cast(ec.EllipticCurvePrivateKey, private_key)
         peer_public = ec.EllipticCurvePublicKey.from_encoded_point(
             curve, peer_public_key
         )
         return private_key.exchange(ec.ECDH(), peer_public)
 
     @staticmethod
-    def parse_server_ecdhe_params(data: bytes) -> dict:
+    def parse_server_ecdhe_params(data: bytes) -> Optional[_ECDHEParams]:
         """
         Parse ServerKeyExchange ECDHE parameters.
 
@@ -670,7 +721,13 @@ class AESCipher:
             raise TLSDecryptionError(f"AES-GCM decryption failed: {e}") from e
 
 
-def _decrypt_tls12_cbc_record(encrypted, key, mac_key, prefix, hash_algo=hashlib.sha1):
+def _decrypt_tls12_cbc_record(
+    encrypted: bytes,
+    key: bytes,
+    mac_key: bytes,
+    prefix: bytes,
+    hash_algo: _HashFactory = hashlib.sha1,
+) -> bytes:
     """Authenticate CBC padding and MAC for any TLS 1.2 record content type.
 
     ``prefix`` contains the sequence number, content type and record version.
@@ -698,11 +755,11 @@ def _decrypt_tls12_cbc_record(encrypted, key, mac_key, prefix, hash_algo=hashlib
     return plaintext
 
 
-def get_cipher_info(cipher_suite: int) -> dict:
+def get_cipher_info(cipher_suite: int) -> _CipherInfo:
     """
     Get cipher suite information
     """
-    cipher_info = {
+    cipher_info: Dict[int, _CipherInfo] = {
         # RSA key exchange with CBC
         0x002F: {
             "name": "TLS_RSA_WITH_AES_128_CBC_SHA",

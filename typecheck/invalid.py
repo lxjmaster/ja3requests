@@ -18,6 +18,13 @@ from ja3requests.protocol.h2.hpack import (
 )
 from ja3requests.protocol.h2.huffman import huffman_decode
 from ja3requests.protocol.tls.client_hello_info import inspect_client_hello
+from ja3requests.protocol.tls.crypto import (
+    AESCipher,
+    ECDHEKeyExchange,
+    TLSCrypto,
+    get_cipher_info,
+)
+from ja3requests.protocol.tls.debug import set_debug_level
 from ja3requests.protocol.tls.session_cache import TLS12Ticket, TLSSessionCache
 from ja3requests._async_utils import owner_task, phase_wait
 from ja3requests._cookie_file import load_cookie_file, save_cookie_file
@@ -40,6 +47,23 @@ def utility_rejects() -> None:
     dict_from_cookie_string(123)  # E: arg-type
     Task(lambda: 'done', 'three', ValueError)  # E: arg-type
     Task(lambda: 'done', 3, 'ValueError')  # E: arg-type
+
+
+def tls_crypto_rejects() -> None:
+    TLSCrypto.prf('secret', b'label', b'seed', 48)  # E: arg-type
+    TLSCrypto.prf(b'secret', b'label', b'seed', 48, hash_algo=123)  # E: arg-type
+    TLSCrypto.derive_keys('key block', 0xC02F)  # E: arg-type
+    TLSCrypto.derive_keys(b'key block', 'C02F')  # E: arg-type
+    get_cipher_info('C02F')  # E: arg-type
+    keys: str = TLSCrypto.derive_keys(b'block', 0xC02F)  # E: assignment
+    ECDHEKeyExchange.generate_keypair('23')  # E: arg-type
+    ECDHEKeyExchange.compute_shared_secret(b'key', b'peer')  # E: arg-type
+    ECDHEKeyExchange.parse_server_ecdhe_params('wire')  # E: arg-type
+    parsed = ECDHEKeyExchange.parse_server_ecdhe_params(b'wire')
+    if parsed is not None:
+        parsed['curve_id'] = b'23'  # E: typeddict-item
+    AESCipher.encrypt_cbc('plaintext', b'key', b'iv')  # E: arg-type
+    set_debug_level('verbose')  # E: arg-type
 
 
 def cookie_file_rejects(jar: Ja3RequestsCookieJar) -> None:

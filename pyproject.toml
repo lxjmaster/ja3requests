@@ -20,6 +20,8 @@ files = [
     "ja3requests/protocol/h2/hpack.py",
     "ja3requests/protocol/tls/client_hello_info.py",
     "ja3requests/protocol/tls/session_cache.py",
+    "ja3requests/protocol/tls/crypto.py",
+    "ja3requests/protocol/tls/debug.py",
 ]
 strict = true
 follow_imports = "silent"

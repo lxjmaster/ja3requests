@@ -1,6 +1,7 @@
 """Compile-only examples for a consumer of the installed, typed package."""
 
 import asyncio
+import hashlib
 from io import BytesIO
 from pathlib import Path
 from typing import (
@@ -39,6 +40,20 @@ from ja3requests.protocol.h2.hpack import (
 )
 from ja3requests.protocol.h2.huffman import huffman_decode, huffman_encode
 from ja3requests.protocol.tls.client_hello_info import inspect_client_hello
+from ja3requests.protocol.tls.crypto import (
+    AESCipher,
+    DHEKeyExchange,
+    ECDHEKeyExchange,
+    RSAKeyExchange,
+    TLSCrypto,
+    get_cipher_info,
+)
+from ja3requests.protocol.tls.debug import (
+    debug,
+    debug_hex,
+    get_debug_level,
+    set_debug_level,
+)
 from ja3requests.protocol.tls.session_cache import (
     TLS12Ticket,
     TLS13Ticket,
@@ -62,6 +77,7 @@ from ja3requests._async_utils import owner_task, phase_wait
 from ja3requests._cookie_file import load_cookie_file, save_cookie_file
 
 if TYPE_CHECKING:
+    from cryptography.hazmat.primitives.asymmetric import ec, x25519
     from ja3requests._typing import RequestDefaults
 
 
@@ -175,6 +191,36 @@ def utility_types(jar: Ja3RequestsCookieJar) -> None:
     assert_type(task, Task[str])
     assert_type(task.retry(), Union[str, int])
     assert_type(Retry().do(lambda: 'done', ValueError), Union[str, int])
+
+
+def tls_crypto_types(curve_id: int, wire: bytes) -> None:
+    assert_type(TLSCrypto.prf(wire, b'label', wire, 48), bytes)
+    assert_type(TLSCrypto.prf(wire, b'label', wire, 48, hash_algo='sha384'), bytes)
+    assert_type(
+        TLSCrypto.prf(wire, b'label', wire, 48, hash_algo=hashlib.sha384), bytes
+    )
+    assert_type(TLSCrypto.prf_hash_for_cipher_suite(0xC030)(wire).digest(), bytes)
+    assert_type(TLSCrypto.derive_keys(wire, 0xC02F), Dict[str, bytes])
+    assert_type(get_cipher_info(0xC030)['key_size'], int)
+    assert_type(get_cipher_info(0xC030)['is_aead'], bool)
+    assert_type(get_cipher_info(0xC030)['name'], str)
+    assert_type(ECDHEKeyExchange.get_curve(curve_id), Union[ec.EllipticCurve, str])
+    key, public = ECDHEKeyExchange.generate_keypair(curve_id)
+    assert_type(key, Union[ec.EllipticCurvePrivateKey, x25519.X25519PrivateKey])
+    assert_type(public, bytes)
+    assert_type(ECDHEKeyExchange.compute_shared_secret(key, public, curve_id), bytes)
+    parsed = ECDHEKeyExchange.parse_server_ecdhe_params(wire)
+    if parsed is not None:
+        assert_type(parsed['curve_id'], int)
+        assert_type(parsed['public_key'], bytes)
+        assert_type(parsed['remaining_offset'], int)
+    assert_type(DHEKeyExchange.generate_keypair(), Tuple[int, int])
+    assert_type(RSAKeyExchange.encrypt_premaster_secret(wire, wire), bytes)
+    assert_type(AESCipher.encrypt_gcm(wire, wire, wire), Tuple[bytes, bytes])
+    assert_type(debug('message'), None)
+    assert_type(debug_hex('wire', wire), None)
+    assert_type(set_debug_level(0), None)
+    assert_type(get_debug_level(), int)
 
 
 def cookie_file_types(jar: CookieJar, custom: Ja3RequestsCookieJar, path: Path) -> None:
