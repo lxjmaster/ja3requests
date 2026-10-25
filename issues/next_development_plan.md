@@ -1,5 +1,70 @@
 # Next Development Plan
 
+## TLS session-cache typing maintenance (2026-10-25)
+
+Status: **COMPLETE / UNREGISTERED**. The next continuation selects the
+existing internal-typing lane's TLS session-cache boundary, based on
+`64833bd022716c19c58d29607327a3a389cc19ff`. Focused mypy reproduced **38
+diagnostics** in `protocol/tls/session_cache.py`, the only selected runtime
+module. Preserve the existing in-memory cache and authenticated resumption
+policy; no persistence, new TLS feature or protocol configuration is selected.
+
+- [✅] Annotate session entries, TLS 1.2/1.3 tickets, optional lookup results,
+  expiry/age methods, insertion/removal and metadata forwarding. Add this
+  module to the strict gate, now twelve modules; no casts or ignores.
+- [✅] Verify executable AST equivalence after removing typing-only imports,
+  annotations and checker-only metadata, Python 3.7 grammar, formatting,
+  error-level lint, existing cache and TLS resumption unit/integration tests.
+- [✅] Verify independent installed artifacts and positive/negative consumers,
+  including 110 expected negative markers, complete tests and coverage.
+- [✅] Deliver scoped source/records to existing master, read back the commit
+  and verify Tests, Coverage, Lint, Documentation and Public typing for it.
+
+Retain the byte-based TLS 1.2 version fields, optional SNI/trust/expiry metadata,
+and existing insertion guards for empty/None identities and ticket secrets.
+The private TLS 1.2 keyword schema is checker-only, following project patterns;
+runtime dependencies and argument forwarding remain unchanged. Existing tests
+already cover capacity, expiry, trust binding, Session IDs and tickets, so reuse
+them and add installed typing examples for meaningful annotation boundaries.
+
+Work uses this workspace with serial edits and independent checks in parallel;
+no subagents or new workspace is needed. Preserve unrelated user files and all
+prior reports. The verifier owns and removes its install/staging roots. Retain
+`dist/post-2.6.0-session-cache-typing/acceptance-01` with its report, manifest,
+logs and candidate artifacts as unpublished development evidence. No release,
+version, tag, deployment or Issue mutation is selected. Use configured Git
+identity and scoped staging; recover within scope without rewriting history.
+Official plan-session binding remains unavailable from prior executions; keep
+UNREGISTERED without inventing a registry transition or substitute identity.
+
+Local acceptance passed: twelve strict modules; formatting for the three
+changed Python/consumer files; package-wide error-level Pylint; **94 cache and
+TLS 1.2/1.3 resumption unit/integration tests**. Executable AST matches `64833bd`
+after removing annotations, typing imports and checker-only metadata; Python
+3.7 grammar passed. The
+[independent artifact report](../dist/post-2.6.0-session-cache-typing/acceptance-01/verification.json)
+passed all ten commands: sdist-to-wheel, metadata/inventory, independent install,
+dependencies, smoke, installed consumers and **4,764 tests + 118 subtests**,
+with **92.7612% statement coverage**, zero failures/errors/skips and the one
+existing collection warning. All **110 negative type markers** passed. Current
+73 runtime module hashes and changed consumer/configuration inputs match the
+accepted snapshot. Command temporary roots and top-level staging were removed;
+retain reports, manifest, logs and both local candidate artifacts. The snapshot
+is based on `64833bd` and retains development version 2.6.0; it is not a release.
+
+Source delivery completed as `ef1c05a86bba7a011e8e1b1ec7bd67697dc2c01e`;
+remote master readback matches. All five exact-commit workflows passed:
+[Tests](https://github.com/lxjmaster/ja3requests/actions/runs/40166429529),
+[Coverage](https://github.com/lxjmaster/ja3requests/actions/runs/40166429566),
+[Lint](https://github.com/lxjmaster/ja3requests/actions/runs/40166429474),
+[Documentation](https://github.com/lxjmaster/ja3requests/actions/runs/40166429504),
+[Public typing](https://github.com/lxjmaster/ja3requests/actions/runs/40166429503).
+Tests includes Python 3.7-3.13 and the wheel job, all successful. A subsequent
+record-only commit carries this completion evidence and is identified by Git
+history and its own workflows. No required implementation, verification or
+temporary-resource work remains; prior user files and reports are preserved.
+No release, tag, deployment or Issue mutation was performed.
+
 ## Shared utility typing maintenance (2026-10-25)
 
 Status: **COMPLETE / UNREGISTERED**. The next continuation selects the
