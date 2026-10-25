@@ -1,5 +1,86 @@
 # Next Development Plan
 
+## Async lifecycle typing maintenance (2026-10-25)
+
+Status: **COMPLETE / UNREGISTERED**. The next continuation advances the
+existing incremental internal-typing lane from delivered request defaults to
+the confined async lifecycle helpers and their required exception boundary.
+Baseline: `0c001e0f24c135863a3f18619ef184b70a8cbfbf`. Focused mypy found
+three diagnostics in `_async_utils.py` and one missing constructor annotation
+in `exceptions.py`. New protocol capabilities and convenience APIs retain
+their independent entry conditions.
+
+- [✅] Annotate the existing exception forwarding boundary and async timeout
+  phase metadata; preserve generic coroutine/task results. Add both modules
+  to the required strict set, now ten modules, without ignores or casts.
+- [✅] Check executable AST equivalence to the baseline after stripping
+  annotations/typing imports, Python 3.7 grammar, formatting and strict mypy.
+- [✅] Verify direct context/result/cancellation/exception-metadata boundaries,
+  affected async integration behavior, error-level lint and independent
+  installed consumer/package acceptance.
+- [✅] Reconcile the exact delivery scope, repository delivery and new-commit
+  Tests/Coverage/Lint/Documentation/Public typing results.
+
+Use the existing workspace and configured Git identity; stage only this batch.
+Preserve user files, historical evidence and published 2.6.0. Retain a new local
+artifact report under `dist/post-2.6.0-async-typing/acceptance-01`; its version
+is only a development candidate and must not overwrite the published package.
+The verifier owns and removes its staging/install environments. Work is serial
+apart from independent checks; no subagents, service or extra workspace is
+needed. Do not rewrite shared history or add a release, tag or deployment.
+Official plan session binding was unavailable in the preceding delivery;
+no registry transition or substitute identity is claimed here.
+
+Initial local acceptance passed: ten strict modules, Black for the five changed
+Python/test/consumer files, package-wide error-level Pylint and 231 focused
+tests. The two runtime files have unchanged executable ASTs after removing
+annotations/typing imports and pass Python 3.7 grammar. The independent
+[artifact report](../dist/post-2.6.0-async-typing/acceptance-01/verification.json)
+passed all ten commands, with **4,756 installed tests + 118 subtests**, zero
+failures/errors/skips and **92.7733% statement coverage**. The one collection
+warning is pre-existing. Positive installed consumers and all **89 expected
+negative markers** passed. Current hashes of all 73 runtime modules match.
+All command temporary roots and top-level staging were removed by the verifier;
+retain the report, manifest, logs and local candidate artifacts as evidence.
+This is a worktree snapshot based on `0c001e0`, not a newly published version.
+
+The first repository delivery, `a0fd4c7`, passed typing/lint/docs/coverage but
+its [Tests run](https://github.com/lxjmaster/ja3requests/actions/runs/40164958707)
+exposed two test assertions. Python 3.7's zero-budget `asyncio.wait_for` requests
+cancellation before the child has joined; the new helper test now explicitly
+awaits that cancellation before asserting terminal state. Python 3.12 hit the
+old client-certificate test's raw PSK-byte substring check in an opaque key
+share. A fixed `SessionTicketExtension(b'\x00\x29')` reproduced the false
+failure locally; the assertion now parses extension type/length boundaries,
+following the adjacent verified-ticket test, with both opaque/empty cases.
+These are test-only delivery fixes; runtime helper/exception bytes remain
+unchanged. The 17 affected tests and formatting passed. Preserve the initial
+CI failure and acceptance-01 as historical evidence; the final test snapshot
+is independently verified under acceptance-02 before delivery is closed.
+
+Final acceptance and source delivery are complete. The
+[final artifact report](../dist/post-2.6.0-async-typing/acceptance-02/verification.json)
+passed all ten commands, **4,757 installed tests + 118 subtests**, **92.7579%
+statement coverage** and all 89 negative type markers, with zero failures,
+errors or skips and one existing collection warning. Runtime/test/consumer
+hashes match the final snapshot; staging and command temporary roots were
+removed. Retain acceptance-02 alongside the initial report and failed CI so
+the test corrections remain auditable. Both snapshots are local unpublished
+2.6.0 development artifacts, not a version publication.
+
+The implementation was delivered as `a0fd4c7`, followed by test corrections
+in `283853f2e53fb310270945346d507b99ff85ac07`. Remote master was read back at
+that corrected source. All five exact-commit workflows passed:
+[Tests](https://github.com/lxjmaster/ja3requests/actions/runs/40165171141),
+[Coverage](https://github.com/lxjmaster/ja3requests/actions/runs/40165171108),
+[Lint](https://github.com/lxjmaster/ja3requests/actions/runs/40165171099),
+[Documentation](https://github.com/lxjmaster/ja3requests/actions/runs/40165171103),
+[Public typing](https://github.com/lxjmaster/ja3requests/actions/runs/40165171098).
+The remaining record-only commit carries this completion evidence; its Git
+history and workflows identify that later documentation revision. There are
+no remaining implementation, acceptance or temporary-resource obligations.
+No release/tag, Issue edits or site deployment were performed.
+
 ## P3 repository delivery selection (2026-10-25)
 
 After the local P1 -> P2 -> P3 completion below, the user's next continuation
