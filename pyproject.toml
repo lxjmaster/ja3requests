@@ -10,6 +10,7 @@ files = [
     "ja3requests/_typing.py",
     "ja3requests/_request_defaults.py",
     "ja3requests/_async_utils.py",
+    "ja3requests/_cookie_file.py",
     "ja3requests/exceptions.py",
     "ja3requests/utils.py",
     "ja3requests/__init__.py",

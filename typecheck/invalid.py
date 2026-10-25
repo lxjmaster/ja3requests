@@ -20,6 +20,7 @@ from ja3requests.protocol.h2.huffman import huffman_decode
 from ja3requests.protocol.tls.client_hello_info import inspect_client_hello
 from ja3requests.protocol.tls.session_cache import TLS12Ticket, TLSSessionCache
 from ja3requests._async_utils import owner_task, phase_wait
+from ja3requests._cookie_file import load_cookie_file, save_cookie_file
 from ja3requests.utils import (
     Task,
     b,
@@ -39,6 +40,17 @@ def utility_rejects() -> None:
     dict_from_cookie_string(123)  # E: arg-type
     Task(lambda: 'done', 'three', ValueError)  # E: arg-type
     Task(lambda: 'done', 3, 'ValueError')  # E: arg-type
+
+
+def cookie_file_rejects(jar: Ja3RequestsCookieJar) -> None:
+    save_cookie_file({}, 'cookies.json')  # E: arg-type
+    save_cookie_file(jar, b'cookies.json')  # E: arg-type
+    save_cookie_file(jar, 'cookies.json', include_session='yes')  # E: arg-type
+    load_cookie_file(jar, 42)  # E: arg-type
+    load_cookie_file(jar, 'cookies.json', merge='yes')  # E: arg-type
+    load_cookie_file(jar, 'cookies.json', include_session=1)  # E: arg-type
+    saved: str = save_cookie_file(jar, 'cookies.json')  # E: assignment
+    loaded: str = load_cookie_file(jar, 'cookies.json')  # E: assignment
 
 
 def session_cache_rejects(cache: TLSSessionCache) -> None:

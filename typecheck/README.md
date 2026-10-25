@@ -45,7 +45,7 @@ including `assert_type` checks that catch an accidental `Any` return. Every
 `# E:` line in `invalid.py` must produce its specific diagnostic; wrong URLs,
 timeouts, streaming options, upload tuples, callback returns, TLS configuration,
 Cookie values, and response return types are covered. The current consumers
-include 110 negative markers: async additions reject synchronous pools, incorrect
+include 118 negative markers: async additions reject synchronous pools, incorrect
 awaited return types, invalid budgets/iterators, text files and unsupported file tuples.
 Synchronous upload calls reject async iterators; async calls accept byte iterators
 and async byte iterators. Async multipart paths include `PathLike[str]`.
@@ -67,7 +67,7 @@ while withholding diagnostics from implementation bodies. It does **not** use
 The source gate strictly checks the aliases, top-level facade, retry policy,
 HTTP/2 frame values, HPACK header and Huffman codecs, and the ClientHello
 inspection schema.
-The strict set also includes request-default validation and merging, for twelve
+The strict set also includes request-default validation and merging, for thirteen
 source modules. Query-pair types preserve existing text-key, byte-key and mixed
 list/tuple inputs, including homogeneous typed lists; string-only configured
 default pairs keep their separate contract. Installed consumers cover those
@@ -96,6 +96,14 @@ identities rejected by existing cache insertion guards remain accepted inputs.
 TLS 1.2 ticket keyword metadata uses a checker-only schema; no optional typing
 dependency is imported at runtime. This migration does not add persistence or
 alter cache capacity, locking, expiry or authenticated resumption policy.
+Cookie-file persistence is strictly checked too, preserving CookieJar and
+text/PathLike paths, boolean options and integer counts. Checker-only views
+describe existing stdlib private storage/locks and the floating-point expiry
+clock; the narrow casts run only during type checking. Dynamic JSON records
+still pass through the existing complete validation before Cookie construction.
+Installed consumers check these internal helpers without establishing a public
+API; eight negative cases reject invalid jars, paths, options and result types.
+File format, atomic replacement and all-or-nothing loading are unchanged.
 The protocol modules are an incremental internal migration, not a claim that
 the full connection and TLS implementation is type-clean. Installed consumers
 also check precise protocol-value return types and eleven invalid protocol uses.

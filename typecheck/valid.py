@@ -59,6 +59,7 @@ from ja3requests.utils import (
 )
 from http.cookiejar import CookieJar
 from ja3requests._async_utils import owner_task, phase_wait
+from ja3requests._cookie_file import load_cookie_file, save_cookie_file
 
 if TYPE_CHECKING:
     from ja3requests._typing import RequestDefaults
@@ -174,6 +175,13 @@ def utility_types(jar: Ja3RequestsCookieJar) -> None:
     assert_type(task, Task[str])
     assert_type(task.retry(), Union[str, int])
     assert_type(Retry().do(lambda: 'done', ValueError), Union[str, int])
+
+
+def cookie_file_types(jar: CookieJar, custom: Ja3RequestsCookieJar, path: Path) -> None:
+    assert_type(save_cookie_file(jar, path), int)
+    assert_type(save_cookie_file(custom, 'cookies.json', include_session=True), int)
+    assert_type(load_cookie_file(jar, 'cookies.json'), int)
+    assert_type(load_cookie_file(custom, path, merge=True, include_session=True), int)
 
 
 def session_cache_types(host: str, port: int) -> None:

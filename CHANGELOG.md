@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add Cookie-file persistence to strict typing, preserving CookieJar inputs,
+  text/PathLike paths, boolean options and integer counts. File format,
+  validation, atomic writes and merge behavior are unchanged.
+
 - Add TLS session-cache entries and TLS 1.2/1.3 tickets to strict typing,
   preserving distinct optional lookup results and existing metadata/expiry
   contracts. Cache locking, eviction and resumption behavior are unchanged.

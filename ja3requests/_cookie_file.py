@@ -1,11 +1,32 @@
 """Versioned Cookie data files; no Session, policy or executable object state."""
 
+from __future__ import annotations
+
 import json
 import os
 import tempfile
 import time
 from http.cookiejar import Cookie, CookieJar
 from pathlib import Path
+from typing import TYPE_CHECKING, Dict, List, NoReturn, Optional, Tuple
+
+if TYPE_CHECKING:
+    from threading import RLock
+    from typing import cast
+
+    from ._typing import PathInput
+
+    # The stdlib stubs omit these existing attributes and restrict the clock
+    # argument to int, although Cookie.is_expired accepts time.time() values.
+    class _CookieState(Cookie):
+        _rest: Dict[str, object]
+
+        def is_expired(self, now: Optional[float] = None) -> bool: ...
+
+    class _CookieJarState(CookieJar):
+        _cookies_lock: RLock
+        _cookies: Dict[str, Dict[str, Dict[str, Cookie]]]
+
 
 MAX_FILE_BYTES = 1024 * 1024
 MAX_COOKIES = 3000
@@ -39,7 +60,7 @@ BOOLEAN_FIELDS = (
 )
 
 
-def _scalar(value):
+def _scalar(value: object) -> bool:
     if value is None or type(value) is bool:
         return True
     if type(value) is int:
@@ -50,7 +71,7 @@ def _scalar(value):
     return False
 
 
-def _parse_cookie(record):
+def _parse_cookie(record: object) -> Cookie:
     if not isinstance(record, dict) or set(record) != set(FIELDS) | {"rest"}:
         raise ValueError("Invalid cookie record fields")
     for field in BOOLEAN_FIELDS:
@@ -83,28 +104,36 @@ def _parse_cookie(record):
         raise ValueError("Invalid cookie record") from error
 
 
-def _eligible(cookie, include_session, now):
+def _eligible(cookie: Cookie, include_session: bool, now: float) -> bool:
+    if TYPE_CHECKING:
+        cookie = cast(_CookieState, cookie)
     return not cookie.is_expired(now) and (
         include_session or (not cookie.discard and cookie.expires is not None)
     )
 
 
-def _check_jar(jar, include_session):
+def _check_jar(jar: object, include_session: object) -> None:
     if not isinstance(jar, CookieJar):
         raise TypeError("Cookie file operations require a CookieJar")
     if type(include_session) is not bool:
         raise TypeError("include_session must be a bool")
 
 
-def save_cookie_file(jar, path, *, include_session=False):
+def save_cookie_file(
+    jar: CookieJar, path: PathInput, *, include_session: bool = False
+) -> int:
     """Save an atomic, private JSON snapshot; return the number saved."""
     _check_jar(jar, include_session)
+    if TYPE_CHECKING:
+        jar = cast(_CookieJarState, jar)
     now = time.time()
     records = []
     with jar._cookies_lock:
         for cookie in jar:
             if not _eligible(cookie, include_session, now):
                 continue
+            if TYPE_CHECKING:
+                cookie = cast(_CookieState, cookie)
             record = {field: getattr(cookie, field) for field in FIELDS}
             record["rest"] = dict(cookie._rest)
             _parse_cookie(record)
@@ -139,8 +168,8 @@ def save_cookie_file(jar, path, *, include_session=False):
     return len(records)
 
 
-def _object(pairs):
-    result = {}
+def _object(pairs: List[Tuple[str, object]]) -> Dict[str, object]:
+    result: Dict[str, object] = {}
     for key, value in pairs:
         if key in result:
             raise ValueError("Duplicate JSON field")
@@ -148,7 +177,7 @@ def _object(pairs):
     return result
 
 
-def _integer(value):
+def _integer(value: str) -> int:
     if len(value.lstrip("-")) > 19:
         raise ValueError("Cookie file integer exceeds limit")
     result = int(value)
@@ -157,13 +186,21 @@ def _integer(value):
     return result
 
 
-def _constant(_value):
+def _constant(_value: str) -> NoReturn:
     raise ValueError("Invalid JSON numeric constant")
 
 
-def load_cookie_file(jar, path, *, merge=False, include_session=False):
+def load_cookie_file(
+    jar: CookieJar,
+    path: PathInput,
+    *,
+    merge: bool = False,
+    include_session: bool = False,
+) -> int:
     """Validate the whole file before replacing/merging; return the number loaded."""
     _check_jar(jar, include_session)
+    if TYPE_CHECKING:
+        jar = cast(_CookieJarState, jar)
     if type(merge) is not bool:
         raise TypeError("merge must be a bool")
     with open(path, "rb") as source:
@@ -171,7 +208,7 @@ def load_cookie_file(jar, path, *, merge=False, include_session=False):
     if len(payload) > MAX_FILE_BYTES:
         raise ValueError("Cookie file exceeds size limit")
     try:
-        document = json.loads(
+        document: object = json.loads(
             payload.decode("utf-8"),
             object_pairs_hook=_object,
             parse_int=_integer,
