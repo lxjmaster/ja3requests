@@ -1,5 +1,240 @@
 # Next Development Plan
 
+## Ordered execution: N1 -> N2 -> N3 (2026-10-25)
+
+Status: **SOURCE AND DESIGN COMPLETE / UNREGISTERED**. The user selected the recommended
+sequence with "proceed in order". This is the current execution entry point;
+the forward plan below retains the preparation baseline. Execute N1, N2a,
+N2b when representable without runtime compatibility changes, then N3's design
+deliverable. N4 and the conditional feature register remain proposals until the
+post-N2 checkpoint establishes an actual need. No timeout implementation,
+version/release/tag, deployment or Issue changes are selected.
+
+- [✅] N1: resolve the four synchronous pool diagnostics, include the module in
+  strict checking and verify precise installed reservation types (146 negative
+  markers), unchanged executable AST, pool tests and an independent artifact.
+- [✅] N2a: inventory actual decoder/parser/property contracts and compatible
+  checker interfaces before annotating the synchronous response boundary.
+- N2b: **DEFERRED AT CONDITIONAL ENTRY**. Full-module response migration
+  requires a property/inheritance compatibility decision; no response
+  implementation was applied or claimed complete. The conditional selection
+  does not authorize changing the runtime contract to satisfy the checker.
+- [✅] N3: deliver a timeout behavior matrix, recommended policy, migration
+  boundary and deterministic acceptance cases; keep runtime changes unselected.
+- [✅] Deliver N1 source with exact remote readback and five actual-commit
+  workflows; reconcile source acceptance, evidence and task-owned cleanup.
+
+Reuse this workspace with serial writes and independent read-only checks in
+parallel; no subagents. Preserve the existing plan and unrelated user files.
+Use configured Git identity and normal scoped commits/pushes to existing master,
+without history rewriting. Each source batch owns a fresh verifier output;
+retain reports/logs/manifests and unpublished candidates while the verifier
+removes temporary installs/staging. N1 output:
+`dist/post-2.6.0-sync-pool-typing/acceptance-01`. Registry binding remains
+unavailable from the observed status failure; do not invent an identity.
+
+### N1 acceptance and source delivery
+
+N1 changed only annotations in `pool.py`, strict configuration, installed
+consumers and associated guidance. Eighteen source modules pass strict mypy;
+all **146 negative markers** match. Black for the three changed Python files,
+all-package error-level Pylint and **71 pool/H2/generation tests** passed.
+The executable AST matches `a227d02` after stripping annotations and typing
+imports; Python 3.7 grammar passed.
+The post-N2 checkpoint reports **1,905 full-package diagnostics in 46 files**
+(73 source files checked), exactly four fewer than the planning baseline;
+the synchronous pool contributes none. The full package is still not type-clean.
+
+The [independent artifact report](../dist/post-2.6.0-sync-pool-typing/acceptance-01/verification.json)
+passed all ten commands, installed consumers and **4,764 runtime tests + 118
+subtests**, with **92.7629% statement coverage**, no failures/errors/skips and
+the one existing collection warning. The 73 current runtime module hashes and
+all six changed source/configuration/consumer/guide inputs match the accepted
+snapshot. Command temporary roots and top-level staging were removed; retain
+the report, source manifest, logs and two unpublished development candidates.
+
+Source commit `e28ee3302679455decd6348c89cf9f23b76fe2b0` was pushed normally
+to master and read back. Its exact-commit workflows all passed:
+[Tests](https://github.com/lxjmaster/ja3requests/actions/runs/40181089836),
+[Coverage](https://github.com/lxjmaster/ja3requests/actions/runs/40181089845),
+[Lint](https://github.com/lxjmaster/ja3requests/actions/runs/40181089921),
+[Documentation](https://github.com/lxjmaster/ja3requests/actions/runs/40181089914),
+[Public typing](https://github.com/lxjmaster/ja3requests/actions/runs/40181089865).
+Tests includes the Python 3.7-3.13 matrix and wheel job. This completion record
+and the two designs are a subsequent documentary delivery, identified by Git
+history and its own exact-commit workflows; source CI is not substituted for
+that final record commit's CI.
+
+### N2 compatibility disposition and N3 design
+
+The [response contract inventory](response_typing_contract.md) records actual
+BaseResponse/HTTPResponse writable fields, Response getter-only overrides,
+empty-response behavior, shared decoder/Brotli requirements and the isolated
+strict-checker reproduction. Focused checks still report 24 response and 13
+base-response diagnostics. Full-module N2b eligibility is not met under the
+annotation-only boundary. Preserve behavior; separately select a hierarchy
+compatibility design or a smaller decoder/parser-only increment to resume it.
+No checker suppression or substitute base was introduced.
+
+The [timeout consistency design](timeout_consistency_design.md) completes N3:
+the route/phase matrix, two approaches, recommended opt-in Session read policy,
+prepared/retry/redirect snapshot rules and deterministic acceptance cases.
+In-memory probes exercise actual H1 send methods without networking. The new
+policy is proposed, not implemented or tested as a runtime feature. Response
+compatibility and future timeout implementation are independent choices.
+
+The next useful decision is a separately selected phase-policy implementation
+or response compatibility increment, based on the two concrete designs. N4 is
+not automatically activated. Required N1 implementation and the selected N2a/N3
+analysis deliverables are complete; N2b's failed entry condition remains
+explicit. The isolated checker reproduction removed its own temporary root;
+no design probe created a listener, persistent worker or environment. No
+release/tag/deployment, timeout behavior change or Issue mutation occurred.
+The three planning/design documents passed 19 local link/anchor checks,
+Python 3.7 grammar for the checker example, whitespace checks and scoped diff
+review. Runtime acceptance was reused for unchanged source after N1.
+
+## Forward plan after async response acceptance (2026-10-25)
+
+Status: **PLANNING COMPLETE / UNREGISTERED**. This section is the historical
+planning entry point, followed by the ordered execution above. The requested
+outcome was a reconciled, actionable queue;
+the proposed implementation rows below had not started at preparation. Earlier dated records
+retain their original snapshots, unchecked historical rows and delivery scopes.
+They do not reopen completed work or authorize new publication or remote edits.
+
+### Verified baseline
+
+- Local and remote master match `a227d025563b26957afac3bf310cb0cf0a9c97ff`.
+  No tracked source changes were pending before this planning pass. Preserve
+  the existing untracked IDE files, manual scripts and historical release notes.
+- The latest GitHub release is [v2.6.0](https://github.com/lxjmaster/ja3requests/releases/tag/v2.6.0),
+  published 2026-10-23. The later Unreleased typing batches are repository
+  maintenance; their local version-2.6.0 candidates are not published artifacts.
+- GitHub reports **zero open Issues and zero open PRs**. The five historical
+  requirements are already closed with [acceptance evidence](issue_acceptance_2026_10_25.md).
+  Public typing, native async, streaming, benchmarks and documentation are
+  delivered capabilities; their optional extensions remain separate candidates.
+- The required strict gate contains **17 modules**, with **144 negative consumer
+  markers**. The last [independent artifact acceptance](../dist/post-2.6.0-async-response-typing/acceptance-01/verification.json)
+  passed **4,764 runtime tests + 118 subtests**, with **92.7629% coverage**.
+  Both latest source and record commits passed their five required workflows.
+  These are retained results; this planning pass did not rerun runtime acceptance.
+- Fresh full-package mypy on this baseline reports **1,909 diagnostics in 47
+  files, checking 73 source files**. Of these, 572 are missing annotations and
+  812 are calls into untyped functions. Counts are migration evidence, not
+  proof of 1,909 runtime bugs or a package-release blocker.
+
+### Recommended sequence and batch boundaries
+
+Recommendation: **N1 -> N2a -> N2b when compatible -> N3**, then reassess against
+an actual consumer workflow. N1 and N2 finish the synchronous pool/response
+counterparts of the recent async maintenance. N3 gives the next functional
+increment an explicit compatibility decision. Do not automatically extend this
+sequence until the entire package is type-clean.
+
+| Order | Outcome / current evidence | Exact work boundary | Acceptance and dependency |
+| --- | --- | --- | --- |
+| N1 | Synchronous pool typing; 4 focused diagnostics | `pool.py`: H2 creation reservations, generation ownership and idle-connection deque types | Selected module passes strict mypy and joins the gate; preserve locks, admission, H2 sharing and generation handling. Independent of N2/N3; recommended next implementation |
+| N2a | Response contract inventory; 24 diagnostics in `response.py`, 13 in `base/__response.py` | Trace decoder variants, generator close, nullable parser state and base/derived property setters. Establish a bounded Brotli static interface | Record existing readable/writable properties and empty-response behavior; identify annotation-only fixes and genuine compatibility decisions before N2b. Depends only on current response evidence |
+| N2b | Synchronous response typing, after N2a | Annotate decoder/parser and directly required base contracts; retain existing exceptions, eager decode fallback and stream ownership | Add the whole module to the strict gate only when clean without suppression. Installed consumers cover generators and public properties. Any unrepresentable property contract returns to a separate compatibility decision; it is not silently redesigned |
+| N3 | Client timeout consistency design | First address documented synchronous direct-HTTPS `timeout=None` 15-second fallback versus unlimited async phase waits. Inventory direct/proxy H1/H2 and buffered/streaming paths | A behavior matrix, one recommended compatible policy, migration impact and deterministic test cases. No timeout implementation, total deadline or proxy rewrite is selected by this plan. Independent of N1/N2 |
+| N4 | Upload ownership typing, after the above checkpoint or a concrete upload need | Partition `_upload.py` (107), `_multipart.py` (67), `sockets/_upload.py` (47) and `_async_upload.py` (26 diagnostics) into source contracts, multipart values and exchange tasks | Establish source types first; migrate callers in separate bounded batches. Preserve borrowed handles, replay, early response and cancellation. Do not combine all four modules with Session/TLS cleanup |
+
+N2a is necessary because the current decoder stores different Brotli/zlib
+objects in one field, and derived read-only properties conflict with writable
+base properties. `requirements-typing.txt` currently provides no Brotli stubs.
+Choose a verified checker interface or suitable development-only stubs during
+that batch; do not suppress the import or assume a dependency models the
+installed output-buffer API. This is not evidence that decoding currently fails.
+
+The other large clusters remain visible: TLS core 161 diagnostics, async H2
+135, HTTPS sockets 128, TLS suites 123, TLS1.3 113, AsyncSession 102 and Session
+101. Small counts alone also do not make TLS `_io.py` (6) the best next batch:
+its decorated generator interface serves both sync and async handshake engines.
+Do not bundle these clusters into N1 or N2 to reduce a diagnostic total.
+
+### Per-batch acceptance and stop conditions
+
+- N1 tests: existing `test/test_pool.py`, `test/test_h2_pool.py` and
+  `test/test_pool_generation.py`, plus relevant pool/network regressions when
+  an affected path requires them. Add installed cases for newly precise
+  reservations/generation types only where they catch a meaningful error.
+- N2 tests: existing response, failure-state and streaming suites, plus async
+  response/streaming regressions because `_ContentDecoder` is shared. Cover
+  gzip/deflate/Brotli truncation, raw-deflate fallback, early close and uncached
+  consumption. Reuse current fixtures; add tests only for an actual gap.
+- Annotation-only work preserves executable AST, Python 3.7 grammar, error-level
+  lint and formatting. Keep current strict/installed consumer checks required;
+  do not lower settings, add broad Any or ignore directives to reach zero.
+- For each accepted source delivery, freeze one independent sdist-to-wheel
+  candidate, verify installed consumers/runtime tests and relevant hashes,
+  then require the five workflows for the actual delivered SHA when repository
+  delivery is selected. Python 3.7 grammar is not runtime matrix evidence.
+- Stop a batch at its specified boundary. New behavior or an incompatible
+  public contract requires its own explicit scope. After N2, review remaining
+  diagnostic counts and the next useful feature; a full-package zero-error
+  target is not assumed. No fixed calendar is promised for unstarted work.
+
+### Functional candidates and entry conditions
+
+These are proposals with no implementation dependency on package-wide typing.
+N3 is the recommended design step; the others start from a named need.
+
+| Candidate | Minimum entry condition | Bounded result / acceptance |
+| --- | --- | --- |
+| HTTP-date `Retry-After` | A server/workflow using date-valued retry hints | Shared parsing with deterministic clocks, past/invalid dates and numeric compatibility; sync/async waits and cancellation, without long real sleeps |
+| Header/query/proxy consistency | One chosen difference and migration policy | Treat empty headers, query `doseq` and proxy URL parsing as separate increments; preserve defaults, credential scope and existing callers |
+| Streaming async prepared requests | A concrete large-body inspection/signing workflow | Define source I/O timing, ownership, replay and concurrent-send restrictions first; reuse upload sources and preserve buffered prepared requests |
+| Async module-level helpers | A convenience-call use case | Start with eager responses and temporary-session cleanup on success/error/cancellation; streaming needs a separate owning-context contract |
+| Extra GREASE vectors | Need for supported-groups/versions wire controls | Refresh section 5 of the [bounded proposal](post_2_4_0_plan.md); keep defaults stable, validate HRR/resumption and pool policy with an independent installed peer |
+| Browser profile refresh | Exact browser version/platform and capable capture environment | Fresh retained TLS/H2 captures and explicit supported-subset comparison; do not infer current browser matching from historical Chrome 154/155 evidence |
+| Public response trailers | A consumer needing data after body EOF | Define immutable exposure and early-close behavior across HTTP1/H2 and sync/async readers |
+| Documentation hosting | Chosen host, public URL and version policy | Reuse the existing MkDocs site; verify deployed routes/assets/version labels |
+| Performance CI / fresh optimization | Chosen workload, runner and comparison policy or a reproduced current regression | Report repeated raw samples and variability first; historical results alone do not establish a current regression or justify a threshold |
+| Additional platforms | Named Python/OS/architecture or external peer | Verify dependency feasibility and installed network acceptance; existing Ubuntu matrix is not universal support evidence |
+
+Cross-process TLS sessions, additional legacy suites, H2 scheduling/push, 0-RTT,
+ECH/PQ and HTTP3 remain longer-term candidates. Each needs a real target and
+separate feasibility/ownership/compatibility criteria. Existing PRIORITY signals
+do not imply scheduling, and existing Cookie files do not persist TLS secrets.
+Completed TLS1.2 latency/read-ahead investigations, packaging removal, uploads,
+buffered preparation, headers/params defaults and historical Issue closure are
+not pending tasks merely because older records contain unchecked proposals.
+
+### Release, delivery and evidence retention
+
+The current maintenance commits can remain on master without a new release.
+A later selected maintenance release may group accepted batches; choose its
+version and source only then. Refresh compatibility notes and build/installed
+acceptance for that exact candidate. PyPI, GitHub release/tag creation and docs
+deployment each need their selected destination and action scope; none follows
+automatically from this planning pass. Never upload local 2.6.0 development
+candidates over the existing release.
+
+Keep one implementation batch active, using the existing workspace; independent
+read-only checks may run concurrently. No subagents or new workspace are needed.
+Preserve user files and historical artifacts. Reuse the large streaming-memory
+measurement for its recorded source; annotation-only batches do not require a
+new 1 GB run. Each future verifier removes its owned install/staging roots and
+retains its own manifest, logs and accepted candidates as evidence.
+
+### Completion of this planning pass
+
+- [✅] Refresh source/remote identity, open Issues/PRs and latest GitHub release.
+- [✅] Reproduce the full typing inventory and focused pool/response/upload
+  candidates; distinguish diagnostics from verified runtime defects.
+- [✅] Set the next batch, dependencies, compatibility checks, stop conditions,
+  functional entry requirements and release/retention boundaries.
+- [✅] Mark earlier sequence prose as historical and verify this plan's local
+  links, whitespace and isolated diff. No runtime source or workflow changed.
+
+`codex-plan status` still reports a missing official session binding. This file
+remains UNREGISTERED; no identity or successful registry transition is invented.
+This does not prevent delivering the reconciled local plan. N1-N4 and the
+conditional candidates above remain future proposals, not incomplete required
+implementation work of this planning request.
+
 ## Async response typing maintenance (2026-10-25)
 
 Status: **COMPLETE / UNREGISTERED**. Continue the internal-typing lane at
@@ -595,7 +830,9 @@ selected P1 -> P2 -> P3 execution. Optional capabilities remain proposals.
 ## Current sequence (2026-10-25)
 
 Status: **PLANNING AND LOCAL PREPARATION COMPLETE / UNREGISTERED**.
-This is the current entry point. The dated sections below preserve earlier
+This is a historical preparation snapshot, superseded by the selected execution
+above and the forward plan at the top of this file. The dated sections below
+preserve earlier
 selections and acceptance; their pending labels do not reopen completed work.
 The present request selects planning and local delivery preparation. Future
 repository delivery, Issue administration and runtime changes are identified
