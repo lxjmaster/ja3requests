@@ -3,6 +3,11 @@
 For the frozen 2.1.0 baseline and subsequent local TLS/async maintenance
 comparisons, see [post-2.1.0 results](POST_2_1_0_RESULTS.md).
 
+For the separate 100 MB / 1 GB sync/async streaming-memory matrix, isolated
+client RSS and Python allocation measurements, see
+[streaming memory acceptance](STREAMING_MEMORY.md). It does not replace or
+reinterpret the historical HTTP/1.1 baseline below.
+
 Run the existing source checkout through the public `ja3requests.Session` API.
 This small baseline addresses the first part of issue #40 and provides a before
 measurement for incremental streaming in #41. It does not complete the broader

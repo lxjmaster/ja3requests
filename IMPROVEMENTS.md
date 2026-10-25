@@ -69,8 +69,8 @@
 
 | Issue | 已交付证据与剩余边界 |
 | --- | --- |
-| [#36 公共类型](https://github.com/lxjmaster/ja3requests/issues/36) | 公共注解、`py.typed` 和安装后消费者类型检查已交付。2.6.0 后的本地批次补齐了 `response.py` 三个内部方法签名及允许失败的 CI `mypy ja3requests/` 全包诊断步骤，保留原有必需检查；详见[本批验收](issues/next_development_plan.md#post-260-typing-completion-2026-10-23)。后续已选定提交、推送和对应 CI 验证，结果以提交历史与该提交的工作流记录为准；不包含 Issue 关闭或新发布。全包仍有内部诊断，不将原始要求扩大为全部清零。 |
+| [#36 公共类型](https://github.com/lxjmaster/ja3requests/issues/36) | 公共注解、`py.typed` 和安装后消费者类型检查已交付。2.6.0 后补齐 `response.py` 三个内部方法签名及允许失败的全包 mypy 步骤，已在 `9af4cc7` 提交并推送，五项 CI 全部成功；详见[验收与 CI 链接](issues/issue_acceptance_2026_10_25.md#evidence-baseline)。全包仍有内部诊断，后续候选为 `_request_defaults.py` 的两项类型诊断；不将原始要求扩大为全部清零。远端 Issue 仍开放。 |
 | [#37 异步 API](https://github.com/lxjmaster/ja3requests/issues/37) | 原生异步、TLS/H2、连接池、hooks 和流式读写已交付，可进入核心能力核销。应说明顶层导出、`aiter_content`/`aiter_lines`、原生 socket 等待及自有池队列与原草案目录/StreamReader/Writer/Semaphore 的实现差异。模块级便捷函数、流式预备请求不是原始要求，不作为此 Issue 的完成门槛。 |
 | [#40 性能](https://github.com/lxjmaster/ja3requests/issues/40) | 基准工具、各原始性能类别、Requests 对照及指定源码/环境的历史报告已交付，已有非可选范围的核销依据。原文明确将性能 CI 标为可选；新版基准也需单独选择，不能把历史数字当成当前运行结果。 |
-| [#41 流式读取](https://github.com/lxjmaster/ja3requests/issues/41) | 增量读取、解码、背压和保留的 100 MiB 测试已交付；原始 1 GB / 内存不超过 `chunk_size` 指标尚未验证，现行契约也不作该保证，不能直接核销。需先约定进程基线、协议/解码缓冲和增量内存的测量口径，或明确调整原始标准，再对固定数据规模和配置验收。 |
+| [#41 流式读取](https://github.com/lxjmaster/ja3requests/issues/41) | 增量读取、解码及背压已交付。2026-10-23 按用户选定的有界流式口径完成本地 100,000,000 / 1,000,000,000 解码字节测量：同步/异步七路径共 28 案例、14 组比较全部通过，应用块最大 16 KiB，无整包缓存。客户端常驻内存（RSS）最大采样增量为 10,059,776 字节，跨规模最大增长为 2,539,520 字节；Python 分配、协议状态及局限见[测量报告](bench/STREAMING_MEMORY.md#accepted-local-run-2026-10-23)。运行时代码和公开契约未改，远端 Issue 原文未修改、未关闭；该结果不证明原字面要求“总内存不超过 `chunk_size`”，不能据此直接核销原标准。 |
 | [#42 文档](https://github.com/lxjmaster/ja3requests/issues/42) | 本地 MkDocs、自动 API、用户/架构/迁移指南、可运行示例和严格文档 CI 已交付，已有非可选内容范围的核销依据。原文明确将 GitHub Pages 部署标为可选；公开托管是独立事项，不作为此 Issue 的完成门槛。 |

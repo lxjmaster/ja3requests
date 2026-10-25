@@ -1,3 +1,4 @@
 # Optional development measurements; never a ja3requests runtime dependency.
 pytest-benchmark>=5,<6
 requests>=2.31,<3
+psutil>=7,<8

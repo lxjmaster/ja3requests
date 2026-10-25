@@ -1,0 +1,3469 @@
+{
+  "body_sizes": [
+    100000000,
+    1000000000
+  ],
+  "budgets": {
+    "python_growth_bytes": 1048576,
+    "python_peak_increase_bytes": 16777216,
+    "rss_growth_bytes": 8388608,
+    "rss_increase_bytes": 67108864
+  },
+  "cases": [
+    {
+      "baseline_lifetime_rss_bytes": 43024384,
+      "body_cached": false,
+      "checkpoints": [
+        {
+          "python_current_bytes": 170378,
+          "python_peak_bytes": 265094,
+          "received_bytes": 25001984
+        },
+        {
+          "python_current_bytes": 170442,
+          "python_peak_bytes": 265094,
+          "received_bytes": 50003968
+        },
+        {
+          "python_current_bytes": 170506,
+          "python_peak_bytes": 265094,
+          "received_bytes": 75005952
+        },
+        {
+          "python_current_bytes": 162634,
+          "python_peak_bytes": 265094,
+          "received_bytes": 100000000
+        }
+      ],
+      "child_exit_code": 0,
+      "chunk_count": 6104,
+      "cleanup": {
+        "client_exited": true,
+        "peer_threads_stopped": true,
+        "reader_joined": true
+      },
+      "client_pid": 55636,
+      "config": {
+        "body_bytes": 100000000,
+        "case": "http-chunked",
+        "chunk_size": 16384,
+        "chunked": true,
+        "client": "sync",
+        "encoding": "identity",
+        "protocol": "http/1.1",
+        "sample_interval": 0.01,
+        "timeout": 180,
+        "tls": "plain"
+      },
+      "controller_pid": 55617,
+      "elapsed_seconds": 0.3257755828090012,
+      "first_chunk_received": true,
+      "lifetime_rss_bytes": 43778048,
+      "max_chunk_bytes": 16384,
+      "peer_connections": [
+        {
+          "alpn": null,
+          "cipher": null,
+          "connection_id": 1,
+          "max_pending_h2_streams": 0,
+          "requests": 1,
+          "server_handshake_seconds": 0.0,
+          "session_reused": false,
+          "tls_version": null
+        }
+      ],
+      "peer_errors": [],
+      "peer_responses": [
+        {
+          "body_bytes": 100000000,
+          "connection_id": 1,
+          "decoded_body_bytes": 100000000,
+          "decoded_bytes_sent": 100000000,
+          "encoded_body_bytes": 100000000,
+          "encoding": "identity",
+          "first_send_started": 1597067.565167958,
+          "framing": "chunked",
+          "gate_prefix_bytes_sent": 32768,
+          "gate_reached": true,
+          "last_send_completed": 1597067.672688333,
+          "last_send_started": 1597067.672663583,
+          "max_source_chunk_bytes": 16384,
+          "prefix_bytes": 32768,
+          "tail_release_requested": true,
+          "tail_released_before_complete": true,
+          "truncated": false
+        }
+      ],
+      "problems": [],
+      "protocol_limits_bytes": {
+        "decoder_deflate_probe": 65536,
+        "decoder_output": 16384,
+        "decoder_prefix": 65536,
+        "response_cache": 0
+      },
+      "protocol_observed_max_bytes": {
+        "decoder_deflate_probe": 0,
+        "decoder_output": 16384,
+        "decoder_prefix": 0,
+        "response_cache": 0
+      },
+      "python_baseline_bytes": 1119,
+      "python_current_bytes": 139098,
+      "python_peak_bytes": 265094,
+      "python_peak_increase_bytes": 263975,
+      "received_bytes": 100000000,
+      "rss_baseline_bytes": 43024384,
+      "rss_increase_bytes": 753664,
+      "rss_max_sample_gap_seconds": 0.01504945894703269,
+      "rss_peak_sampled_bytes": 43778048,
+      "rss_samples": 13,
+      "status": "passed",
+      "stderr": ""
+    },
+    {
+      "baseline_lifetime_rss_bytes": 42008576,
+      "body_cached": false,
+      "checkpoints": [
+        {
+          "python_current_bytes": 170378,
+          "python_peak_bytes": 265139,
+          "received_bytes": 250003456
+        },
+        {
+          "python_current_bytes": 170442,
+          "python_peak_bytes": 265139,
+          "received_bytes": 500014112
+        },
+        {
+          "python_current_bytes": 170506,
+          "python_peak_bytes": 265139,
+          "received_bytes": 750001184
+        },
+        {
+          "python_current_bytes": 165930,
+          "python_peak_bytes": 265139,
+          "received_bytes": 1000000000
+        }
+      ],
+      "child_exit_code": 0,
+      "chunk_count": 61036,
+      "cleanup": {
+        "client_exited": true,
+        "peer_threads_stopped": true,
+        "reader_joined": true
+      },
+      "client_pid": 55637,
+      "config": {
+        "body_bytes": 1000000000,
+        "case": "http-chunked",
+        "chunk_size": 16384,
+        "chunked": true,
+        "client": "sync",
+        "encoding": "identity",
+        "protocol": "http/1.1",
+        "sample_interval": 0.01,
+        "timeout": 180,
+        "tls": "plain"
+      },
+      "controller_pid": 55617,
+      "elapsed_seconds": 1.2253020841162652,
+      "first_chunk_received": true,
+      "lifetime_rss_bytes": 42745856,
+      "max_chunk_bytes": 16384,
+      "peer_connections": [
+        {
+          "alpn": null,
+          "cipher": null,
+          "connection_id": 1,
+          "max_pending_h2_streams": 0,
+          "requests": 1,
+          "server_handshake_seconds": 0.0,
+          "session_reused": false,
+          "tls_version": null
+        }
+      ],
+      "peer_errors": [],
+      "peer_responses": [
+        {
+          "body_bytes": 1000000000,
+          "connection_id": 1,
+          "decoded_body_bytes": 1000000000,
+          "decoded_bytes_sent": 1000000000,
+          "encoded_body_bytes": 1000000000,
+          "encoding": "identity",
+          "first_send_started": 1597067.876576291,
+          "framing": "chunked",
+          "gate_prefix_bytes_sent": 32768,
+          "gate_reached": true,
+          "last_send_completed": 1597068.952903416,
+          "last_send_started": 1597068.952877666,
+          "max_source_chunk_bytes": 16384,
+          "prefix_bytes": 32768,
+          "tail_release_requested": true,
+          "tail_released_before_complete": true,
+          "truncated": false
+        }
+      ],
+      "problems": [],
+      "protocol_limits_bytes": {
+        "decoder_deflate_probe": 65536,
+        "decoder_output": 16384,
+        "decoder_prefix": 65536,
+        "response_cache": 0
+      },
+      "protocol_observed_max_bytes": {
+        "decoder_deflate_probe": 0,
+        "decoder_output": 16384,
+        "decoder_prefix": 0,
+        "response_cache": 0
+      },
+      "python_baseline_bytes": 1119,
+      "python_current_bytes": 139098,
+      "python_peak_bytes": 265139,
+      "python_peak_increase_bytes": 264020,
+      "received_bytes": 1000000000,
+      "rss_baseline_bytes": 42024960,
+      "rss_increase_bytes": 622592,
+      "rss_max_sample_gap_seconds": 0.015098958974704146,
+      "rss_peak_sampled_bytes": 42647552,
+      "rss_samples": 82,
+      "status": "passed",
+      "stderr": ""
+    },
+    {
+      "baseline_lifetime_rss_bytes": 42041344,
+      "body_cached": false,
+      "checkpoints": [
+        {
+          "python_current_bytes": 449874,
+          "python_peak_bytes": 516789,
+          "received_bytes": 25001984
+        },
+        {
+          "python_current_bytes": 449938,
+          "python_peak_bytes": 516789,
+          "received_bytes": 50003968
+        },
+        {
+          "python_current_bytes": 450002,
+          "python_peak_bytes": 516789,
+          "received_bytes": 75005952
+        },
+        {
+          "python_current_bytes": 427565,
+          "python_peak_bytes": 516789,
+          "received_bytes": 100000000
+        }
+      ],
+      "child_exit_code": 0,
+      "chunk_count": 6104,
+      "cleanup": {
+        "client_exited": true,
+        "peer_threads_stopped": true,
+        "reader_joined": true
+      },
+      "client_pid": 55657,
+      "config": {
+        "body_bytes": 100000000,
+        "case": "tls12-http1",
+        "chunk_size": 16384,
+        "chunked": false,
+        "client": "sync",
+        "encoding": "identity",
+        "protocol": "http/1.1",
+        "sample_interval": 0.01,
+        "timeout": 180,
+        "tls": "TLSv1.2"
+      },
+      "controller_pid": 55617,
+      "elapsed_seconds": 0.511244332883507,
+      "first_chunk_received": true,
+      "lifetime_rss_bytes": 48103424,
+      "max_chunk_bytes": 16384,
+      "peer_connections": [
+        {
+          "alpn": "http/1.1",
+          "cipher": "ECDHE-RSA-AES128-GCM-SHA256",
+          "connection_id": 1,
+          "max_pending_h2_streams": 0,
+          "requests": 1,
+          "server_handshake_seconds": 0.012005541007965803,
+          "session_reused": false,
+          "tls_version": "TLSv1.2"
+        }
+      ],
+      "peer_errors": [],
+      "peer_responses": [
+        {
+          "body_bytes": 100000000,
+          "connection_id": 1,
+          "decoded_body_bytes": 100000000,
+          "decoded_bytes_sent": 100000000,
+          "encoded_body_bytes": 100000000,
+          "encoding": "identity",
+          "first_send_started": 1597069.116108416,
+          "framing": "content-length",
+          "gate_prefix_bytes_sent": 32768,
+          "gate_reached": true,
+          "last_send_completed": 1597069.412973916,
+          "last_send_started": 1597069.412954875,
+          "max_source_chunk_bytes": 16384,
+          "prefix_bytes": 32768,
+          "tail_release_requested": true,
+          "tail_released_before_complete": true,
+          "truncated": false
+        }
+      ],
+      "problems": [],
+      "protocol_limits_bytes": {
+        "decoder_deflate_probe": 65536,
+        "decoder_output": 16384,
+        "decoder_prefix": 65536,
+        "response_cache": 0,
+        "sync_reader_pending": 65536
+      },
+      "protocol_observed_max_bytes": {
+        "decoder_deflate_probe": 0,
+        "decoder_output": 16384,
+        "decoder_prefix": 0,
+        "response_cache": 0,
+        "sync_reader_pending": 0
+      },
+      "python_baseline_bytes": 1119,
+      "python_current_bytes": 411386,
+      "python_peak_bytes": 516789,
+      "python_peak_increase_bytes": 515670,
+      "received_bytes": 100000000,
+      "rss_baseline_bytes": 42041344,
+      "rss_increase_bytes": 6062080,
+      "rss_max_sample_gap_seconds": 0.015091125154867768,
+      "rss_peak_sampled_bytes": 48103424,
+      "rss_samples": 27,
+      "status": "passed",
+      "stderr": ""
+    },
+    {
+      "baseline_lifetime_rss_bytes": 42565632,
+      "body_cached": false,
+      "checkpoints": [
+        {
+          "python_current_bytes": 449700,
+          "python_peak_bytes": 516615,
+          "received_bytes": 250003456
+        },
+        {
+          "python_current_bytes": 449764,
+          "python_peak_bytes": 516615,
+          "received_bytes": 500006912
+        },
+        {
+          "python_current_bytes": 449828,
+          "python_peak_bytes": 516615,
+          "received_bytes": 750010368
+        },
+        {
+          "python_current_bytes": 421412,
+          "python_peak_bytes": 516615,
+          "received_bytes": 1000000000
+        }
+      ],
+      "child_exit_code": 0,
+      "chunk_count": 61036,
+      "cleanup": {
+        "client_exited": true,
+        "peer_threads_stopped": true,
+        "reader_joined": true
+      },
+      "client_pid": 55658,
+      "config": {
+        "body_bytes": 1000000000,
+        "case": "tls12-http1",
+        "chunk_size": 16384,
+        "chunked": false,
+        "client": "sync",
+        "encoding": "identity",
+        "protocol": "http/1.1",
+        "sample_interval": 0.01,
+        "timeout": 180,
+        "tls": "TLSv1.2"
+      },
+      "controller_pid": 55617,
+      "elapsed_seconds": 3.1593432910740376,
+      "first_chunk_received": true,
+      "lifetime_rss_bytes": 48316416,
+      "max_chunk_bytes": 16384,
+      "peer_connections": [
+        {
+          "alpn": "http/1.1",
+          "cipher": "ECDHE-RSA-AES128-GCM-SHA256",
+          "connection_id": 1,
+          "max_pending_h2_streams": 0,
+          "requests": 1,
+          "server_handshake_seconds": 0.008469500113278627,
+          "session_reused": false,
+          "tls_version": "TLSv1.2"
+        }
+      ],
+      "peer_errors": [],
+      "peer_responses": [
+        {
+          "body_bytes": 1000000000,
+          "connection_id": 1,
+          "decoded_body_bytes": 1000000000,
+          "decoded_bytes_sent": 1000000000,
+          "encoded_body_bytes": 1000000000,
+          "encoding": "identity",
+          "first_send_started": 1597069.628820375,
+          "framing": "content-length",
+          "gate_prefix_bytes_sent": 32768,
+          "gate_reached": true,
+          "last_send_completed": 1597072.608287708,
+          "last_send_started": 1597072.608187875,
+          "max_source_chunk_bytes": 16384,
+          "prefix_bytes": 32768,
+          "tail_release_requested": true,
+          "tail_released_before_complete": true,
+          "truncated": false
+        }
+      ],
+      "problems": [],
+      "protocol_limits_bytes": {
+        "decoder_deflate_probe": 65536,
+        "decoder_output": 16384,
+        "decoder_prefix": 65536,
+        "response_cache": 0,
+        "sync_reader_pending": 65536
+      },
+      "protocol_observed_max_bytes": {
+        "decoder_deflate_probe": 0,
+        "decoder_output": 16384,
+        "decoder_prefix": 0,
+        "response_cache": 0,
+        "sync_reader_pending": 0
+      },
+      "python_baseline_bytes": 1119,
+      "python_current_bytes": 411156,
+      "python_peak_bytes": 516615,
+      "python_peak_increase_bytes": 515496,
+      "received_bytes": 1000000000,
+      "rss_baseline_bytes": 42582016,
+      "rss_increase_bytes": 5734400,
+      "rss_max_sample_gap_seconds": 0.015159707982093096,
+      "rss_peak_sampled_bytes": 48316416,
+      "rss_samples": 223,
+      "status": "passed",
+      "stderr": ""
+    },
+    {
+      "baseline_lifetime_rss_bytes": 42582016,
+      "body_cached": false,
+      "checkpoints": [
+        {
+          "python_current_bytes": 560186,
+          "python_peak_bytes": 626047,
+          "received_bytes": 25001984
+        },
+        {
+          "python_current_bytes": 560250,
+          "python_peak_bytes": 626047,
+          "received_bytes": 50003968
+        },
+        {
+          "python_current_bytes": 560314,
+          "python_peak_bytes": 626047,
+          "received_bytes": 75005952
+        },
+        {
+          "python_current_bytes": 544186,
+          "python_peak_bytes": 626071,
+          "received_bytes": 100000000
+        }
+      ],
+      "child_exit_code": 0,
+      "chunk_count": 6104,
+      "cleanup": {
+        "client_exited": true,
+        "peer_threads_stopped": true,
+        "reader_joined": true
+      },
+      "client_pid": 55686,
+      "config": {
+        "body_bytes": 100000000,
+        "case": "tls13-http1",
+        "chunk_size": 16384,
+        "chunked": false,
+        "client": "sync",
+        "encoding": "identity",
+        "protocol": "http/1.1",
+        "sample_interval": 0.01,
+        "timeout": 180,
+        "tls": "TLSv1.3"
+      },
+      "controller_pid": 55617,
+      "elapsed_seconds": 0.4142275839112699,
+      "first_chunk_received": true,
+      "lifetime_rss_bytes": 48250880,
+      "max_chunk_bytes": 16384,
+      "peer_connections": [
+        {
+          "alpn": "http/1.1",
+          "cipher": "TLS_AES_256_GCM_SHA384",
+          "connection_id": 1,
+          "max_pending_h2_streams": 0,
+          "requests": 1,
+          "server_handshake_seconds": 0.009091250132769346,
+          "session_reused": false,
+          "tls_version": "TLSv1.3"
+        }
+      ],
+      "peer_errors": [],
+      "peer_responses": [
+        {
+          "body_bytes": 100000000,
+          "connection_id": 1,
+          "decoded_body_bytes": 100000000,
+          "decoded_bytes_sent": 100000000,
+          "encoded_body_bytes": 100000000,
+          "encoding": "identity",
+          "first_send_started": 1597072.788779666,
+          "framing": "content-length",
+          "gate_prefix_bytes_sent": 32768,
+          "gate_reached": true,
+          "last_send_completed": 1597072.9999765,
+          "last_send_started": 1597072.999954291,
+          "max_source_chunk_bytes": 16384,
+          "prefix_bytes": 32768,
+          "tail_release_requested": true,
+          "tail_released_before_complete": true,
+          "truncated": false
+        }
+      ],
+      "problems": [],
+      "protocol_limits_bytes": {
+        "decoder_deflate_probe": 65536,
+        "decoder_output": 16384,
+        "decoder_prefix": 65536,
+        "response_cache": 0,
+        "sync_reader_pending": 65536
+      },
+      "protocol_observed_max_bytes": {
+        "decoder_deflate_probe": 0,
+        "decoder_output": 16384,
+        "decoder_prefix": 0,
+        "response_cache": 0,
+        "sync_reader_pending": 0
+      },
+      "python_baseline_bytes": 1119,
+      "python_current_bytes": 528920,
+      "python_peak_bytes": 626071,
+      "python_peak_increase_bytes": 624952,
+      "received_bytes": 100000000,
+      "rss_baseline_bytes": 42598400,
+      "rss_increase_bytes": 5652480,
+      "rss_max_sample_gap_seconds": 0.015070749912410975,
+      "rss_peak_sampled_bytes": 48250880,
+      "rss_samples": 21,
+      "status": "passed",
+      "stderr": ""
+    },
+    {
+      "baseline_lifetime_rss_bytes": 41943040,
+      "body_cached": false,
+      "checkpoints": [
+        {
+          "python_current_bytes": 559736,
+          "python_peak_bytes": 625650,
+          "received_bytes": 250003456
+        },
+        {
+          "python_current_bytes": 559800,
+          "python_peak_bytes": 625650,
+          "received_bytes": 500006912
+        },
+        {
+          "python_current_bytes": 559864,
+          "python_peak_bytes": 625650,
+          "received_bytes": 750010368
+        },
+        {
+          "python_current_bytes": 537848,
+          "python_peak_bytes": 625650,
+          "received_bytes": 1000000000
+        }
+      ],
+      "child_exit_code": 0,
+      "chunk_count": 61036,
+      "cleanup": {
+        "client_exited": true,
+        "peer_threads_stopped": true,
+        "reader_joined": true
+      },
+      "client_pid": 55687,
+      "config": {
+        "body_bytes": 1000000000,
+        "case": "tls13-http1",
+        "chunk_size": 16384,
+        "chunked": false,
+        "client": "sync",
+        "encoding": "identity",
+        "protocol": "http/1.1",
+        "sample_interval": 0.01,
+        "timeout": 180,
+        "tls": "TLSv1.3"
+      },
+      "controller_pid": 55617,
+      "elapsed_seconds": 2.340774250216782,
+      "first_chunk_received": true,
+      "lifetime_rss_bytes": 48005120,
+      "max_chunk_bytes": 16384,
+      "peer_connections": [
+        {
+          "alpn": "http/1.1",
+          "cipher": "TLS_AES_256_GCM_SHA384",
+          "connection_id": 1,
+          "max_pending_h2_streams": 0,
+          "requests": 1,
+          "server_handshake_seconds": 0.008249874925240874,
+          "session_reused": false,
+          "tls_version": "TLSv1.3"
+        }
+      ],
+      "peer_errors": [],
+      "peer_responses": [
+        {
+          "body_bytes": 1000000000,
+          "connection_id": 1,
+          "decoded_body_bytes": 1000000000,
+          "decoded_bytes_sent": 1000000000,
+          "encoded_body_bytes": 1000000000,
+          "encoding": "identity",
+          "first_send_started": 1597073.197948875,
+          "framing": "content-length",
+          "gate_prefix_bytes_sent": 32768,
+          "gate_reached": true,
+          "last_send_completed": 1597075.326479,
+          "last_send_started": 1597075.32645725,
+          "max_source_chunk_bytes": 16384,
+          "prefix_bytes": 32768,
+          "tail_release_requested": true,
+          "tail_released_before_complete": true,
+          "truncated": false
+        }
+      ],
+      "problems": [],
+      "protocol_limits_bytes": {
+        "decoder_deflate_probe": 65536,
+        "decoder_output": 16384,
+        "decoder_prefix": 65536,
+        "response_cache": 0,
+        "sync_reader_pending": 65536
+      },
+      "protocol_observed_max_bytes": {
+        "decoder_deflate_probe": 0,
+        "decoder_output": 16384,
+        "decoder_prefix": 0,
+        "response_cache": 0,
+        "sync_reader_pending": 0
+      },
+      "python_baseline_bytes": 1119,
+      "python_current_bytes": 528465,
+      "python_peak_bytes": 625650,
+      "python_peak_increase_bytes": 624531,
+      "received_bytes": 1000000000,
+      "rss_baseline_bytes": 41959424,
+      "rss_increase_bytes": 6045696,
+      "rss_max_sample_gap_seconds": 0.01510662492364645,
+      "rss_peak_sampled_bytes": 48005120,
+      "rss_samples": 160,
+      "status": "passed",
+      "stderr": ""
+    },
+    {
+      "baseline_lifetime_rss_bytes": 42827776,
+      "body_cached": false,
+      "checkpoints": [
+        {
+          "python_current_bytes": 658821,
+          "python_peak_bytes": 779968,
+          "received_bytes": 25001669
+        },
+        {
+          "python_current_bytes": 707897,
+          "python_peak_bytes": 780032,
+          "received_bytes": 50003345
+        },
+        {
+          "python_current_bytes": 708082,
+          "python_peak_bytes": 780032,
+          "received_bytes": 75005022
+        },
+        {
+          "python_current_bytes": 629127,
+          "python_peak_bytes": 780032,
+          "received_bytes": 100000000
+        }
+      ],
+      "child_exit_code": 0,
+      "chunk_count": 6104,
+      "cleanup": {
+        "client_exited": true,
+        "peer_threads_stopped": true,
+        "reader_joined": true
+      },
+      "client_pid": 55700,
+      "config": {
+        "body_bytes": 100000000,
+        "case": "tls13-h2",
+        "chunk_size": 16384,
+        "chunked": false,
+        "client": "sync",
+        "encoding": "identity",
+        "protocol": "h2",
+        "sample_interval": 0.01,
+        "timeout": 180,
+        "tls": "TLSv1.3"
+      },
+      "controller_pid": 55617,
+      "elapsed_seconds": 1.0188173330388963,
+      "first_chunk_received": true,
+      "lifetime_rss_bytes": 49807360,
+      "max_chunk_bytes": 16384,
+      "peer_connections": [
+        {
+          "alpn": "h2",
+          "cipher": "TLS_AES_256_GCM_SHA384",
+          "connection_id": 1,
+          "max_pending_h2_streams": 1,
+          "requests": 1,
+          "server_handshake_seconds": 0.00795904197730124,
+          "session_reused": false,
+          "tls_version": "TLSv1.3"
+        }
+      ],
+      "peer_errors": [],
+      "peer_responses": [
+        {
+          "body_bytes": 100000000,
+          "connection_id": 1,
+          "decoded_body_bytes": 100000000,
+          "decoded_bytes_sent": 100000000,
+          "encoded_body_bytes": 100000000,
+          "encoding": "identity",
+          "first_send_started": 1597075.541314666,
+          "framing": "h2-data",
+          "gate_prefix_bytes_sent": 32768,
+          "gate_reached": true,
+          "last_send_completed": 1597076.405616833,
+          "last_send_started": 1597076.405593541,
+          "max_source_chunk_bytes": 16384,
+          "prefix_bytes": 32768,
+          "stream_id": 1,
+          "tail_release_requested": true,
+          "tail_released_before_complete": true,
+          "truncated": false
+        }
+      ],
+      "problems": [],
+      "protocol_limits_bytes": {
+        "decoder_deflate_probe": 65536,
+        "decoder_output": 16384,
+        "decoder_prefix": 65536,
+        "h2_data_queue": 131070,
+        "h2_stream_body": 65535,
+        "response_cache": 0,
+        "sync_reader_pending": 65536
+      },
+      "protocol_observed_max_bytes": {
+        "decoder_deflate_probe": 0,
+        "decoder_output": 16384,
+        "decoder_prefix": 0,
+        "h2_data_queue": 65535,
+        "h2_frame_pending": 0,
+        "h2_stream_body": 65535,
+        "response_cache": 0,
+        "sync_reader_pending": 0
+      },
+      "python_baseline_bytes": 1119,
+      "python_current_bytes": 605045,
+      "python_peak_bytes": 780032,
+      "python_peak_increase_bytes": 778913,
+      "received_bytes": 100000000,
+      "rss_baseline_bytes": 42827776,
+      "rss_increase_bytes": 6979584,
+      "rss_max_sample_gap_seconds": 0.015088667161762714,
+      "rss_peak_sampled_bytes": 49807360,
+      "rss_samples": 71,
+      "status": "passed",
+      "stderr": ""
+    },
+    {
+      "baseline_lifetime_rss_bytes": 42336256,
+      "body_cached": false,
+      "checkpoints": [
+        {
+          "python_current_bytes": 641893,
+          "python_peak_bytes": 779534,
+          "received_bytes": 250000362
+        },
+        {
+          "python_current_bytes": 674815,
+          "python_peak_bytes": 779598,
+          "received_bytes": 500000709
+        },
+        {
+          "python_current_bytes": 674929,
+          "python_peak_bytes": 779662,
+          "received_bytes": 750001056
+        },
+        {
+          "python_current_bytes": 639265,
+          "python_peak_bytes": 779726,
+          "received_bytes": 1000000000
+        }
+      ],
+      "child_exit_code": 0,
+      "chunk_count": 61036,
+      "cleanup": {
+        "client_exited": true,
+        "peer_threads_stopped": true,
+        "reader_joined": true
+      },
+      "client_pid": 55705,
+      "config": {
+        "body_bytes": 1000000000,
+        "case": "tls13-h2",
+        "chunk_size": 16384,
+        "chunked": false,
+        "client": "sync",
+        "encoding": "identity",
+        "protocol": "h2",
+        "sample_interval": 0.01,
+        "timeout": 180,
+        "tls": "TLSv1.3"
+      },
+      "controller_pid": 55617,
+      "elapsed_seconds": 8.631573542021215,
+      "first_chunk_received": true,
+      "lifetime_rss_bytes": 50675712,
+      "max_chunk_bytes": 16384,
+      "peer_connections": [
+        {
+          "alpn": "h2",
+          "cipher": "TLS_AES_256_GCM_SHA384",
+          "connection_id": 1,
+          "max_pending_h2_streams": 1,
+          "requests": 1,
+          "server_handshake_seconds": 0.009004415944218636,
+          "session_reused": false,
+          "tls_version": "TLSv1.3"
+        }
+      ],
+      "peer_errors": [],
+      "peer_responses": [
+        {
+          "body_bytes": 1000000000,
+          "connection_id": 1,
+          "decoded_body_bytes": 1000000000,
+          "decoded_bytes_sent": 1000000000,
+          "encoded_body_bytes": 1000000000,
+          "encoding": "identity",
+          "first_send_started": 1597076.564163541,
+          "framing": "h2-data",
+          "gate_prefix_bytes_sent": 32768,
+          "gate_reached": true,
+          "last_send_completed": 1597085.047225041,
+          "last_send_started": 1597085.047200791,
+          "max_source_chunk_bytes": 16384,
+          "prefix_bytes": 32768,
+          "stream_id": 1,
+          "tail_release_requested": true,
+          "tail_released_before_complete": true,
+          "truncated": false
+        }
+      ],
+      "problems": [],
+      "protocol_limits_bytes": {
+        "decoder_deflate_probe": 65536,
+        "decoder_output": 16384,
+        "decoder_prefix": 65536,
+        "h2_data_queue": 131070,
+        "h2_stream_body": 65535,
+        "response_cache": 0,
+        "sync_reader_pending": 65536
+      },
+      "protocol_observed_max_bytes": {
+        "decoder_deflate_probe": 0,
+        "decoder_output": 16384,
+        "decoder_prefix": 0,
+        "h2_data_queue": 65535,
+        "h2_frame_pending": 0,
+        "h2_stream_body": 65535,
+        "response_cache": 0,
+        "sync_reader_pending": 0
+      },
+      "python_baseline_bytes": 1119,
+      "python_current_bytes": 609897,
+      "python_peak_bytes": 779726,
+      "python_peak_increase_bytes": 778607,
+      "received_bytes": 1000000000,
+      "rss_baseline_bytes": 42369024,
+      "rss_increase_bytes": 8306688,
+      "rss_max_sample_gap_seconds": 0.015099582960829139,
+      "rss_peak_sampled_bytes": 50675712,
+      "rss_samples": 637,
+      "status": "passed",
+      "stderr": ""
+    },
+    {
+      "baseline_lifetime_rss_bytes": 42532864,
+      "body_cached": false,
+      "checkpoints": [
+        {
+          "python_current_bytes": 215767,
+          "python_peak_bytes": 265139,
+          "received_bytes": 25000436
+        },
+        {
+          "python_current_bytes": 216182,
+          "python_peak_bytes": 265139,
+          "received_bytes": 50000356
+        },
+        {
+          "python_current_bytes": 216594,
+          "python_peak_bytes": 265139,
+          "received_bytes": 75001308
+        },
+        {
+          "python_current_bytes": 212899,
+          "python_peak_bytes": 265139,
+          "received_bytes": 100000000
+        }
+      ],
+      "child_exit_code": 0,
+      "chunk_count": 6104,
+      "cleanup": {
+        "client_exited": true,
+        "peer_threads_stopped": true,
+        "reader_joined": true
+      },
+      "client_pid": 55749,
+      "config": {
+        "body_bytes": 100000000,
+        "case": "gzip",
+        "chunk_size": 16384,
+        "chunked": true,
+        "client": "sync",
+        "encoding": "gzip",
+        "protocol": "http/1.1",
+        "sample_interval": 0.01,
+        "timeout": 180,
+        "tls": "plain"
+      },
+      "controller_pid": 55617,
+      "elapsed_seconds": 0.30978012504056096,
+      "first_chunk_received": true,
+      "lifetime_rss_bytes": 43892736,
+      "max_chunk_bytes": 16384,
+      "peer_connections": [
+        {
+          "alpn": null,
+          "cipher": null,
+          "connection_id": 1,
+          "max_pending_h2_streams": 0,
+          "requests": 1,
+          "server_handshake_seconds": 0.0,
+          "session_reused": false,
+          "tls_version": null
+        }
+      ],
+      "peer_errors": [],
+      "peer_responses": [
+        {
+          "body_bytes": 100000000,
+          "connection_id": 1,
+          "decoded_body_bytes": 100000000,
+          "decoded_bytes_sent": 100000000,
+          "encoded_body_bytes": 97238,
+          "encoding": "gzip",
+          "first_send_started": 1597085.186975583,
+          "framing": "chunked",
+          "gate_prefix_bytes_sent": 32768,
+          "gate_reached": true,
+          "last_send_completed": 1597085.357483875,
+          "last_send_started": 1597085.357437541,
+          "max_source_chunk_bytes": 16384,
+          "prefix_bytes": 32768,
+          "tail_release_requested": true,
+          "tail_released_before_complete": true,
+          "truncated": false
+        }
+      ],
+      "problems": [],
+      "protocol_limits_bytes": {
+        "decoder_deflate_probe": 65536,
+        "decoder_output": 16384,
+        "decoder_prefix": 65536,
+        "decoder_unconsumed_tail": 65536,
+        "decoder_unused_data": 65536,
+        "response_cache": 0
+      },
+      "protocol_observed_max_bytes": {
+        "decoder_deflate_probe": 0,
+        "decoder_output": 16384,
+        "decoder_prefix": 0,
+        "decoder_unconsumed_tail": 4080,
+        "decoder_unused_data": 0,
+        "response_cache": 0
+      },
+      "python_baseline_bytes": 1119,
+      "python_current_bytes": 139664,
+      "python_peak_bytes": 265139,
+      "python_peak_increase_bytes": 264020,
+      "received_bytes": 100000000,
+      "rss_baseline_bytes": 42614784,
+      "rss_increase_bytes": 1277952,
+      "rss_max_sample_gap_seconds": 0.015133125009015203,
+      "rss_peak_sampled_bytes": 43892736,
+      "rss_samples": 17,
+      "status": "passed",
+      "stderr": ""
+    },
+    {
+      "baseline_lifetime_rss_bytes": 42598400,
+      "body_cached": false,
+      "checkpoints": [
+        {
+          "python_current_bytes": 218914,
+          "python_peak_bytes": 265094,
+          "received_bytes": 250003844
+        },
+        {
+          "python_current_bytes": 218373,
+          "python_peak_bytes": 265094,
+          "received_bytes": 500008720
+        },
+        {
+          "python_current_bytes": 217834,
+          "python_peak_bytes": 265094,
+          "received_bytes": 750013596
+        },
+        {
+          "python_current_bytes": 212254,
+          "python_peak_bytes": 265094,
+          "received_bytes": 1000000000
+        }
+      ],
+      "child_exit_code": 0,
+      "chunk_count": 61039,
+      "cleanup": {
+        "client_exited": true,
+        "peer_threads_stopped": true,
+        "reader_joined": true
+      },
+      "client_pid": 55750,
+      "config": {
+        "body_bytes": 1000000000,
+        "case": "gzip",
+        "chunk_size": 16384,
+        "chunked": true,
+        "client": "sync",
+        "encoding": "gzip",
+        "protocol": "http/1.1",
+        "sample_interval": 0.01,
+        "timeout": 180,
+        "tls": "plain"
+      },
+      "controller_pid": 55617,
+      "elapsed_seconds": 1.8396082089748234,
+      "first_chunk_received": true,
+      "lifetime_rss_bytes": 43384832,
+      "max_chunk_bytes": 16384,
+      "peer_connections": [
+        {
+          "alpn": null,
+          "cipher": null,
+          "connection_id": 1,
+          "max_pending_h2_streams": 0,
+          "requests": 1,
+          "server_handshake_seconds": 0.0,
+          "session_reused": false,
+          "tls_version": null
+        }
+      ],
+      "peer_errors": [],
+      "peer_responses": [
+        {
+          "body_bytes": 1000000000,
+          "connection_id": 1,
+          "decoded_body_bytes": 1000000000,
+          "decoded_bytes_sent": 1000000000,
+          "encoded_body_bytes": 971993,
+          "encoding": "gzip",
+          "first_send_started": 1597085.496160541,
+          "framing": "chunked",
+          "gate_prefix_bytes_sent": 32768,
+          "gate_reached": true,
+          "last_send_completed": 1597087.185808666,
+          "last_send_started": 1597087.185780041,
+          "max_source_chunk_bytes": 16384,
+          "prefix_bytes": 32768,
+          "tail_release_requested": true,
+          "tail_released_before_complete": true,
+          "truncated": false
+        }
+      ],
+      "problems": [],
+      "protocol_limits_bytes": {
+        "decoder_deflate_probe": 65536,
+        "decoder_output": 16384,
+        "decoder_prefix": 65536,
+        "decoder_unconsumed_tail": 65536,
+        "decoder_unused_data": 65536,
+        "response_cache": 0
+      },
+      "protocol_observed_max_bytes": {
+        "decoder_deflate_probe": 0,
+        "decoder_output": 16384,
+        "decoder_prefix": 0,
+        "decoder_unconsumed_tail": 4080,
+        "decoder_unused_data": 0,
+        "response_cache": 0
+      },
+      "python_baseline_bytes": 1119,
+      "python_current_bytes": 139666,
+      "python_peak_bytes": 265094,
+      "python_peak_increase_bytes": 263975,
+      "received_bytes": 1000000000,
+      "rss_baseline_bytes": 42614784,
+      "rss_increase_bytes": 770048,
+      "rss_max_sample_gap_seconds": 0.015091124922037125,
+      "rss_peak_sampled_bytes": 43384832,
+      "rss_samples": 126,
+      "status": "passed",
+      "stderr": ""
+    },
+    {
+      "baseline_lifetime_rss_bytes": 43188224,
+      "body_cached": false,
+      "checkpoints": [
+        {
+          "python_current_bytes": 215778,
+          "python_peak_bytes": 265139,
+          "received_bytes": 25000436
+        },
+        {
+          "python_current_bytes": 216193,
+          "python_peak_bytes": 265139,
+          "received_bytes": 50000356
+        },
+        {
+          "python_current_bytes": 216605,
+          "python_peak_bytes": 265139,
+          "received_bytes": 75001308
+        },
+        {
+          "python_current_bytes": 212906,
+          "python_peak_bytes": 265139,
+          "received_bytes": 100000000
+        }
+      ],
+      "child_exit_code": 0,
+      "chunk_count": 6104,
+      "cleanup": {
+        "client_exited": true,
+        "peer_threads_stopped": true,
+        "reader_joined": true
+      },
+      "client_pid": 55765,
+      "config": {
+        "body_bytes": 100000000,
+        "case": "deflate",
+        "chunk_size": 16384,
+        "chunked": true,
+        "client": "sync",
+        "encoding": "deflate",
+        "protocol": "http/1.1",
+        "sample_interval": 0.01,
+        "timeout": 180,
+        "tls": "plain"
+      },
+      "controller_pid": 55617,
+      "elapsed_seconds": 0.3105196659453213,
+      "first_chunk_received": true,
+      "lifetime_rss_bytes": 43991040,
+      "max_chunk_bytes": 16384,
+      "peer_connections": [
+        {
+          "alpn": null,
+          "cipher": null,
+          "connection_id": 1,
+          "max_pending_h2_streams": 0,
+          "requests": 1,
+          "server_handshake_seconds": 0.0,
+          "session_reused": false,
+          "tls_version": null
+        }
+      ],
+      "peer_errors": [],
+      "peer_responses": [
+        {
+          "body_bytes": 100000000,
+          "connection_id": 1,
+          "decoded_body_bytes": 100000000,
+          "decoded_bytes_sent": 100000000,
+          "encoded_body_bytes": 97226,
+          "encoding": "deflate",
+          "first_send_started": 1597087.337505375,
+          "framing": "chunked",
+          "gate_prefix_bytes_sent": 32768,
+          "gate_reached": true,
+          "last_send_completed": 1597087.509162958,
+          "last_send_started": 1597087.5091365,
+          "max_source_chunk_bytes": 16384,
+          "prefix_bytes": 32768,
+          "tail_release_requested": true,
+          "tail_released_before_complete": true,
+          "truncated": false
+        }
+      ],
+      "problems": [],
+      "protocol_limits_bytes": {
+        "decoder_deflate_probe": 65536,
+        "decoder_output": 16384,
+        "decoder_prefix": 65536,
+        "decoder_unconsumed_tail": 65536,
+        "decoder_unused_data": 65536,
+        "response_cache": 0
+      },
+      "protocol_observed_max_bytes": {
+        "decoder_deflate_probe": 0,
+        "decoder_output": 16384,
+        "decoder_prefix": 0,
+        "decoder_unconsumed_tail": 4080,
+        "decoder_unused_data": 0,
+        "response_cache": 0
+      },
+      "python_baseline_bytes": 1119,
+      "python_current_bytes": 139666,
+      "python_peak_bytes": 265139,
+      "python_peak_increase_bytes": 264020,
+      "received_bytes": 100000000,
+      "rss_baseline_bytes": 43204608,
+      "rss_increase_bytes": 589824,
+      "rss_max_sample_gap_seconds": 0.015071165980771184,
+      "rss_peak_sampled_bytes": 43794432,
+      "rss_samples": 16,
+      "status": "passed",
+      "stderr": ""
+    },
+    {
+      "baseline_lifetime_rss_bytes": 41877504,
+      "body_cached": false,
+      "checkpoints": [
+        {
+          "python_current_bytes": 218923,
+          "python_peak_bytes": 265094,
+          "received_bytes": 250003844
+        },
+        {
+          "python_current_bytes": 218382,
+          "python_peak_bytes": 265094,
+          "received_bytes": 500008720
+        },
+        {
+          "python_current_bytes": 217843,
+          "python_peak_bytes": 265094,
+          "received_bytes": 750013596
+        },
+        {
+          "python_current_bytes": 212259,
+          "python_peak_bytes": 265094,
+          "received_bytes": 1000000000
+        }
+      ],
+      "child_exit_code": 0,
+      "chunk_count": 61039,
+      "cleanup": {
+        "client_exited": true,
+        "peer_threads_stopped": true,
+        "reader_joined": true
+      },
+      "client_pid": 55766,
+      "config": {
+        "body_bytes": 1000000000,
+        "case": "deflate",
+        "chunk_size": 16384,
+        "chunked": true,
+        "client": "sync",
+        "encoding": "deflate",
+        "protocol": "http/1.1",
+        "sample_interval": 0.01,
+        "timeout": 180,
+        "tls": "plain"
+      },
+      "controller_pid": 55617,
+      "elapsed_seconds": 1.9345132091548294,
+      "first_chunk_received": true,
+      "lifetime_rss_bytes": 43302912,
+      "max_chunk_bytes": 16384,
+      "peer_connections": [
+        {
+          "alpn": null,
+          "cipher": null,
+          "connection_id": 1,
+          "max_pending_h2_streams": 0,
+          "requests": 1,
+          "server_handshake_seconds": 0.0,
+          "session_reused": false,
+          "tls_version": null
+        }
+      ],
+      "peer_errors": [],
+      "peer_responses": [
+        {
+          "body_bytes": 1000000000,
+          "connection_id": 1,
+          "decoded_body_bytes": 1000000000,
+          "decoded_bytes_sent": 1000000000,
+          "encoded_body_bytes": 971981,
+          "encoding": "deflate",
+          "first_send_started": 1597087.64493725,
+          "framing": "chunked",
+          "gate_prefix_bytes_sent": 32768,
+          "gate_reached": true,
+          "last_send_completed": 1597089.362578791,
+          "last_send_started": 1597089.362540625,
+          "max_source_chunk_bytes": 16384,
+          "prefix_bytes": 32768,
+          "tail_release_requested": true,
+          "tail_released_before_complete": true,
+          "truncated": false
+        }
+      ],
+      "problems": [],
+      "protocol_limits_bytes": {
+        "decoder_deflate_probe": 65536,
+        "decoder_output": 16384,
+        "decoder_prefix": 65536,
+        "decoder_unconsumed_tail": 65536,
+        "decoder_unused_data": 65536,
+        "response_cache": 0
+      },
+      "protocol_observed_max_bytes": {
+        "decoder_deflate_probe": 0,
+        "decoder_output": 16384,
+        "decoder_prefix": 0,
+        "decoder_unconsumed_tail": 4080,
+        "decoder_unused_data": 0,
+        "response_cache": 0
+      },
+      "python_baseline_bytes": 1119,
+      "python_current_bytes": 139666,
+      "python_peak_bytes": 265094,
+      "python_peak_increase_bytes": 263975,
+      "received_bytes": 1000000000,
+      "rss_baseline_bytes": 41893888,
+      "rss_increase_bytes": 1409024,
+      "rss_max_sample_gap_seconds": 0.015122666023671627,
+      "rss_peak_sampled_bytes": 43302912,
+      "rss_samples": 128,
+      "status": "passed",
+      "stderr": ""
+    },
+    {
+      "baseline_lifetime_rss_bytes": 41926656,
+      "body_cached": false,
+      "checkpoints": [
+        {
+          "python_current_bytes": 170537,
+          "python_peak_bytes": 265139,
+          "received_bytes": 25001984
+        },
+        {
+          "python_current_bytes": 170601,
+          "python_peak_bytes": 265139,
+          "received_bytes": 50003968
+        },
+        {
+          "python_current_bytes": 170665,
+          "python_peak_bytes": 265139,
+          "received_bytes": 75005952
+        },
+        {
+          "python_current_bytes": 162793,
+          "python_peak_bytes": 265139,
+          "received_bytes": 100000000
+        }
+      ],
+      "child_exit_code": 0,
+      "chunk_count": 6105,
+      "cleanup": {
+        "client_exited": true,
+        "peer_threads_stopped": true,
+        "reader_joined": true
+      },
+      "client_pid": 55776,
+      "config": {
+        "body_bytes": 100000000,
+        "case": "br",
+        "chunk_size": 16384,
+        "chunked": true,
+        "client": "sync",
+        "encoding": "br",
+        "protocol": "http/1.1",
+        "sample_interval": 0.01,
+        "timeout": 180,
+        "tls": "plain"
+      },
+      "controller_pid": 55617,
+      "elapsed_seconds": 0.41273816605098546,
+      "first_chunk_received": true,
+      "lifetime_rss_bytes": 51183616,
+      "max_chunk_bytes": 16384,
+      "peer_connections": [
+        {
+          "alpn": null,
+          "cipher": null,
+          "connection_id": 1,
+          "max_pending_h2_streams": 0,
+          "requests": 1,
+          "server_handshake_seconds": 0.0,
+          "session_reused": false,
+          "tls_version": null
+        }
+      ],
+      "peer_errors": [],
+      "peer_responses": [
+        {
+          "body_bytes": 100000000,
+          "connection_id": 1,
+          "decoded_body_bytes": 100000000,
+          "decoded_bytes_sent": 100000000,
+          "encoded_body_bytes": 128187,
+          "encoding": "br",
+          "first_send_started": 1597089.5835665,
+          "framing": "chunked",
+          "gate_prefix_bytes_sent": 32768,
+          "gate_reached": true,
+          "last_send_completed": 1597089.65167825,
+          "last_send_started": 1597089.651654291,
+          "max_source_chunk_bytes": 16384,
+          "prefix_bytes": 32768,
+          "tail_release_requested": true,
+          "tail_released_before_complete": true,
+          "truncated": false
+        }
+      ],
+      "problems": [],
+      "protocol_limits_bytes": {
+        "decoder_deflate_probe": 65536,
+        "decoder_output": 16384,
+        "decoder_prefix": 65536,
+        "response_cache": 0
+      },
+      "protocol_observed_max_bytes": {
+        "decoder_deflate_probe": 0,
+        "decoder_output": 16384,
+        "decoder_prefix": 0,
+        "response_cache": 0
+      },
+      "python_baseline_bytes": 1119,
+      "python_current_bytes": 139096,
+      "python_peak_bytes": 265139,
+      "python_peak_increase_bytes": 264020,
+      "received_bytes": 100000000,
+      "rss_baseline_bytes": 41943040,
+      "rss_increase_bytes": 9240576,
+      "rss_max_sample_gap_seconds": 0.01508908299729228,
+      "rss_peak_sampled_bytes": 51183616,
+      "rss_samples": 23,
+      "status": "passed",
+      "stderr": ""
+    },
+    {
+      "baseline_lifetime_rss_bytes": 42172416,
+      "body_cached": false,
+      "checkpoints": [
+        {
+          "python_current_bytes": 170494,
+          "python_peak_bytes": 265094,
+          "received_bytes": 250003456
+        },
+        {
+          "python_current_bytes": 170558,
+          "python_peak_bytes": 265094,
+          "received_bytes": 500006912
+        },
+        {
+          "python_current_bytes": 170622,
+          "python_peak_bytes": 265094,
+          "received_bytes": 750010368
+        },
+        {
+          "python_current_bytes": 156862,
+          "python_peak_bytes": 265094,
+          "received_bytes": 1000000000
+        }
+      ],
+      "child_exit_code": 0,
+      "chunk_count": 61037,
+      "cleanup": {
+        "client_exited": true,
+        "peer_threads_stopped": true,
+        "reader_joined": true
+      },
+      "client_pid": 55777,
+      "config": {
+        "body_bytes": 1000000000,
+        "case": "br",
+        "chunk_size": 16384,
+        "chunked": true,
+        "client": "sync",
+        "encoding": "br",
+        "protocol": "http/1.1",
+        "sample_interval": 0.01,
+        "timeout": 180,
+        "tls": "plain"
+      },
+      "controller_pid": 55617,
+      "elapsed_seconds": 2.650862915907055,
+      "first_chunk_received": true,
+      "lifetime_rss_bytes": 52101120,
+      "max_chunk_bytes": 16384,
+      "peer_connections": [
+        {
+          "alpn": null,
+          "cipher": null,
+          "connection_id": 1,
+          "max_pending_h2_streams": 0,
+          "requests": 1,
+          "server_handshake_seconds": 0.0,
+          "session_reused": false,
+          "tls_version": null
+        }
+      ],
+      "peer_errors": [],
+      "peer_responses": [
+        {
+          "body_bytes": 1000000000,
+          "connection_id": 1,
+          "decoded_body_bytes": 1000000000,
+          "decoded_bytes_sent": 1000000000,
+          "encoded_body_bytes": 1281759,
+          "encoding": "br",
+          "first_send_started": 1597089.992485791,
+          "framing": "chunked",
+          "gate_prefix_bytes_sent": 32768,
+          "gate_reached": true,
+          "last_send_completed": 1597091.652448416,
+          "last_send_started": 1597091.652418833,
+          "max_source_chunk_bytes": 16384,
+          "prefix_bytes": 32768,
+          "tail_release_requested": true,
+          "tail_released_before_complete": true,
+          "truncated": false
+        }
+      ],
+      "problems": [],
+      "protocol_limits_bytes": {
+        "decoder_deflate_probe": 65536,
+        "decoder_output": 16384,
+        "decoder_prefix": 65536,
+        "response_cache": 0
+      },
+      "protocol_observed_max_bytes": {
+        "decoder_deflate_probe": 0,
+        "decoder_output": 16384,
+        "decoder_prefix": 0,
+        "response_cache": 0
+      },
+      "python_baseline_bytes": 1119,
+      "python_current_bytes": 139053,
+      "python_peak_bytes": 265094,
+      "python_peak_increase_bytes": 263975,
+      "received_bytes": 1000000000,
+      "rss_baseline_bytes": 42188800,
+      "rss_increase_bytes": 9912320,
+      "rss_max_sample_gap_seconds": 0.015243290923535824,
+      "rss_peak_sampled_bytes": 52101120,
+      "rss_samples": 187,
+      "status": "passed",
+      "stderr": ""
+    },
+    {
+      "baseline_lifetime_rss_bytes": 42631168,
+      "body_cached": false,
+      "checkpoints": [
+        {
+          "python_current_bytes": 198136,
+          "python_peak_bytes": 332039,
+          "received_bytes": 25001984
+        },
+        {
+          "python_current_bytes": 231001,
+          "python_peak_bytes": 332103,
+          "received_bytes": 50003968
+        },
+        {
+          "python_current_bytes": 198264,
+          "python_peak_bytes": 332167,
+          "received_bytes": 75005952
+        },
+        {
+          "python_current_bytes": 190400,
+          "python_peak_bytes": 332231,
+          "received_bytes": 100000000
+        }
+      ],
+      "child_exit_code": 0,
+      "chunk_count": 6105,
+      "cleanup": {
+        "client_exited": true,
+        "peer_threads_stopped": true,
+        "reader_joined": true
+      },
+      "client_pid": 55791,
+      "config": {
+        "body_bytes": 100000000,
+        "case": "http-chunked",
+        "chunk_size": 16384,
+        "chunked": true,
+        "client": "async",
+        "encoding": "identity",
+        "protocol": "http/1.1",
+        "sample_interval": 0.01,
+        "timeout": 180,
+        "tls": "plain"
+      },
+      "controller_pid": 55617,
+      "elapsed_seconds": 0.9216220828238875,
+      "first_chunk_received": true,
+      "lifetime_rss_bytes": 44597248,
+      "max_chunk_bytes": 16384,
+      "peer_connections": [
+        {
+          "alpn": null,
+          "cipher": null,
+          "connection_id": 1,
+          "max_pending_h2_streams": 0,
+          "requests": 1,
+          "server_handshake_seconds": 0.0,
+          "session_reused": false,
+          "tls_version": null
+        }
+      ],
+      "peer_errors": [],
+      "peer_responses": [
+        {
+          "body_bytes": 100000000,
+          "connection_id": 1,
+          "decoded_body_bytes": 100000000,
+          "decoded_bytes_sent": 100000000,
+          "encoded_body_bytes": 100000000,
+          "encoding": "identity",
+          "first_send_started": 1597092.648179208,
+          "framing": "chunked",
+          "gate_prefix_bytes_sent": 32768,
+          "gate_reached": true,
+          "last_send_completed": 1597093.348035125,
+          "last_send_started": 1597093.348012208,
+          "max_source_chunk_bytes": 16384,
+          "prefix_bytes": 32768,
+          "tail_release_requested": true,
+          "tail_released_before_complete": true,
+          "truncated": false
+        }
+      ],
+      "problems": [],
+      "protocol_limits_bytes": {
+        "decoder_deflate_probe": 65536,
+        "decoder_output": 16384,
+        "decoder_prefix": 65536,
+        "http1_pending": 65536,
+        "response_cache": 0,
+        "transport_pending": 65536,
+        "transport_plaintext": 65536
+      },
+      "protocol_observed_max_bytes": {
+        "decoder_deflate_probe": 0,
+        "decoder_output": 16384,
+        "decoder_prefix": 0,
+        "http1_pending": 3990,
+        "response_cache": 0,
+        "transport_pending": 49152,
+        "transport_plaintext": 0
+      },
+      "python_baseline_bytes": 1119,
+      "python_current_bytes": 172983,
+      "python_peak_bytes": 332231,
+      "python_peak_increase_bytes": 331112,
+      "received_bytes": 100000000,
+      "rss_baseline_bytes": 42631168,
+      "rss_increase_bytes": 1933312,
+      "rss_max_sample_gap_seconds": 0.015095209004357457,
+      "rss_peak_sampled_bytes": 44564480,
+      "rss_samples": 63,
+      "status": "passed",
+      "stderr": ""
+    },
+    {
+      "baseline_lifetime_rss_bytes": 41877504,
+      "body_cached": false,
+      "checkpoints": [
+        {
+          "python_current_bytes": 247632,
+          "python_peak_bytes": 332350,
+          "received_bytes": 250003456
+        },
+        {
+          "python_current_bytes": 198511,
+          "python_peak_bytes": 332414,
+          "received_bytes": 500006912
+        },
+        {
+          "python_current_bytes": 214992,
+          "python_peak_bytes": 332478,
+          "received_bytes": 750010368
+        },
+        {
+          "python_current_bytes": 184823,
+          "python_peak_bytes": 332542,
+          "received_bytes": 1000000000
+        }
+      ],
+      "child_exit_code": 0,
+      "chunk_count": 61037,
+      "cleanup": {
+        "client_exited": true,
+        "peer_threads_stopped": true,
+        "reader_joined": true
+      },
+      "client_pid": 55800,
+      "config": {
+        "body_bytes": 1000000000,
+        "case": "http-chunked",
+        "chunk_size": 16384,
+        "chunked": true,
+        "client": "async",
+        "encoding": "identity",
+        "protocol": "http/1.1",
+        "sample_interval": 0.01,
+        "timeout": 180,
+        "tls": "plain"
+      },
+      "controller_pid": 55617,
+      "elapsed_seconds": 7.288704874925315,
+      "first_chunk_received": true,
+      "lifetime_rss_bytes": 44548096,
+      "max_chunk_bytes": 16384,
+      "peer_connections": [
+        {
+          "alpn": null,
+          "cipher": null,
+          "connection_id": 1,
+          "max_pending_h2_streams": 0,
+          "requests": 1,
+          "server_handshake_seconds": 0.0,
+          "session_reused": false,
+          "tls_version": null
+        }
+      ],
+      "peer_errors": [],
+      "peer_responses": [
+        {
+          "body_bytes": 1000000000,
+          "connection_id": 1,
+          "decoded_body_bytes": 1000000000,
+          "decoded_bytes_sent": 1000000000,
+          "encoded_body_bytes": 1000000000,
+          "encoding": "identity",
+          "first_send_started": 1597093.570357125,
+          "framing": "chunked",
+          "gate_prefix_bytes_sent": 32768,
+          "gate_reached": true,
+          "last_send_completed": 1597100.641272375,
+          "last_send_started": 1597100.6412435,
+          "max_source_chunk_bytes": 16384,
+          "prefix_bytes": 32768,
+          "tail_release_requested": true,
+          "tail_released_before_complete": true,
+          "truncated": false
+        }
+      ],
+      "problems": [],
+      "protocol_limits_bytes": {
+        "decoder_deflate_probe": 65536,
+        "decoder_output": 16384,
+        "decoder_prefix": 65536,
+        "http1_pending": 65536,
+        "response_cache": 0,
+        "transport_pending": 65536,
+        "transport_plaintext": 65536
+      },
+      "protocol_observed_max_bytes": {
+        "decoder_deflate_probe": 0,
+        "decoder_output": 16384,
+        "decoder_prefix": 0,
+        "http1_pending": 3990,
+        "response_cache": 0,
+        "transport_pending": 49152,
+        "transport_plaintext": 0
+      },
+      "python_baseline_bytes": 1119,
+      "python_current_bytes": 172830,
+      "python_peak_bytes": 332542,
+      "python_peak_increase_bytes": 331423,
+      "received_bytes": 1000000000,
+      "rss_baseline_bytes": 41893888,
+      "rss_increase_bytes": 2588672,
+      "rss_max_sample_gap_seconds": 0.015096916118636727,
+      "rss_peak_sampled_bytes": 44482560,
+      "rss_samples": 576,
+      "status": "passed",
+      "stderr": ""
+    },
+    {
+      "baseline_lifetime_rss_bytes": 42106880,
+      "body_cached": false,
+      "checkpoints": [
+        {
+          "python_current_bytes": 501126,
+          "python_peak_bytes": 679517,
+          "received_bytes": 25001984
+        },
+        {
+          "python_current_bytes": 489704,
+          "python_peak_bytes": 679517,
+          "received_bytes": 50003968
+        },
+        {
+          "python_current_bytes": 543818,
+          "python_peak_bytes": 679517,
+          "received_bytes": 75005952
+        },
+        {
+          "python_current_bytes": 471977,
+          "python_peak_bytes": 679517,
+          "received_bytes": 100000000
+        }
+      ],
+      "child_exit_code": 0,
+      "chunk_count": 6104,
+      "cleanup": {
+        "client_exited": true,
+        "peer_threads_stopped": true,
+        "reader_joined": true
+      },
+      "client_pid": 55865,
+      "config": {
+        "body_bytes": 100000000,
+        "case": "tls12-http1",
+        "chunk_size": 16384,
+        "chunked": false,
+        "client": "async",
+        "encoding": "identity",
+        "protocol": "http/1.1",
+        "sample_interval": 0.01,
+        "timeout": 180,
+        "tls": "TLSv1.2"
+      },
+      "controller_pid": 55617,
+      "elapsed_seconds": 1.123255082871765,
+      "first_chunk_received": true,
+      "lifetime_rss_bytes": 49020928,
+      "max_chunk_bytes": 16384,
+      "peer_connections": [
+        {
+          "alpn": "http/1.1",
+          "cipher": "ECDHE-RSA-AES128-GCM-SHA256",
+          "connection_id": 1,
+          "max_pending_h2_streams": 0,
+          "requests": 1,
+          "server_handshake_seconds": 0.009646165883168578,
+          "session_reused": false,
+          "tls_version": "TLSv1.2"
+        }
+      ],
+      "peer_errors": [],
+      "peer_responses": [
+        {
+          "body_bytes": 100000000,
+          "connection_id": 1,
+          "decoded_body_bytes": 100000000,
+          "decoded_bytes_sent": 100000000,
+          "encoded_body_bytes": 100000000,
+          "encoding": "identity",
+          "first_send_started": 1597100.869663416,
+          "framing": "content-length",
+          "gate_prefix_bytes_sent": 32768,
+          "gate_reached": true,
+          "last_send_completed": 1597101.815098208,
+          "last_send_started": 1597101.815081666,
+          "max_source_chunk_bytes": 16384,
+          "prefix_bytes": 32768,
+          "tail_release_requested": true,
+          "tail_released_before_complete": true,
+          "truncated": false
+        }
+      ],
+      "problems": [],
+      "protocol_limits_bytes": {
+        "decoder_deflate_probe": 65536,
+        "decoder_output": 16384,
+        "decoder_prefix": 65536,
+        "http1_pending": 65536,
+        "response_cache": 0,
+        "transport_pending": 65536,
+        "transport_plaintext": 65536
+      },
+      "protocol_observed_max_bytes": {
+        "decoder_deflate_probe": 0,
+        "decoder_output": 16384,
+        "decoder_prefix": 0,
+        "http1_pending": 0,
+        "response_cache": 0,
+        "transport_pending": 65534,
+        "transport_plaintext": 0
+      },
+      "python_baseline_bytes": 1119,
+      "python_current_bytes": 445146,
+      "python_peak_bytes": 679517,
+      "python_peak_increase_bytes": 678398,
+      "received_bytes": 100000000,
+      "rss_baseline_bytes": 42106880,
+      "rss_increase_bytes": 6881280,
+      "rss_max_sample_gap_seconds": 0.015062374994158745,
+      "rss_peak_sampled_bytes": 48988160,
+      "rss_samples": 82,
+      "status": "passed",
+      "stderr": ""
+    },
+    {
+      "baseline_lifetime_rss_bytes": 42860544,
+      "body_cached": false,
+      "checkpoints": [
+        {
+          "python_current_bytes": 545418,
+          "python_peak_bytes": 679698,
+          "received_bytes": 250003456
+        },
+        {
+          "python_current_bytes": 512571,
+          "python_peak_bytes": 679698,
+          "received_bytes": 500006912
+        },
+        {
+          "python_current_bytes": 545260,
+          "python_peak_bytes": 679924,
+          "received_bytes": 750010368
+        },
+        {
+          "python_current_bytes": 466270,
+          "python_peak_bytes": 679924,
+          "received_bytes": 1000000000
+        }
+      ],
+      "child_exit_code": 0,
+      "chunk_count": 61036,
+      "cleanup": {
+        "client_exited": true,
+        "peer_threads_stopped": true,
+        "reader_joined": true
+      },
+      "client_pid": 55878,
+      "config": {
+        "body_bytes": 1000000000,
+        "case": "tls12-http1",
+        "chunk_size": 16384,
+        "chunked": false,
+        "client": "async",
+        "encoding": "identity",
+        "protocol": "http/1.1",
+        "sample_interval": 0.01,
+        "timeout": 180,
+        "tls": "TLSv1.2"
+      },
+      "controller_pid": 55617,
+      "elapsed_seconds": 9.521312582772225,
+      "first_chunk_received": true,
+      "lifetime_rss_bytes": 50380800,
+      "max_chunk_bytes": 16384,
+      "peer_connections": [
+        {
+          "alpn": "http/1.1",
+          "cipher": "ECDHE-RSA-AES128-GCM-SHA256",
+          "connection_id": 1,
+          "max_pending_h2_streams": 0,
+          "requests": 1,
+          "server_handshake_seconds": 0.008459125179797411,
+          "session_reused": false,
+          "tls_version": "TLSv1.2"
+        }
+      ],
+      "peer_errors": [],
+      "peer_responses": [
+        {
+          "body_bytes": 1000000000,
+          "connection_id": 1,
+          "decoded_body_bytes": 1000000000,
+          "decoded_bytes_sent": 1000000000,
+          "encoded_body_bytes": 1000000000,
+          "encoding": "identity",
+          "first_send_started": 1597101.992882125,
+          "framing": "content-length",
+          "gate_prefix_bytes_sent": 32768,
+          "gate_reached": true,
+          "last_send_completed": 1597111.333032083,
+          "last_send_started": 1597111.333005,
+          "max_source_chunk_bytes": 16384,
+          "prefix_bytes": 32768,
+          "tail_release_requested": true,
+          "tail_released_before_complete": true,
+          "truncated": false
+        }
+      ],
+      "problems": [],
+      "protocol_limits_bytes": {
+        "decoder_deflate_probe": 65536,
+        "decoder_output": 16384,
+        "decoder_prefix": 65536,
+        "http1_pending": 65536,
+        "response_cache": 0,
+        "transport_pending": 65536,
+        "transport_plaintext": 65536
+      },
+      "protocol_observed_max_bytes": {
+        "decoder_deflate_probe": 0,
+        "decoder_output": 16384,
+        "decoder_prefix": 0,
+        "http1_pending": 0,
+        "response_cache": 0,
+        "transport_pending": 65535,
+        "transport_plaintext": 0
+      },
+      "python_baseline_bytes": 1119,
+      "python_current_bytes": 445218,
+      "python_peak_bytes": 679924,
+      "python_peak_increase_bytes": 678805,
+      "received_bytes": 1000000000,
+      "rss_baseline_bytes": 42860544,
+      "rss_increase_bytes": 7471104,
+      "rss_max_sample_gap_seconds": 0.015121292090043426,
+      "rss_peak_sampled_bytes": 50331648,
+      "rss_samples": 741,
+      "status": "passed",
+      "stderr": ""
+    },
+    {
+      "baseline_lifetime_rss_bytes": 41467904,
+      "body_cached": false,
+      "checkpoints": [
+        {
+          "python_current_bytes": 622514,
+          "python_peak_bytes": 790237,
+          "received_bytes": 25001984
+        },
+        {
+          "python_current_bytes": 621774,
+          "python_peak_bytes": 790237,
+          "received_bytes": 50003968
+        },
+        {
+          "python_current_bytes": 621034,
+          "python_peak_bytes": 790237,
+          "received_bytes": 75005952
+        },
+        {
+          "python_current_bytes": 582697,
+          "python_peak_bytes": 790525,
+          "received_bytes": 100000000
+        }
+      ],
+      "child_exit_code": 0,
+      "chunk_count": 6104,
+      "cleanup": {
+        "client_exited": true,
+        "peer_threads_stopped": true,
+        "reader_joined": true
+      },
+      "client_pid": 55923,
+      "config": {
+        "body_bytes": 100000000,
+        "case": "tls13-http1",
+        "chunk_size": 16384,
+        "chunked": false,
+        "client": "async",
+        "encoding": "identity",
+        "protocol": "http/1.1",
+        "sample_interval": 0.01,
+        "timeout": 180,
+        "tls": "TLSv1.3"
+      },
+      "controller_pid": 55617,
+      "elapsed_seconds": 1.025246584089473,
+      "first_chunk_received": true,
+      "lifetime_rss_bytes": 49496064,
+      "max_chunk_bytes": 16384,
+      "peer_connections": [
+        {
+          "alpn": "http/1.1",
+          "cipher": "TLS_AES_256_GCM_SHA384",
+          "connection_id": 1,
+          "max_pending_h2_streams": 0,
+          "requests": 1,
+          "server_handshake_seconds": 0.010162707883864641,
+          "session_reused": false,
+          "tls_version": "TLSv1.3"
+        }
+      ],
+      "peer_errors": [],
+      "peer_responses": [
+        {
+          "body_bytes": 100000000,
+          "connection_id": 1,
+          "decoded_body_bytes": 100000000,
+          "decoded_bytes_sent": 100000000,
+          "encoded_body_bytes": 100000000,
+          "encoding": "identity",
+          "first_send_started": 1597111.517178041,
+          "framing": "content-length",
+          "gate_prefix_bytes_sent": 32768,
+          "gate_reached": true,
+          "last_send_completed": 1597112.356762333,
+          "last_send_started": 1597112.356735458,
+          "max_source_chunk_bytes": 16384,
+          "prefix_bytes": 32768,
+          "tail_release_requested": true,
+          "tail_released_before_complete": true,
+          "truncated": false
+        }
+      ],
+      "problems": [],
+      "protocol_limits_bytes": {
+        "decoder_deflate_probe": 65536,
+        "decoder_output": 16384,
+        "decoder_prefix": 65536,
+        "http1_pending": 65536,
+        "response_cache": 0,
+        "transport_pending": 65536,
+        "transport_plaintext": 65536
+      },
+      "protocol_observed_max_bytes": {
+        "decoder_deflate_probe": 0,
+        "decoder_output": 16384,
+        "decoder_prefix": 0,
+        "http1_pending": 0,
+        "response_cache": 0,
+        "transport_pending": 65524,
+        "transport_plaintext": 0
+      },
+      "python_baseline_bytes": 1119,
+      "python_current_bytes": 564075,
+      "python_peak_bytes": 790525,
+      "python_peak_increase_bytes": 789406,
+      "received_bytes": 100000000,
+      "rss_baseline_bytes": 41582592,
+      "rss_increase_bytes": 7864320,
+      "rss_max_sample_gap_seconds": 0.015097958035767078,
+      "rss_peak_sampled_bytes": 49446912,
+      "rss_samples": 76,
+      "status": "passed",
+      "stderr": ""
+    },
+    {
+      "baseline_lifetime_rss_bytes": 41713664,
+      "body_cached": false,
+      "checkpoints": [
+        {
+          "python_current_bytes": 631596,
+          "python_peak_bytes": 790249,
+          "received_bytes": 250003456
+        },
+        {
+          "python_current_bytes": 640026,
+          "python_peak_bytes": 790249,
+          "received_bytes": 500006912
+        },
+        {
+          "python_current_bytes": 648456,
+          "python_peak_bytes": 790377,
+          "received_bytes": 750010368
+        },
+        {
+          "python_current_bytes": 576721,
+          "python_peak_bytes": 790377,
+          "received_bytes": 1000000000
+        }
+      ],
+      "child_exit_code": 0,
+      "chunk_count": 61036,
+      "cleanup": {
+        "client_exited": true,
+        "peer_threads_stopped": true,
+        "reader_joined": true
+      },
+      "client_pid": 55924,
+      "config": {
+        "body_bytes": 1000000000,
+        "case": "tls13-http1",
+        "chunk_size": 16384,
+        "chunked": false,
+        "client": "async",
+        "encoding": "identity",
+        "protocol": "http/1.1",
+        "sample_interval": 0.01,
+        "timeout": 180,
+        "tls": "TLSv1.3"
+      },
+      "controller_pid": 55617,
+      "elapsed_seconds": 8.683354541892186,
+      "first_chunk_received": true,
+      "lifetime_rss_bytes": 51691520,
+      "max_chunk_bytes": 16384,
+      "peer_connections": [
+        {
+          "alpn": "http/1.1",
+          "cipher": "TLS_AES_256_GCM_SHA384",
+          "connection_id": 1,
+          "max_pending_h2_streams": 0,
+          "requests": 1,
+          "server_handshake_seconds": 0.008834041887894273,
+          "session_reused": false,
+          "tls_version": "TLSv1.3"
+        }
+      ],
+      "peer_errors": [],
+      "peer_responses": [
+        {
+          "body_bytes": 1000000000,
+          "connection_id": 1,
+          "decoded_body_bytes": 1000000000,
+          "decoded_bytes_sent": 1000000000,
+          "encoded_body_bytes": 1000000000,
+          "encoding": "identity",
+          "first_send_started": 1597112.537016708,
+          "framing": "content-length",
+          "gate_prefix_bytes_sent": 32768,
+          "gate_reached": true,
+          "last_send_completed": 1597121.059684375,
+          "last_send_started": 1597121.059662375,
+          "max_source_chunk_bytes": 16384,
+          "prefix_bytes": 32768,
+          "tail_release_requested": true,
+          "tail_released_before_complete": true,
+          "truncated": false
+        }
+      ],
+      "problems": [],
+      "protocol_limits_bytes": {
+        "decoder_deflate_probe": 65536,
+        "decoder_output": 16384,
+        "decoder_prefix": 65536,
+        "http1_pending": 65536,
+        "response_cache": 0,
+        "transport_pending": 65536,
+        "transport_plaintext": 65536
+      },
+      "protocol_observed_max_bytes": {
+        "decoder_deflate_probe": 0,
+        "decoder_output": 16384,
+        "decoder_prefix": 0,
+        "http1_pending": 0,
+        "response_cache": 0,
+        "transport_pending": 65534,
+        "transport_plaintext": 0
+      },
+      "python_baseline_bytes": 1119,
+      "python_current_bytes": 564455,
+      "python_peak_bytes": 790377,
+      "python_peak_increase_bytes": 789258,
+      "received_bytes": 1000000000,
+      "rss_baseline_bytes": 41746432,
+      "rss_increase_bytes": 9912320,
+      "rss_max_sample_gap_seconds": 0.01570337498560548,
+      "rss_peak_sampled_bytes": 51658752,
+      "rss_samples": 687,
+      "status": "passed",
+      "stderr": ""
+    },
+    {
+      "baseline_lifetime_rss_bytes": 42942464,
+      "body_cached": false,
+      "checkpoints": [
+        {
+          "python_current_bytes": 641767,
+          "python_peak_bytes": 789231,
+          "received_bytes": 25001679
+        },
+        {
+          "python_current_bytes": 673882,
+          "python_peak_bytes": 789231,
+          "received_bytes": 50003358
+        },
+        {
+          "python_current_bytes": 658310,
+          "python_peak_bytes": 789359,
+          "received_bytes": 75005037
+        },
+        {
+          "python_current_bytes": 638152,
+          "python_peak_bytes": 789359,
+          "received_bytes": 100000000
+        }
+      ],
+      "child_exit_code": 0,
+      "chunk_count": 6104,
+      "cleanup": {
+        "client_exited": true,
+        "peer_threads_stopped": true,
+        "reader_joined": true
+      },
+      "client_pid": 55994,
+      "config": {
+        "body_bytes": 100000000,
+        "case": "tls13-h2",
+        "chunk_size": 16384,
+        "chunked": false,
+        "client": "async",
+        "encoding": "identity",
+        "protocol": "h2",
+        "sample_interval": 0.01,
+        "timeout": 180,
+        "tls": "TLSv1.3"
+      },
+      "controller_pid": 55617,
+      "elapsed_seconds": 1.9274170000571758,
+      "first_chunk_received": true,
+      "lifetime_rss_bytes": 49758208,
+      "max_chunk_bytes": 16384,
+      "peer_connections": [
+        {
+          "alpn": "h2",
+          "cipher": "TLS_AES_256_GCM_SHA384",
+          "connection_id": 1,
+          "max_pending_h2_streams": 1,
+          "requests": 1,
+          "server_handshake_seconds": 0.008411667076870799,
+          "session_reused": false,
+          "tls_version": "TLSv1.3"
+        }
+      ],
+      "peer_errors": [],
+      "peer_responses": [
+        {
+          "body_bytes": 100000000,
+          "connection_id": 1,
+          "decoded_body_bytes": 100000000,
+          "decoded_bytes_sent": 100000000,
+          "encoded_body_bytes": 100000000,
+          "encoding": "identity",
+          "first_send_started": 1597121.228798875,
+          "framing": "h2-data",
+          "gate_prefix_bytes_sent": 32768,
+          "gate_reached": true,
+          "last_send_completed": 1597122.961278958,
+          "last_send_started": 1597122.961238,
+          "max_source_chunk_bytes": 16384,
+          "prefix_bytes": 32768,
+          "stream_id": 1,
+          "tail_release_requested": true,
+          "tail_released_before_complete": true,
+          "truncated": false
+        }
+      ],
+      "problems": [],
+      "protocol_limits_bytes": {
+        "decoder_deflate_probe": 65536,
+        "decoder_output": 16384,
+        "decoder_prefix": 65536,
+        "h2_data_queue": 131070,
+        "h2_stream_body": 65535,
+        "http1_pending": 65536,
+        "response_cache": 0,
+        "transport_pending": 65536,
+        "transport_plaintext": 65536
+      },
+      "protocol_observed_max_bytes": {
+        "decoder_deflate_probe": 0,
+        "decoder_output": 16384,
+        "decoder_prefix": 0,
+        "h2_data_queue": 49151,
+        "h2_frame_pending": 0,
+        "h2_stream_body": 49151,
+        "http1_pending": 0,
+        "response_cache": 0,
+        "transport_pending": 0,
+        "transport_plaintext": 0
+      },
+      "python_baseline_bytes": 1119,
+      "python_current_bytes": 622195,
+      "python_peak_bytes": 789359,
+      "python_peak_increase_bytes": 788240,
+      "received_bytes": 100000000,
+      "rss_baseline_bytes": 42942464,
+      "rss_increase_bytes": 6750208,
+      "rss_max_sample_gap_seconds": 0.015128833008930087,
+      "rss_peak_sampled_bytes": 49692672,
+      "rss_samples": 144,
+      "status": "passed",
+      "stderr": ""
+    },
+    {
+      "baseline_lifetime_rss_bytes": 41861120,
+      "body_cached": false,
+      "checkpoints": [
+        {
+          "python_current_bytes": 656896,
+          "python_peak_bytes": 788705,
+          "received_bytes": 250000404
+        },
+        {
+          "python_current_bytes": 673356,
+          "python_peak_bytes": 788769,
+          "received_bytes": 500000808
+        },
+        {
+          "python_current_bytes": 657784,
+          "python_peak_bytes": 788833,
+          "received_bytes": 750001212
+        },
+        {
+          "python_current_bytes": 651509,
+          "python_peak_bytes": 788897,
+          "received_bytes": 1000000000
+        }
+      ],
+      "child_exit_code": 0,
+      "chunk_count": 61036,
+      "cleanup": {
+        "client_exited": true,
+        "peer_threads_stopped": true,
+        "reader_joined": true
+      },
+      "client_pid": 56001,
+      "config": {
+        "body_bytes": 1000000000,
+        "case": "tls13-h2",
+        "chunk_size": 16384,
+        "chunked": false,
+        "client": "async",
+        "encoding": "identity",
+        "protocol": "h2",
+        "sample_interval": 0.01,
+        "timeout": 180,
+        "tls": "TLSv1.3"
+      },
+      "controller_pid": 55617,
+      "elapsed_seconds": 17.88712895894423,
+      "first_chunk_received": true,
+      "lifetime_rss_bytes": 51150848,
+      "max_chunk_bytes": 16384,
+      "peer_connections": [
+        {
+          "alpn": "h2",
+          "cipher": "TLS_AES_256_GCM_SHA384",
+          "connection_id": 1,
+          "max_pending_h2_streams": 1,
+          "requests": 1,
+          "server_handshake_seconds": 0.008741792058572173,
+          "session_reused": false,
+          "tls_version": "TLSv1.3"
+        }
+      ],
+      "peer_errors": [],
+      "peer_responses": [
+        {
+          "body_bytes": 1000000000,
+          "connection_id": 1,
+          "decoded_body_bytes": 1000000000,
+          "decoded_bytes_sent": 1000000000,
+          "encoded_body_bytes": 1000000000,
+          "encoding": "identity",
+          "first_send_started": 1597123.151962666,
+          "framing": "h2-data",
+          "gate_prefix_bytes_sent": 32768,
+          "gate_reached": true,
+          "last_send_completed": 1597140.840532041,
+          "last_send_started": 1597140.84047125,
+          "max_source_chunk_bytes": 16384,
+          "prefix_bytes": 32768,
+          "stream_id": 1,
+          "tail_release_requested": true,
+          "tail_released_before_complete": true,
+          "truncated": false
+        }
+      ],
+      "problems": [],
+      "protocol_limits_bytes": {
+        "decoder_deflate_probe": 65536,
+        "decoder_output": 16384,
+        "decoder_prefix": 65536,
+        "h2_data_queue": 131070,
+        "h2_stream_body": 65535,
+        "http1_pending": 65536,
+        "response_cache": 0,
+        "transport_pending": 65536,
+        "transport_plaintext": 65536
+      },
+      "protocol_observed_max_bytes": {
+        "decoder_deflate_probe": 0,
+        "decoder_output": 16384,
+        "decoder_prefix": 0,
+        "h2_data_queue": 49151,
+        "h2_frame_pending": 0,
+        "h2_stream_body": 49151,
+        "http1_pending": 0,
+        "response_cache": 0,
+        "transport_pending": 0,
+        "transport_plaintext": 0
+      },
+      "python_baseline_bytes": 1119,
+      "python_current_bytes": 632116,
+      "python_peak_bytes": 788897,
+      "python_peak_increase_bytes": 787778,
+      "received_bytes": 1000000000,
+      "rss_baseline_bytes": 41861120,
+      "rss_increase_bytes": 9289728,
+      "rss_max_sample_gap_seconds": 0.02187733305618167,
+      "rss_peak_sampled_bytes": 51150848,
+      "rss_samples": 1440,
+      "status": "passed",
+      "stderr": ""
+    },
+    {
+      "baseline_lifetime_rss_bytes": 42352640,
+      "body_cached": false,
+      "checkpoints": [
+        {
+          "python_current_bytes": 244698,
+          "python_peak_bytes": 309359,
+          "received_bytes": 25000436
+        },
+        {
+          "python_current_bytes": 245112,
+          "python_peak_bytes": 309359,
+          "received_bytes": 50000356
+        },
+        {
+          "python_current_bytes": 245525,
+          "python_peak_bytes": 309359,
+          "received_bytes": 75001308
+        },
+        {
+          "python_current_bytes": 241820,
+          "python_peak_bytes": 309359,
+          "received_bytes": 100000000
+        }
+      ],
+      "child_exit_code": 0,
+      "chunk_count": 6127,
+      "cleanup": {
+        "client_exited": true,
+        "peer_threads_stopped": true,
+        "reader_joined": true
+      },
+      "client_pid": 56108,
+      "config": {
+        "body_bytes": 100000000,
+        "case": "gzip",
+        "chunk_size": 16384,
+        "chunked": true,
+        "client": "async",
+        "encoding": "gzip",
+        "protocol": "http/1.1",
+        "sample_interval": 0.01,
+        "timeout": 180,
+        "tls": "plain"
+      },
+      "controller_pid": 55617,
+      "elapsed_seconds": 0.35841170814819634,
+      "first_chunk_received": true,
+      "lifetime_rss_bytes": 43319296,
+      "max_chunk_bytes": 16384,
+      "peer_connections": [
+        {
+          "alpn": null,
+          "cipher": null,
+          "connection_id": 1,
+          "max_pending_h2_streams": 0,
+          "requests": 1,
+          "server_handshake_seconds": 0.0,
+          "session_reused": false,
+          "tls_version": null
+        }
+      ],
+      "peer_errors": [],
+      "peer_responses": [
+        {
+          "body_bytes": 100000000,
+          "connection_id": 1,
+          "decoded_body_bytes": 100000000,
+          "decoded_bytes_sent": 100000000,
+          "encoded_body_bytes": 97238,
+          "encoding": "gzip",
+          "first_send_started": 1597141.080345875,
+          "framing": "chunked",
+          "gate_prefix_bytes_sent": 32768,
+          "gate_reached": true,
+          "last_send_completed": 1597141.252077375,
+          "last_send_started": 1597141.252047916,
+          "max_source_chunk_bytes": 16384,
+          "prefix_bytes": 32768,
+          "tail_release_requested": true,
+          "tail_released_before_complete": true,
+          "truncated": false
+        }
+      ],
+      "problems": [],
+      "protocol_limits_bytes": {
+        "decoder_deflate_probe": 65536,
+        "decoder_output": 16384,
+        "decoder_prefix": 65536,
+        "decoder_unconsumed_tail": 65536,
+        "decoder_unused_data": 65536,
+        "http1_pending": 65536,
+        "response_cache": 0,
+        "transport_pending": 65536,
+        "transport_plaintext": 65536
+      },
+      "protocol_observed_max_bytes": {
+        "decoder_deflate_probe": 0,
+        "decoder_output": 16384,
+        "decoder_prefix": 0,
+        "decoder_unconsumed_tail": 4061,
+        "decoder_unused_data": 0,
+        "http1_pending": 7,
+        "response_cache": 0,
+        "transport_pending": 21,
+        "transport_plaintext": 0
+      },
+      "python_baseline_bytes": 1119,
+      "python_current_bytes": 174141,
+      "python_peak_bytes": 309359,
+      "python_peak_increase_bytes": 308240,
+      "received_bytes": 100000000,
+      "rss_baseline_bytes": 42352640,
+      "rss_increase_bytes": 933888,
+      "rss_max_sample_gap_seconds": 0.015065417159348726,
+      "rss_peak_sampled_bytes": 43286528,
+      "rss_samples": 19,
+      "status": "passed",
+      "stderr": ""
+    },
+    {
+      "baseline_lifetime_rss_bytes": 41795584,
+      "body_cached": false,
+      "checkpoints": [
+        {
+          "python_current_bytes": 247915,
+          "python_peak_bytes": 309312,
+          "received_bytes": 250003844
+        },
+        {
+          "python_current_bytes": 251520,
+          "python_peak_bytes": 309312,
+          "received_bytes": 500008720
+        },
+        {
+          "python_current_bytes": 246864,
+          "python_peak_bytes": 309312,
+          "received_bytes": 750013596
+        },
+        {
+          "python_current_bytes": 240758,
+          "python_peak_bytes": 309312,
+          "received_bytes": 1000000000
+        }
+      ],
+      "child_exit_code": 0,
+      "chunk_count": 61275,
+      "cleanup": {
+        "client_exited": true,
+        "peer_threads_stopped": true,
+        "reader_joined": true
+      },
+      "client_pid": 56109,
+      "config": {
+        "body_bytes": 1000000000,
+        "case": "gzip",
+        "chunk_size": 16384,
+        "chunked": true,
+        "client": "async",
+        "encoding": "gzip",
+        "protocol": "http/1.1",
+        "sample_interval": 0.01,
+        "timeout": 180,
+        "tls": "plain"
+      },
+      "controller_pid": 55617,
+      "elapsed_seconds": 1.9344569169916213,
+      "first_chunk_received": true,
+      "lifetime_rss_bytes": 43532288,
+      "max_chunk_bytes": 16384,
+      "peer_connections": [
+        {
+          "alpn": null,
+          "cipher": null,
+          "connection_id": 1,
+          "max_pending_h2_streams": 0,
+          "requests": 1,
+          "server_handshake_seconds": 0.0,
+          "session_reused": false,
+          "tls_version": null
+        }
+      ],
+      "peer_errors": [],
+      "peer_responses": [
+        {
+          "body_bytes": 1000000000,
+          "connection_id": 1,
+          "decoded_body_bytes": 1000000000,
+          "decoded_bytes_sent": 1000000000,
+          "encoded_body_bytes": 971993,
+          "encoding": "gzip",
+          "first_send_started": 1597141.387664541,
+          "framing": "chunked",
+          "gate_prefix_bytes_sent": 32768,
+          "gate_reached": true,
+          "last_send_completed": 1597143.088214083,
+          "last_send_started": 1597143.088177,
+          "max_source_chunk_bytes": 16384,
+          "prefix_bytes": 32768,
+          "tail_release_requested": true,
+          "tail_released_before_complete": true,
+          "truncated": false
+        }
+      ],
+      "problems": [],
+      "protocol_limits_bytes": {
+        "decoder_deflate_probe": 65536,
+        "decoder_output": 16384,
+        "decoder_prefix": 65536,
+        "decoder_unconsumed_tail": 65536,
+        "decoder_unused_data": 65536,
+        "http1_pending": 65536,
+        "response_cache": 0,
+        "transport_pending": 65536,
+        "transport_plaintext": 65536
+      },
+      "protocol_observed_max_bytes": {
+        "decoder_deflate_probe": 0,
+        "decoder_output": 16384,
+        "decoder_prefix": 0,
+        "decoder_unconsumed_tail": 4061,
+        "decoder_unused_data": 0,
+        "http1_pending": 7,
+        "response_cache": 0,
+        "transport_pending": 4137,
+        "transport_plaintext": 0
+      },
+      "python_baseline_bytes": 1119,
+      "python_current_bytes": 174315,
+      "python_peak_bytes": 309312,
+      "python_peak_increase_bytes": 308193,
+      "received_bytes": 1000000000,
+      "rss_baseline_bytes": 41795584,
+      "rss_increase_bytes": 1687552,
+      "rss_max_sample_gap_seconds": 0.015151415951550007,
+      "rss_peak_sampled_bytes": 43483136,
+      "rss_samples": 129,
+      "status": "passed",
+      "stderr": ""
+    },
+    {
+      "baseline_lifetime_rss_bytes": 42352640,
+      "body_cached": false,
+      "checkpoints": [
+        {
+          "python_current_bytes": 244312,
+          "python_peak_bytes": 308853,
+          "received_bytes": 25000436
+        },
+        {
+          "python_current_bytes": 245494,
+          "python_peak_bytes": 313948,
+          "received_bytes": 50000356
+        },
+        {
+          "python_current_bytes": 246165,
+          "python_peak_bytes": 313948,
+          "received_bytes": 75001308
+        },
+        {
+          "python_current_bytes": 242678,
+          "python_peak_bytes": 314567,
+          "received_bytes": 100000000
+        }
+      ],
+      "child_exit_code": 0,
+      "chunk_count": 6125,
+      "cleanup": {
+        "client_exited": true,
+        "peer_threads_stopped": true,
+        "reader_joined": true
+      },
+      "client_pid": 56119,
+      "config": {
+        "body_bytes": 100000000,
+        "case": "deflate",
+        "chunk_size": 16384,
+        "chunked": true,
+        "client": "async",
+        "encoding": "deflate",
+        "protocol": "http/1.1",
+        "sample_interval": 0.01,
+        "timeout": 180,
+        "tls": "plain"
+      },
+      "controller_pid": 55617,
+      "elapsed_seconds": 0.41439129202626646,
+      "first_chunk_received": true,
+      "lifetime_rss_bytes": 43515904,
+      "max_chunk_bytes": 16384,
+      "peer_connections": [
+        {
+          "alpn": null,
+          "cipher": null,
+          "connection_id": 1,
+          "max_pending_h2_streams": 0,
+          "requests": 1,
+          "server_handshake_seconds": 0.0,
+          "session_reused": false,
+          "tls_version": null
+        }
+      ],
+      "peer_errors": [],
+      "peer_responses": [
+        {
+          "body_bytes": 100000000,
+          "connection_id": 1,
+          "decoded_body_bytes": 100000000,
+          "decoded_bytes_sent": 100000000,
+          "encoded_body_bytes": 97226,
+          "encoding": "deflate",
+          "first_send_started": 1597143.326088875,
+          "framing": "chunked",
+          "gate_prefix_bytes_sent": 32768,
+          "gate_reached": true,
+          "last_send_completed": 1597143.498662333,
+          "last_send_started": 1597143.498631166,
+          "max_source_chunk_bytes": 16384,
+          "prefix_bytes": 32768,
+          "tail_release_requested": true,
+          "tail_released_before_complete": true,
+          "truncated": false
+        }
+      ],
+      "problems": [],
+      "protocol_limits_bytes": {
+        "decoder_deflate_probe": 65536,
+        "decoder_output": 16384,
+        "decoder_prefix": 65536,
+        "decoder_unconsumed_tail": 65536,
+        "decoder_unused_data": 65536,
+        "http1_pending": 65536,
+        "response_cache": 0,
+        "transport_pending": 65536,
+        "transport_plaintext": 65536
+      },
+      "protocol_observed_max_bytes": {
+        "decoder_deflate_probe": 0,
+        "decoder_output": 16384,
+        "decoder_prefix": 0,
+        "decoder_unconsumed_tail": 4080,
+        "decoder_unused_data": 0,
+        "http1_pending": 7,
+        "response_cache": 0,
+        "transport_pending": 21,
+        "transport_plaintext": 0
+      },
+      "python_baseline_bytes": 1119,
+      "python_current_bytes": 175272,
+      "python_peak_bytes": 314567,
+      "python_peak_increase_bytes": 313448,
+      "received_bytes": 100000000,
+      "rss_baseline_bytes": 42369024,
+      "rss_increase_bytes": 1097728,
+      "rss_max_sample_gap_seconds": 0.01506212493404746,
+      "rss_peak_sampled_bytes": 43466752,
+      "rss_samples": 16,
+      "status": "passed",
+      "stderr": ""
+    },
+    {
+      "baseline_lifetime_rss_bytes": 41844736,
+      "body_cached": false,
+      "checkpoints": [
+        {
+          "python_current_bytes": 249377,
+          "python_peak_bytes": 308806,
+          "received_bytes": 250003844
+        },
+        {
+          "python_current_bytes": 249557,
+          "python_peak_bytes": 308806,
+          "received_bytes": 500008720
+        },
+        {
+          "python_current_bytes": 250938,
+          "python_peak_bytes": 308806,
+          "received_bytes": 750013596
+        },
+        {
+          "python_current_bytes": 245188,
+          "python_peak_bytes": 308806,
+          "received_bytes": 1000000000
+        }
+      ],
+      "child_exit_code": 0,
+      "chunk_count": 61275,
+      "cleanup": {
+        "client_exited": true,
+        "peer_threads_stopped": true,
+        "reader_joined": true
+      },
+      "client_pid": 56121,
+      "config": {
+        "body_bytes": 1000000000,
+        "case": "deflate",
+        "chunk_size": 16384,
+        "chunked": true,
+        "client": "async",
+        "encoding": "deflate",
+        "protocol": "http/1.1",
+        "sample_interval": 0.01,
+        "timeout": 180,
+        "tls": "plain"
+      },
+      "controller_pid": 55617,
+      "elapsed_seconds": 1.9387788749299943,
+      "first_chunk_received": true,
+      "lifetime_rss_bytes": 43335680,
+      "max_chunk_bytes": 16384,
+      "peer_connections": [
+        {
+          "alpn": null,
+          "cipher": null,
+          "connection_id": 1,
+          "max_pending_h2_streams": 0,
+          "requests": 1,
+          "server_handshake_seconds": 0.0,
+          "session_reused": false,
+          "tls_version": null
+        }
+      ],
+      "peer_errors": [],
+      "peer_responses": [
+        {
+          "body_bytes": 1000000000,
+          "connection_id": 1,
+          "decoded_body_bytes": 1000000000,
+          "decoded_bytes_sent": 1000000000,
+          "encoded_body_bytes": 971981,
+          "encoding": "deflate",
+          "first_send_started": 1597143.742226666,
+          "framing": "chunked",
+          "gate_prefix_bytes_sent": 32768,
+          "gate_reached": true,
+          "last_send_completed": 1597145.456823875,
+          "last_send_started": 1597145.4567925,
+          "max_source_chunk_bytes": 16384,
+          "prefix_bytes": 32768,
+          "tail_release_requested": true,
+          "tail_released_before_complete": true,
+          "truncated": false
+        }
+      ],
+      "problems": [],
+      "protocol_limits_bytes": {
+        "decoder_deflate_probe": 65536,
+        "decoder_output": 16384,
+        "decoder_prefix": 65536,
+        "decoder_unconsumed_tail": 65536,
+        "decoder_unused_data": 65536,
+        "http1_pending": 65536,
+        "response_cache": 0,
+        "transport_pending": 65536,
+        "transport_plaintext": 65536
+      },
+      "protocol_observed_max_bytes": {
+        "decoder_deflate_probe": 0,
+        "decoder_output": 16384,
+        "decoder_prefix": 0,
+        "decoder_unconsumed_tail": 4061,
+        "decoder_unused_data": 0,
+        "http1_pending": 7,
+        "response_cache": 0,
+        "transport_pending": 21,
+        "transport_plaintext": 0
+      },
+      "python_baseline_bytes": 1119,
+      "python_current_bytes": 178973,
+      "python_peak_bytes": 308806,
+      "python_peak_increase_bytes": 307687,
+      "received_bytes": 1000000000,
+      "rss_baseline_bytes": 41844736,
+      "rss_increase_bytes": 1425408,
+      "rss_max_sample_gap_seconds": 0.015098416013643146,
+      "rss_peak_sampled_bytes": 43270144,
+      "rss_samples": 129,
+      "status": "passed",
+      "stderr": ""
+    },
+    {
+      "baseline_lifetime_rss_bytes": 41713664,
+      "body_cached": false,
+      "checkpoints": [
+        {
+          "python_current_bytes": 220891,
+          "python_peak_bytes": 302949,
+          "received_bytes": 25001984
+        },
+        {
+          "python_current_bytes": 245183,
+          "python_peak_bytes": 332997,
+          "received_bytes": 50003968
+        },
+        {
+          "python_current_bytes": 204207,
+          "python_peak_bytes": 332997,
+          "received_bytes": 75005952
+        },
+        {
+          "python_current_bytes": 191311,
+          "python_peak_bytes": 332997,
+          "received_bytes": 100000000
+        }
+      ],
+      "child_exit_code": 0,
+      "chunk_count": 6105,
+      "cleanup": {
+        "client_exited": true,
+        "peer_threads_stopped": true,
+        "reader_joined": true
+      },
+      "client_pid": 56131,
+      "config": {
+        "body_bytes": 100000000,
+        "case": "br",
+        "chunk_size": 16384,
+        "chunked": true,
+        "client": "async",
+        "encoding": "br",
+        "protocol": "http/1.1",
+        "sample_interval": 0.01,
+        "timeout": 180,
+        "tls": "plain"
+      },
+      "controller_pid": 55617,
+      "elapsed_seconds": 0.5164138749241829,
+      "first_chunk_received": true,
+      "lifetime_rss_bytes": 51806208,
+      "max_chunk_bytes": 16384,
+      "peer_connections": [
+        {
+          "alpn": null,
+          "cipher": null,
+          "connection_id": 1,
+          "max_pending_h2_streams": 0,
+          "requests": 1,
+          "server_handshake_seconds": 0.0,
+          "session_reused": false,
+          "tls_version": null
+        }
+      ],
+      "peer_errors": [],
+      "peer_responses": [
+        {
+          "body_bytes": 100000000,
+          "connection_id": 1,
+          "decoded_body_bytes": 100000000,
+          "decoded_bytes_sent": 100000000,
+          "encoded_body_bytes": 128187,
+          "encoding": "br",
+          "first_send_started": 1597145.681123583,
+          "framing": "chunked",
+          "gate_prefix_bytes_sent": 32768,
+          "gate_reached": true,
+          "last_send_completed": 1597145.748975125,
+          "last_send_started": 1597145.748946958,
+          "max_source_chunk_bytes": 16384,
+          "prefix_bytes": 32768,
+          "tail_release_requested": true,
+          "tail_released_before_complete": true,
+          "truncated": false
+        }
+      ],
+      "problems": [],
+      "protocol_limits_bytes": {
+        "decoder_deflate_probe": 65536,
+        "decoder_output": 16384,
+        "decoder_prefix": 65536,
+        "http1_pending": 65536,
+        "response_cache": 0,
+        "transport_pending": 65536,
+        "transport_plaintext": 65536
+      },
+      "protocol_observed_max_bytes": {
+        "decoder_deflate_probe": 0,
+        "decoder_output": 16384,
+        "decoder_prefix": 0,
+        "http1_pending": 4071,
+        "response_cache": 0,
+        "transport_pending": 61440,
+        "transport_plaintext": 0
+      },
+      "python_baseline_bytes": 1119,
+      "python_current_bytes": 173751,
+      "python_peak_bytes": 332997,
+      "python_peak_increase_bytes": 331878,
+      "received_bytes": 100000000,
+      "rss_baseline_bytes": 41713664,
+      "rss_increase_bytes": 10059776,
+      "rss_max_sample_gap_seconds": 0.015066333813592792,
+      "rss_peak_sampled_bytes": 51773440,
+      "rss_samples": 31,
+      "status": "passed",
+      "stderr": ""
+    },
+    {
+      "baseline_lifetime_rss_bytes": 42827776,
+      "body_cached": false,
+      "checkpoints": [
+        {
+          "python_current_bytes": 210683,
+          "python_peak_bytes": 332446,
+          "received_bytes": 250003456
+        },
+        {
+          "python_current_bytes": 256941,
+          "python_peak_bytes": 332522,
+          "received_bytes": 500006912
+        },
+        {
+          "python_current_bytes": 239549,
+          "python_peak_bytes": 332584,
+          "received_bytes": 750010368
+        },
+        {
+          "python_current_bytes": 184866,
+          "python_peak_bytes": 332838,
+          "received_bytes": 1000000000
+        }
+      ],
+      "child_exit_code": 0,
+      "chunk_count": 61041,
+      "cleanup": {
+        "client_exited": true,
+        "peer_threads_stopped": true,
+        "reader_joined": true
+      },
+      "client_pid": 56132,
+      "config": {
+        "body_bytes": 1000000000,
+        "case": "br",
+        "chunk_size": 16384,
+        "chunked": true,
+        "client": "async",
+        "encoding": "br",
+        "protocol": "http/1.1",
+        "sample_interval": 0.01,
+        "timeout": 180,
+        "tls": "plain"
+      },
+      "controller_pid": 55617,
+      "elapsed_seconds": 3.5677857080008835,
+      "first_chunk_received": true,
+      "lifetime_rss_bytes": 52887552,
+      "max_chunk_bytes": 16384,
+      "peer_connections": [
+        {
+          "alpn": null,
+          "cipher": null,
+          "connection_id": 1,
+          "max_pending_h2_streams": 0,
+          "requests": 1,
+          "server_handshake_seconds": 0.0,
+          "session_reused": false,
+          "tls_version": null
+        }
+      ],
+      "peer_errors": [],
+      "peer_responses": [
+        {
+          "body_bytes": 1000000000,
+          "connection_id": 1,
+          "decoded_body_bytes": 1000000000,
+          "decoded_bytes_sent": 1000000000,
+          "encoded_body_bytes": 1281759,
+          "encoding": "br",
+          "first_send_started": 1597146.195964791,
+          "framing": "chunked",
+          "gate_prefix_bytes_sent": 32768,
+          "gate_reached": true,
+          "last_send_completed": 1597146.849842625,
+          "last_send_started": 1597146.849815041,
+          "max_source_chunk_bytes": 16384,
+          "prefix_bytes": 32768,
+          "tail_release_requested": true,
+          "tail_released_before_complete": true,
+          "truncated": false
+        }
+      ],
+      "problems": [],
+      "protocol_limits_bytes": {
+        "decoder_deflate_probe": 65536,
+        "decoder_output": 16384,
+        "decoder_prefix": 65536,
+        "http1_pending": 65536,
+        "response_cache": 0,
+        "transport_pending": 65536,
+        "transport_plaintext": 65536
+      },
+      "protocol_observed_max_bytes": {
+        "decoder_deflate_probe": 0,
+        "decoder_output": 16384,
+        "decoder_prefix": 0,
+        "http1_pending": 4074,
+        "response_cache": 0,
+        "transport_pending": 65535,
+        "transport_plaintext": 0
+      },
+      "python_baseline_bytes": 1119,
+      "python_current_bytes": 172694,
+      "python_peak_bytes": 332838,
+      "python_peak_increase_bytes": 331719,
+      "received_bytes": 1000000000,
+      "rss_baseline_bytes": 42844160,
+      "rss_increase_bytes": 9994240,
+      "rss_max_sample_gap_seconds": 0.01514479098841548,
+      "rss_peak_sampled_bytes": 52838400,
+      "rss_samples": 256,
+      "status": "passed",
+      "stderr": ""
+    }
+  ],
+  "chunk_size": 16384,
+  "clients": [
+    "sync",
+    "async"
+  ],
+  "comparisons": [
+    {
+      "case": "br",
+      "client": "async",
+      "python_growth_bytes": 0,
+      "rss_growth_bytes": 0,
+      "status": "passed"
+    },
+    {
+      "case": "deflate",
+      "client": "async",
+      "python_growth_bytes": 0,
+      "rss_growth_bytes": 327680,
+      "status": "passed"
+    },
+    {
+      "case": "gzip",
+      "client": "async",
+      "python_growth_bytes": 0,
+      "rss_growth_bytes": 753664,
+      "status": "passed"
+    },
+    {
+      "case": "http-chunked",
+      "client": "async",
+      "python_growth_bytes": 311,
+      "rss_growth_bytes": 655360,
+      "status": "passed"
+    },
+    {
+      "case": "tls12-http1",
+      "client": "async",
+      "python_growth_bytes": 407,
+      "rss_growth_bytes": 589824,
+      "status": "passed"
+    },
+    {
+      "case": "tls13-h2",
+      "client": "async",
+      "python_growth_bytes": 0,
+      "rss_growth_bytes": 2539520,
+      "status": "passed"
+    },
+    {
+      "case": "tls13-http1",
+      "client": "async",
+      "python_growth_bytes": 0,
+      "rss_growth_bytes": 2048000,
+      "status": "passed"
+    },
+    {
+      "case": "br",
+      "client": "sync",
+      "python_growth_bytes": 0,
+      "rss_growth_bytes": 671744,
+      "status": "passed"
+    },
+    {
+      "case": "deflate",
+      "client": "sync",
+      "python_growth_bytes": 0,
+      "rss_growth_bytes": 819200,
+      "status": "passed"
+    },
+    {
+      "case": "gzip",
+      "client": "sync",
+      "python_growth_bytes": 0,
+      "rss_growth_bytes": 0,
+      "status": "passed"
+    },
+    {
+      "case": "http-chunked",
+      "client": "sync",
+      "python_growth_bytes": 45,
+      "rss_growth_bytes": 0,
+      "status": "passed"
+    },
+    {
+      "case": "tls12-http1",
+      "client": "sync",
+      "python_growth_bytes": 0,
+      "rss_growth_bytes": 0,
+      "status": "passed"
+    },
+    {
+      "case": "tls13-h2",
+      "client": "sync",
+      "python_growth_bytes": 0,
+      "rss_growth_bytes": 1327104,
+      "status": "passed"
+    },
+    {
+      "case": "tls13-http1",
+      "client": "sync",
+      "python_growth_bytes": 0,
+      "rss_growth_bytes": 393216,
+      "status": "passed"
+    }
+  ],
+  "dependencies": {
+    "brotli": "1.2.0",
+    "cryptography": "45.0.5",
+    "psutil": "7.0.0"
+  },
+  "finished_at_utc": "2026-10-23T13:26:48.632031+00:00",
+  "git": {
+    "head_sha": "9af4cc7032b82bea055dcd09b82d5bf8bba80f44",
+    "tracked_changes_present": true,
+    "working_tree_dirty_including_untracked": true
+  },
+  "platform": "macOS-15.7.7-arm64-arm-64bit-Mach-O",
+  "python": "3.13.3 (v3.13.3:6280bb54784, Apr  8 2025, 10:47:54) [Clang 15.0.0 (clang-1500.3.9.4)]",
+  "scope": "local checkout, not published-artifact acceptance",
+  "selected_cases": [
+    "http-chunked",
+    "tls12-http1",
+    "tls13-http1",
+    "tls13-h2",
+    "gzip",
+    "deflate",
+    "br"
+  ],
+  "source_before": {
+    "files": {
+      "ja3requests/__init__.py": "39363fb2e0dbb44e2341a7a471a01b1a42f1f36304f61c791d2ccf00b87bd56b",
+      "ja3requests/__version__.py": "d14499f07c06f655281bf6e25f1f20cbad41d3895a3265d2b07bea1e63ee4797",
+      "ja3requests/_async_upload.py": "664d2e0b5b46c5ea9f45d916525f0bd4dab7e911ce663cb2be2a8214bb772bbb",
+      "ja3requests/_async_utils.py": "bf079e4afb1be191cccd13b3954f5ccee9e4838ffda610feec7c3286fa7a7881",
+      "ja3requests/_cookie_file.py": "bb2e9eabfc0edeac882b50dca969471bfe3d79bc19bb19420e0e641d1339b3c5",
+      "ja3requests/_multipart.py": "a3768050ed86edf8bd8f647efffd1f42d6156911f2132c85bf99232617dcf4ea",
+      "ja3requests/_request_defaults.py": "9d46d0fa4f8f57eb98aa32ab6f50405eb5a85dea994c83a7ae323ec95c2719cf",
+      "ja3requests/_typing.py": "9ca4a56af20aa9f440e6b7b88c9160903a42620c4b67a0da00e05670dcfff627",
+      "ja3requests/_upload.py": "044ca4e89fc365315b0f604a216e90e717b29a18ef0d56364cf22d9eef429a39",
+      "ja3requests/async_pool.py": "572c0d81984595cbcee38eff9883614650c62127410c171fe9110a2cc739f44e",
+      "ja3requests/async_response.py": "c84b735ffa87ef9510517a7a8c85cfe2331e9d503e8d91772d782eca7c7ab69b",
+      "ja3requests/async_sessions.py": "1bb5affabc3475cd3ebc7cd57b706e535354c72dcd8179cf1245250dda5dfd12",
+      "ja3requests/async_transport.py": "caa41b4da4e197f7ad0627e9d37574033e650dec316ce14ac2568f9801930812",
+      "ja3requests/base/__contexts.py": "1482380343d847bad618d8f5c2d274f37b024b4abbf951363ddd7934d9ce51b6",
+      "ja3requests/base/__init__.py": "c21c8073efe41384018b735acfb07b265f4649505f0eea9976fd5bea5788e524",
+      "ja3requests/base/__requests.py": "6350c46c60adf7a7b3d5c0bc5860474860819a495b701a0709ccf5fdd0b35d08",
+      "ja3requests/base/__response.py": "4af3fe1389f20b4e474b5ad13a0be16e5ce9dbfe1e03ec60f7cec757b0dd1d59",
+      "ja3requests/base/__sessions.py": "c48aa93761d29ce37b6830a9aeb3dc1d5645eac2421f525df261a62d545f7beb",
+      "ja3requests/base/__sockets.py": "d4f1a7dbe2b8d4663b4c589c8550fb38abc44e10993671d05bef78703b691a8e",
+      "ja3requests/const.py": "fe7456005f40a81240a0ec2e0f5ca10708d4143b20de70fe10507c34f9e6faa0",
+      "ja3requests/contexts/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "ja3requests/contexts/context.py": "a99e79f87a40f69cdc2fc3f9e19a58e4a212abc30cbbe1eb46f961311675f3e3",
+      "ja3requests/cookies.py": "5bcac8f244280cd14c85f0d83fc44cbf05860bb70ffb06e6e128b81f64284cea",
+      "ja3requests/exceptions.py": "b772a67e90bc3b166faba95c754ed1a6c3346e28384621da5a4457d2479a85db",
+      "ja3requests/pool.py": "091897f1e2a354d473e7eac6dce516f9e195336d0b9dcacfab285f8673d9d7d7",
+      "ja3requests/protocol/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "ja3requests/protocol/exceptions.py": "60f5aa021a1ea0c81c778d379562189c4e43b5709ad0f21f0e0655b1a8a52a3a",
+      "ja3requests/protocol/h2/__init__.py": "2f197b55056a1b2d1cb9ea5aa9fc22e0101f303e51eb268a16d8909ae4fa5d95",
+      "ja3requests/protocol/h2/async_connection.py": "6e36cdf17b407abc7688d996f9d3b7672d3cf30e8cbb6d92ad04d7e25988d2b4",
+      "ja3requests/protocol/h2/connection.py": "be4e3af23e0e49ec04f951a803e358419bdc41f59160e56e29b8af458ed5f8a6",
+      "ja3requests/protocol/h2/frame.py": "4d1cda4faf15309a6d759fe6c98570532affd7a5aab1922a60a58ef1efc959d3",
+      "ja3requests/protocol/h2/hpack.py": "274073f31089669ccd8639a7dd16fefb06176867014ccd50e75539b78d2f9c4d",
+      "ja3requests/protocol/h2/huffman.py": "0e3b15a58b86ac9ced9cccb02d088d90d083fc568920c0fadc045cd6f92339ca",
+      "ja3requests/protocol/h2/multiplex.py": "ae1fd04cc59676b2416a070f3adfbcc33e0d8ace4dd5176d7caf35056a7c8a8f",
+      "ja3requests/protocol/h2/stream_state.py": "35c757335dec06c416cf80d1db4920561c6b32c6402a5ad13c6b6209009a2b7c",
+      "ja3requests/protocol/sockets.py": "4c9b31b22c9b46d84bc5b8de9e68a97a1dbd7c62895911dcf462186b84c2228c",
+      "ja3requests/protocol/tls/__init__.py": "56f225ca02b2634a47225f90a7d603697e411dcecf920cf34e3cd8cb33951894",
+      "ja3requests/protocol/tls/_io.py": "71a9e896b88b50449f70eb51c66fed4308ee5126554a0f6946d6796f1e2f8613",
+      "ja3requests/protocol/tls/browser_presets.py": "063c2060d908cebbb5515099d251b67304d12c98c31456d5a034acf5ccf81cab",
+      "ja3requests/protocol/tls/certificate_verify.py": "c713fe2e65646dfc12c4ee0b73f526994992f088e56e9d6bfaaf1c18e868b0ce",
+      "ja3requests/protocol/tls/cipher_suites/__init__.py": "9feca4dfb876bad2cb45a45285c3a1066b6b53d6911cf1657f442d64163da1c2",
+      "ja3requests/protocol/tls/cipher_suites/suites.py": "d7a4ce0349fa881b2d718bf2211e9fef160ce9d062d3912cb5be4083611950d4",
+      "ja3requests/protocol/tls/client_hello_info.py": "cf96b57956a3a634862ecd2d4d548fa2ae0f758785c45a27dc7c3c28317cc47e",
+      "ja3requests/protocol/tls/config.py": "57c651e72678973d7dd3268b00462d0ee05d4f43e850330e34c0b370a6e1cebe",
+      "ja3requests/protocol/tls/crypto.py": "6b6154abea7314eff07469508e756dcda6c481dd19cc7044445e0234602ac0fa",
+      "ja3requests/protocol/tls/debug.py": "c3666e30bbdda249d230c075b2530d8dffdfb848d82791db104444a900a53971",
+      "ja3requests/protocol/tls/extensions/__init__.py": "4c65f54758d0267282a1b4fa5343855b3cf3812a7096c12067cc33bd7b9d6122",
+      "ja3requests/protocol/tls/layers/__init__.py": "f554da8b5253692ed9aa68fe18355d92001039adb82603b672dfa06878f2fc6c",
+      "ja3requests/protocol/tls/layers/certificate.py": "b7262200af48c2a1b34ec488a8feba18a57243abb8b1cf88e0c8de7d904f5c81",
+      "ja3requests/protocol/tls/layers/certificate_request.py": "4e993a8531feb34394e5e70b873cd65e6929c76e853238cb32432a3ffe0f0bcd",
+      "ja3requests/protocol/tls/layers/client_hello.py": "f5a37595c63e97c13a79b5cd71e94cf9888101c2bd80e5fd1d5f9c453c8b0ace",
+      "ja3requests/protocol/tls/layers/hello_request.py": "e1745772d36cd7a2261c8fe1f7192ce9cce3f4b5d393124921dbf1de80c626f2",
+      "ja3requests/protocol/tls/layers/server_hello.py": "be76698c214990b26f87c603c20787c8eeb62ec2bee1380859075a87b57d266b",
+      "ja3requests/protocol/tls/layers/server_hello_done.py": "8d334967d307987c77d00f83e827179d9e6e0037def3c2063bbd588257186a8a",
+      "ja3requests/protocol/tls/layers/server_key_exchange.py": "cd487d14bb089b189adc8bf1fdadd1d30e182128b7756b41d4f082af0485cec2",
+      "ja3requests/protocol/tls/record_layer.py": "d6110b432ff67501b00a59b01cc5061f642de8cd79d4f0b69be19a908cce19f9",
+      "ja3requests/protocol/tls/security_warnings.py": "b57b37907cf70214450abbdfff84e03fa6efce74a3555205ae7391b2eee53381",
+      "ja3requests/protocol/tls/session_cache.py": "f441196c4e15297b6c245f26369582fb7e7f2f2419c8315d8ad4aeabcd3e3437",
+      "ja3requests/protocol/tls/tls13.py": "69af6b9ce7acd33de2aced4c39cc59ceeac645141dbfb82ec354de143caa5b1f",
+      "ja3requests/requests/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "ja3requests/requests/http.py": "f8f0b40d227ee780ae3541abe4f417b951050ac310cd3cb0ffb929ae55a32de3",
+      "ja3requests/requests/https.py": "3419c10bf23bd6894c6fd1ab75e123df307f97893b4f831692334d907432fedc",
+      "ja3requests/requests/request.py": "0fd5f99fb0d16b98775bd531286af2ab1e809078f364b93855321fb5b0034b81",
+      "ja3requests/response.py": "9b87eedb7ecd398269bb02518e3c35d2433afabfe45d4b28d9cb524990c29209",
+      "ja3requests/retry.py": "29b7d8464de45727f79c5940e691c93a34e90495c8d3cf1357afa63bf7eba2f3",
+      "ja3requests/sessions.py": "07adffc15d03e4a767a0affa12c377440994ec3eb4313f4d6af1e894b1d7c963",
+      "ja3requests/sockets/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "ja3requests/sockets/_upload.py": "baec17df07b7ebffc14e5569a15ba92db96e14123c30934f5188609f950a7e67",
+      "ja3requests/sockets/http.py": "9cf3acf259ae5187af90150a8b9243f0ee231231324817693cce1740db262f40",
+      "ja3requests/sockets/https.py": "c0a16ef182c58aee77da88d070d14092467f4d6f0a06121ff1875e4cfc0c2e96",
+      "ja3requests/sockets/proxy.py": "d561e4a7b6e3ef52d54b052aa817ad6864aa91c492a817f5769ec0f8d1f7a5ee",
+      "ja3requests/sockets/socks.py": "6668947a606fabb7eea2063be0f36c948128815261a9ece778f3fa0c1c1bc727",
+      "ja3requests/utils.py": "c499fb001c1a3c040720b5e272b2ad5d5ddf287123c97e95055d8cf3c34c3902"
+    },
+    "module_count": 73,
+    "sha256": "323c747d93ccc9b9d2e34de88ac18832030ef01c6eac4c94bcf67c2b2c2131b8"
+  },
+  "source_stable": true,
+  "started_at_utc": "2026-10-23T13:25:25.897977+00:00",
+  "status": "passed",
+  "temporary_removed": true,
+  "tools_before": {
+    "bench/http1_baseline.py": "102da44f5bc8283d7a6db78d3376f78c3684c25a99eae5bf0cfc5956555ffd03",
+    "bench/peers.py": "7222e62f3b0a9a6ad284c1e9d16fdde7b360cffd0b91a3be059fc9b28f893797",
+    "bench/requirements.txt": "b6e3e6733a9992b2b28e175cd7ad0ec0746e7cf78470033de1f12bff07f46bfd",
+    "bench/stream_memory.py": "3a01513733db8472d2f72a645a97ec465c75c77b4666cc9ce30f56a90068343d",
+    "bench/stream_memory_peer.py": "7cf1b7a1adf8f1bcecaee1a65648499efab397d437874102d5284639439cd340",
+    "bench/test_protocol_performance.py": "fa4479cba30e57937269bc61b93a51fcf9cb4b124822317bf3e7d8c20b91045c",
+    "test/integration/conftest.py": "9a56b420f988c397964ed1542161d3e6c70212f9058213d624737f62f1079a8d",
+    "test/mock_servers/local.py": "d2ff7feabeaedc72f1d8d032003feda173128b4da62121ce0d873b7028cfb406",
+    "tools/verify_release.py": "09a60e90ea06768e3ef0ef7ee8929c58e100f48b873f34f128f268fdac67c373"
+  },
+  "tools_stable": true
+}

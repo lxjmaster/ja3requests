@@ -1,5 +1,217 @@
 # Next Development Plan
 
+## Selected execution: P1 -> P2 -> P3 (2026-10-25)
+
+Status: **IN PROGRESS / UNREGISTERED**. The user selected the ordered sequence
+with "continue in order" after reviewing the concrete preparation below.
+This supersedes the earlier planning-only selection for these three outcomes.
+
+- [ ] P1: commit the exact 12-file tooling/evidence batch below, push normally
+  to the existing master, and verify its five exact-commit workflows.
+- [ ] P2: refresh the five Issues, post the prepared evidence with delivered
+  commit permalinks, reconcile the async API mapping and explicitly record the
+  selected replacement memory criterion in Issue 41 before closing it.
+  Close the five original Issues with scoped acceptance evidence.
+- [ ] P3: resolve the two `_request_defaults.py` diagnostics plus directly
+  required helper annotations, add the module to strict checking, and verify
+  the existing default-merging/runtime/installed-consumer boundaries.
+- [ ] Reconcile remote readback, local verification, retention and cleanup.
+
+P1's repository delivery covers the 12 listed files. P3 is a subsequent local
+implementation/acceptance batch; no package release, tag or deployment is
+selected. Required checks follow the boundaries below. The completed 1 GB run
+remains historical evidence for its recorded source snapshot after P3 changes.
+Do not alter its JSON or rerun that large measurement solely for annotations.
+
+Use configured Git identity and scoped staging, preserving unrelated local
+files. Remote Issue writes use explicit prepared bodies and readback; inspect
+actual state before retrying an operation. A failed required CI check is fixed
+within the batch and verified before Issue closure. Keep failed evidence,
+avoid history rewriting and do not expand runtime semantics to fix types.
+Work is serial; no subagents are needed. Retain reports and acceptance logs;
+remove only this execution's owned temporary environments/files after use.
+
+The supported status command still lacks an official session binding. Keep
+this file UNREGISTERED; no registry transition or substitute identity is claimed.
+
+## Current sequence (2026-10-25)
+
+Status: **PLANNING AND LOCAL PREPARATION COMPLETE / UNREGISTERED**.
+This is the current entry point. The dated sections below preserve earlier
+selections and acceptance; their pending labels do not reopen completed work.
+The present request selects planning and local delivery preparation. Future
+repository delivery, Issue administration and runtime changes are identified
+below with their own execution boundaries.
+
+### Verified state
+
+- Local and remote master are
+  `9af4cc7032b82bea055dcd09b82d5bf8bba80f44`. Tests, Coverage, Lint,
+  Documentation and Public typing all succeeded for that commit; the
+  [Issue acceptance drafts](issue_acceptance_2026_10_25.md#evidence-baseline)
+  link the five runs. The typing batch is already delivered to the repository.
+- Latest GitHub Release is v2.6.0, published 2026-10-23, with tag target
+  `76f1e6b4fba91c8e53d500f6bc7832cf86ece0e8`. Post-release typing and new
+  measurement tooling are not described as part of that released artifact.
+- Issue 41 local measurement is complete: 28 cases / 14 comparisons, unchanged
+  report hash and matching package/tool hashes. Its tools/tests/docs remain
+  uncommitted. A byte-identical
+  [repository evidence copy](../bench/streaming-memory-2026-10-23.json) now
+  preserves the original JSON independently of local ignored `dist` retention.
+- Issues 36, 37, 40, 41 and 42 were re-read on 2026-10-25 and remain OPEN.
+  Their original bodies and update times are unchanged since 2026-04-17.
+- A new focused diagnostic found **two errors in `_request_defaults.py`**:
+  an untyped `default_headers` call at line 84 and inferred query-pair types at
+  line 120. This is a maintenance candidate, not a runtime failure.
+
+### Ordered next outcomes
+
+| Order | Outcome and dependency | Work | Acceptance / current selection |
+| --- | --- | --- | --- |
+| P0 | Make the completed measurement reviewable and reconcile the backlog | Preserve an exact report copy in `bench`, link its provenance, prepare five Issue updates, and record this sequence | Selected now; complete after report equality/hash, links and scope readback. Reuse unchanged measurement/test evidence |
+| P1 | Deliver the accepted development tools to the repository; depends on P0 | Commit only the 12 listed files, push normally to existing master, verify the five workflows for the actual new commit | Recommended immediate delivery step. Requires selection of commit/push; no package version or release is needed for development-only tools |
+| P2 | Reconcile the five historical Issues; evidence-dependent on P1 for the new memory files | Use the prepared per-Issue evidence. For 41 explicitly adopt the bounded-memory interpretation before closure; for 37 explain the delivered API mapping | Requires selection of exact remote edits/closures. Four Issues have evidence for their required core scope; 41's literal memory wording remains unreconciled remotely |
+| P3 | Tighten one bounded internal type boundary; independent of Issue closure | Resolve the two `_request_defaults.py` diagnostics and only directly required helper annotations; add that module to strict checking when clean | Recommended next code batch after tooling delivery. Preserve request behavior, Python >=3.7 and installed public consumers; implementation is not selected by this planning pass |
+
+P2 and P3 have no implementation dependency on each other. Keep one active
+write batch; independent reads/checks may run concurrently. No subagents are
+needed for this local planning/evidence work.
+
+### P1 exact delivery inputs
+
+The proposed commit contains these 12 files, after a fresh overlap check:
+
+```text
+IMPROVEMENTS.md
+bench/README.md
+bench/requirements.txt
+bench/STREAMING_MEMORY.md
+bench/stream_memory.py
+bench/stream_memory_peer.py
+bench/streaming-memory-2026-10-23.json
+issues/next_development_plan.md
+issues/streaming_memory_acceptance.md
+issues/issue_acceptance_2026_10_25.md
+tools/tests/test_stream_memory.py
+tools/tests/test_stream_memory_peer.py
+```
+
+The candidate is development tooling, tests, evidence and repository guidance.
+It adds psutil only to optional benchmark requirements. The existing Python
+3.12 tooling CI job already installs psutil through `requirements-capture.txt`;
+the runtime test matrix and package dependencies remain unchanged. The full
+1 GB matrix remains explicitly invoked; machine-specific RSS budgets are not
+silently added to general CI. Reuse the successful 206 tooling tests and the
+28-case acceptance while their source/tool inputs match; rerun affected checks
+only for relevant changes or an actual delivery failure.
+
+Preserve IDE files, `.DS_Store`, debug scripts, historical release records and
+other `dist` artifacts. A later delivery must use the actual configured Git
+identity, retain the accepted JSON bytes and read back the new remote commit
+and its five workflow results. Do not substitute the older green commit's CI
+for the new tools' CI.
+
+### P3 bounded code acceptance
+
+Reproduce the current diagnostics with:
+
+```sh
+.venv/bin/python -m mypy ja3requests/_request_defaults.py \
+  --no-incremental --cache-dir=/dev/null
+```
+
+The 2026-10-25 command exited 1 with exactly two diagnostics. A later selected
+implementation should give `default_headers` a precise return contract and
+correct query-pair inference without coercing inputs or changing runtime
+validation. Avoid broad `Any`, ignore directives, module-wide suppression or
+an unrequested rewrite of request preparation.
+
+Verify that module and the existing strict set, the existing
+`test/test_request_defaults.py` and `test/integration/test_request_defaults.py`,
+formatting/error-level lint, and independent installed consumer typing if
+public annotations or packaging inputs change. Preserve empty/raw bypass,
+ordered query pairs, byte headers, atomic assignment, snapshots and sync/async
+behavior. Add a test only for a meaningful uncovered boundary. If resolving
+the diagnostics requires a behavior change, return to the compatibility choice
+before expanding this type-only batch.
+
+### Deferred choices and completed work
+
+Public documentation hosting needs a host/URL/version policy; optional benchmark
+CI needs a workload/runner/comparison policy. Browser changes need a selected
+version/platform and fresh capture. Async module-level helpers, streaming
+prepared requests, timeout/proxy/query consistency, persistent TLS sessions,
+H2 scheduling/push, 0-RTT, ECH/PQ and HTTP3 remain independent choices with
+consumer/compatibility requirements. None is a prerequisite for P1-P3.
+
+Do not reopen TLS1.2's 300 ms pause, the selected native-async read-ahead
+investigation or legacy packaging removal: all three were completed in 2.1.1,
+as recorded in [the later results](../bench/POST_2_1_0_RESULTS.md) and
+[the reconciled register](post_2_1_1_plan.md#8-deferred-candidate-register).
+Uploads, async files/Cookie files, buffered async preparation, request HEADERS
+priority, HPACK exclusions, Chrome 155 subset, redirect policy and opt-in
+headers/params defaults have also shipped. Old unchecked historical rows are
+not evidence that these features are missing.
+
+### Local verification and retention
+
+The original report and its repository copy must remain byte-identical, with
+SHA-256 `641230a2fe374c263931cf717889d3f5f125aba8e511407a05ce1d326a8afe79`.
+Read back all links in the changed Markdown, JSON acceptance counts/flags,
+report/module/tool hashes, the exact changed-file scope and `git diff --check`.
+This documentation/evidence pass needs no repeat full runtime suite, package
+build or large measurement. The focused mypy diagnostic above is recorded as
+failing evidence for P3, not a passing test.
+
+Retain both JSON copies, the small smoke report and the existing acceptance
+record. No service, staging installation or task-owned temporary directory is
+created in this pass. Recover only this pass's edits if a check fails; preserve
+the original reports and unrelated work. The supported plan status command
+still reports a missing official session binding; no registry operation or
+session identity is fabricated. This file remains UNREGISTERED.
+
+Completed on 2026-10-25:
+
+- [✅] Refresh remote master, latest GitHub Release, five exact-commit workflows
+  and the original bodies/states of all five historical Issues.
+- [✅] Confirm the original 28-case / 14-comparison measurement, current package
+  and tool hashes, then preserve a byte-identical repository JSON copy.
+- [✅] Prepare the five Issue evidence/criterion drafts, the exact 12-file
+  delivery set, ordered dependencies and bounded next-code acceptance.
+- [✅] Resolve all 102 relative file targets across the six affected Markdown
+  records, check the new anchors, report equality/hash and whitespace, and
+  confirm no runtime/workflow/package/site source changes in this pass.
+
+P0 is complete. P1-P3 are proposed next execution outcomes with the selections
+specified above; they are not unfinished required work for this planning pass.
+
+## Local streaming memory acceptance (2026-10-23)
+
+The user selected the bounded-streaming measurement interpretation for Issue
+#41. The fixed **100,000,000 / 1,000,000,000 decoded-byte** matrix passed all
+**28 cases and 14 size comparisons** across sync/async HTTP1, TLS 1.2/1.3,
+TLS 1.3 H2 and separate gzip/deflate/Brotli paths, with `chunk_size=16384`.
+The [measurement guide and results](../bench/STREAMING_MEMORY.md#accepted-local-run-2026-10-23)
+and [execution record](streaming_memory_acceptance.md) preserve the exact scope,
+budgets, tooling tests and limitations. The
+[raw report](../dist/streaming-memory/acceptance-01/measurement.json) is retained
+locally under Git-ignored `dist`; the guide includes its hash and reproduction.
+
+The maximum sampled RSS increase over the client baseline was 10,059,776 bytes;
+the maximum traced Python peak increase was 789,406 bytes. Maximum growth from
+100 MB to 1 GB was 2,539,520 RSS bytes and 407 traced Python bytes. Every case
+validated complete content, gated early delivery, no response-body cache and
+bounded application chunks; source/tool stability and cleanup passed.
+The tooling regression suite passed **206 tests**. The runtime source and its
+public streaming contract remain unchanged at
+`9af4cc7032b82bea055dcd09b82d5bf8bba80f44`.
+
+This batch is local-only: no commit, push, release or remote Issue edit/closure.
+Its evidence supports the user-selected measurement boundary, not the original
+literal `all memory <= chunk_size` wording. Repository delivery or remote
+acceptance reconciliation remains a separate selection; no further capability
+is automatically added. Earlier typing/release sections below are history.
+
 ## Typing repository delivery selection (2026-10-23)
 
 The user subsequently selected a scoped commit of the completed typing batch,
