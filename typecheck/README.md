@@ -45,7 +45,7 @@ including `assert_type` checks that catch an accidental `Any` return. Every
 `# E:` line in `invalid.py` must produce its specific diagnostic; wrong URLs,
 timeouts, streaming options, upload tuples, callback returns, TLS configuration,
 Cookie values, and response return types are covered. The current consumers
-include 138 negative markers: async additions reject synchronous pools, incorrect
+include 144 negative markers: async additions reject synchronous pools, incorrect
 awaited return types, invalid budgets/iterators, text files and unsupported file tuples.
 Synchronous upload calls reject async iterators; async calls accept byte iterators
 and async byte iterators. Async multipart paths include `PathLike[str]`.
@@ -67,7 +67,7 @@ while withholding diagnostics from implementation bodies. It does **not** use
 The source gate strictly checks the aliases, top-level facade, retry policy,
 HTTP/2 frame values, HPACK header and Huffman codecs, and the ClientHello
 inspection schema.
-The strict set also includes request-default validation and merging, for sixteen
+The strict set also includes request-default validation and merging, for seventeen
 source modules. Query-pair types preserve existing text-key, byte-key and mixed
 list/tuple inputs, including homogeneous typed lists; string-only configured
 default pairs keep their separate contract. Installed consumers cover those
@@ -121,6 +121,15 @@ runtime checks. Transport/H2 adapters and route-key components retain their
 existing dynamic annotations; this batch does not redesign those interfaces.
 Installed examples check internal lease/task types without making them public
 APIs. Eight negative cases cover factory results, options, leases and task sets.
+AsyncResponse is strictly checked too. Body iterators retain their actual
+AsyncGenerator[bytes, None] type, including aclose() and byte-valued iteration.
+Pending reads accept Future[bytes], matching ensure_future; cleanup tasks return
+None, owned upload sources retain UploadSource, and parsed headers retain text
+pairs. Only the directly called Cookie extraction adapter receives a signature;
+the rest of the Cookie module is outside this strict migration. JSON and
+transport adapters keep their existing dynamic boundaries. Six negative cases
+cover generator send values, read/cleanup ownership, upload sources and jars.
+Parsing, decoding, cancellation and resource release behavior are unchanged.
 The protocol modules are an incremental internal migration, not a claim that
 the full connection and TLS implementation is type-clean. Installed consumers
 also check precise protocol-value return types and eleven invalid protocol uses.

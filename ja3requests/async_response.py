@@ -7,13 +7,15 @@ import json
 import math
 from types import SimpleNamespace, TracebackType
 from typing import (
+    TYPE_CHECKING,
     Any,
-    AsyncIterator,
+    AsyncGenerator,
     Awaitable,
     Callable,
     Dict,
     List,
     Optional,
+    Tuple,
     Type,
 )
 
@@ -30,6 +32,9 @@ from ja3requests.exceptions import (
     Timeout,
 )
 from ja3requests.response import _ContentDecoder
+
+if TYPE_CHECKING:
+    from ja3requests._upload import UploadSource
 
 
 class AsyncResponse:
@@ -83,10 +88,10 @@ class AsyncResponse:
         self._chunk_crlf = False
         self._no_body = False
         self._reusable = False
-        self._pending_read: Optional[asyncio.Task] = None
-        self._cleanup_task: Optional[asyncio.Task] = None
+        self._pending_read: Optional[asyncio.Future[bytes]] = None
+        self._cleanup_task: Optional[asyncio.Task[None]] = None
         self._session_owner: Optional[Callable[[], Any]] = None
-        self._upload_sources: list = []
+        self._upload_sources: List[UploadSource] = []
 
     @classmethod
     async def from_http1(
@@ -248,8 +253,8 @@ class AsyncResponse:
                 raise error_type("Truncated HTTP response line")
             self._buffer.extend(data)
 
-    async def _read_headers(self) -> List[Any]:
-        headers = []
+    async def _read_headers(self) -> List[Tuple[str, str]]:
+        headers: List[Tuple[str, str]] = []
         while True:
             line = await self._readline(InvalidResponseHeaders)
             if line in (b"\r\n", b"\n"):
@@ -264,7 +269,7 @@ class AsyncResponse:
                 raise InvalidResponseHeaders("Invalid response header name")
             headers.append((name.decode('latin-1'), value.strip().decode('latin-1')))
 
-    def _set_headers(self, pairs: List[Any]) -> None:
+    def _set_headers(self, pairs: List[Tuple[str, str]]) -> None:
         self.raw_headers = []
         self.headers = {}
         self._headers_lower = {}
@@ -465,7 +470,7 @@ class AsyncResponse:
             # task's exception has been observed, and ownership is detached.
             pass
 
-    async def _iter_decoded(self, chunk_size: int) -> AsyncIterator[bytes]:
+    async def _iter_decoded(self, chunk_size: int) -> AsyncGenerator[bytes, None]:
         decoder = _ContentDecoder(self._content_encoding, chunk_size)
         try:
             while True:
@@ -516,7 +521,9 @@ class AsyncResponse:
         """Collect and parse a JSON body."""
         return json.loads(await self.read())
 
-    async def aiter_content(self, chunk_size: int = 1024) -> AsyncIterator[bytes]:
+    async def aiter_content(
+        self, chunk_size: int = 1024
+    ) -> AsyncGenerator[bytes, None]:
         """Yield bounded decoded chunks without retaining an uncached replay copy."""
         self._check_loop()
         if (
@@ -539,7 +546,7 @@ class AsyncResponse:
 
     async def aiter_lines(
         self, chunk_size: int = 512, delimiter: Optional[bytes] = None
-    ) -> AsyncIterator[bytes]:
+    ) -> AsyncGenerator[bytes, None]:
         """Yield byte lines; one unfinished line may grow independently of chunks."""
         if delimiter is not None and not isinstance(delimiter, bytes):
             raise TypeError("delimiter must be bytes or None")

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add AsyncResponse to strict typing, preserving byte-valued async generators
+  and their close interface, pending reads, cleanup tasks, upload sources and
+  text header pairs. Parsing, decoding and resource release are unchanged.
+
 - Add the asynchronous connection pool to strict typing, preserving entry and
   lease results, coroutine factories, waiters and cleanup tasks. Admission,
   cancellation, H2 sharing and shutdown behavior are unchanged.

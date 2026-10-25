@@ -6,6 +6,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
+    AsyncGenerator,
     AsyncIterator,
     Dict,
     Iterator,
@@ -27,7 +28,7 @@ from ja3requests import (
     AsyncSession,
 )
 from ja3requests.base import BaseRequest
-from ja3requests.cookies import Ja3RequestsCookieJar
+from ja3requests.cookies import Ja3RequestsCookieJar, extract_cookies_to_jar
 from ja3requests.pool import ConnectionPool
 from ja3requests.protocol.h2.frame import H2Frame, build_settings_frame
 from ja3requests.protocol.h2.hpack import (
@@ -457,6 +458,23 @@ async def pool_lease_types(pool: AsyncConnectionPool, entry: _Entry) -> None:
     assert_type(await pool.aclose(), None)
 
 
+async def response_lifecycle_types(
+    response: AsyncResponse, pending: asyncio.Future[bytes]
+) -> None:
+    chunks = response.aiter_content(1024)
+    lines = response.aiter_lines(delimiter=b'\n')
+    assert_type(chunks, AsyncGenerator[bytes, None])
+    assert_type(lines, AsyncGenerator[bytes, None])
+    async for chunk in chunks:
+        assert_type(chunk, bytes)
+    async for line in lines:
+        assert_type(line, bytes)
+    assert_type(await chunks.aclose(), None)
+    assert_type(await lines.aclose(), None)
+    assert_type(await response._wait_read(pending), bytes)
+    assert_type(extract_cookies_to_jar(CookieJar(), object(), response), None)
+
+
 async def native_async_calls(url: str) -> None:
     async with AsyncConnectionPool(max_pool_size=4) as pool:
         assert_type(pool, AsyncConnectionPool)
@@ -475,8 +493,10 @@ async def native_async_calls(url: str) -> None:
                 url, timeout=(1, None), stream=True
             ) as response:
                 assert_type(response, AsyncResponse)
-                assert_type(response.aiter_content(1024), AsyncIterator[bytes])
-                assert_type(response.aiter_lines(delimiter=b'\n'), AsyncIterator[bytes])
+                assert_type(response.aiter_content(1024), AsyncGenerator[bytes, None])
+                assert_type(
+                    response.aiter_lines(delimiter=b'\n'), AsyncGenerator[bytes, None]
+                )
                 assert_type(await response.read(), bytes)
                 assert_type(await response.text(), str)
                 assert_type(response.content, bytes)

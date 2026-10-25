@@ -6,7 +6,7 @@ from typing import AsyncIterator, Awaitable, Callable
 
 import ja3requests
 from ja3requests import HTTPRetry, Response, Session, TlsConfig
-from ja3requests.cookies import Ja3RequestsCookieJar
+from ja3requests.cookies import Ja3RequestsCookieJar, extract_cookies_to_jar
 from ja3requests.pool import ConnectionPool
 from ja3requests.protocol.h2.frame import H2Frame
 from ja3requests.protocol.h2.hpack import (
@@ -179,6 +179,19 @@ async def pool_rejects(
     pool._retire(object())  # E: arg-type
     pool._waiters.add(asyncio.Future[int]())  # E: arg-type
     pool._cleanup.add(asyncio.create_task(number()))  # E: arg-type
+
+
+async def response_lifecycle_rejects(response: ja3requests.AsyncResponse) -> None:
+    async def number() -> int:
+        return 1
+
+    await response.aiter_content().asend(b'bad')  # E: arg-type
+    await response.aiter_lines().asend('bad')  # E: arg-type
+    response._pending_read = asyncio.Future[str]()  # E: assignment
+    task: asyncio.Task[int] = asyncio.create_task(number())
+    response._cleanup_task = task  # E: assignment
+    response._upload_sources.append(object())  # E: arg-type
+    extract_cookies_to_jar({}, object(), object())  # E: arg-type
 
 
 async def async_rejects(

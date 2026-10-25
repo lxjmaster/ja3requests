@@ -198,7 +198,7 @@ class MockResponse:
         return self.info().get_all(name, [])
 
 
-def extract_cookies_to_jar(jar, request, response):
+def extract_cookies_to_jar(jar: CookieJar, request: Any, response: Any) -> None:
     """Extract the cookies from the response into a CookieJar.
 
     :param jar: CookieJar (not necessarily a RequestsCookieJar)

@@ -45,6 +45,12 @@ Keep the session open until its responses finish.
 | `response.aiter_lines(chunk_size, delimiter)` | Byte lines with LF/CRLF handling; a bytes delimiter is optional |
 | `await response.aclose()` | Release ownership once; cached bytes remain readable |
 
+`aiter_content()` and `aiter_lines()` return asynchronous generators, typed as
+`AsyncGenerator[bytes, None]`. They support normal `async for` iteration and
+`await iterator.aclose()`. Keep the response context manager or explicit
+`response.aclose()` as the ownership boundary, including when an iterator has
+never been advanced.
+
 Creating an iterator does not claim the body until its first advancement. Once
 uncached iteration or a collection operation starts, a competing consumer is
 rejected. An uncached body cannot be replayed: another iteration or full read
