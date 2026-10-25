@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Strictly check async phase-budget helpers and request exceptions, preserving
+  coroutine task result types and existing dynamic exception metadata. This
+  adds annotations only; timeout translation, cancellation and task contexts
+  keep their existing runtime behavior.
+
 - Add request-default merging to the strict source typing gate. Preserve existing
   string/byte query keys in the pair annotations and annotate generated header
   values; request preparation, validation and wire behavior are unchanged.

@@ -1,5 +1,6 @@
 """Compile-only examples for a consumer of the installed, typed package."""
 
+import asyncio
 from io import BytesIO
 from pathlib import Path
 from typing import (
@@ -40,6 +41,7 @@ from ja3requests.protocol.h2.huffman import huffman_decode, huffman_encode
 from ja3requests.protocol.tls.client_hello_info import inspect_client_hello
 from ja3requests.requests.request import Request
 from ja3requests.utils import default_headers, default_user_agent, make_headers
+from ja3requests._async_utils import owner_task, phase_wait
 
 if TYPE_CHECKING:
     from ja3requests._typing import RequestDefaults
@@ -128,6 +130,19 @@ def generated_header_types() -> None:
     assert_type(default_user_agent(), str)
     assert_type(default_headers(), Dict[str, Union[str, bytes]])
     assert_type(make_headers(user_agent=b'custom'), Dict[str, Union[str, bytes]])
+
+
+async def async_helper_types() -> None:
+    async def value() -> int:
+        return 42
+
+    task = owner_task(value())
+    assert_type(task, asyncio.Task[int])
+    assert_type(await phase_wait(task, 1, 'read'), int)
+    try:
+        await phase_wait(value(), 0, 'read')
+    except ja3requests.Timeout as error:
+        assert_type(error.phase, str)
 
 
 def protocol_value_boundaries(record: bytes) -> None:

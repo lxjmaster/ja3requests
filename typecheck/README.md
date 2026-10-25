@@ -67,12 +67,20 @@ while withholding diagnostics from implementation bodies. It does **not** use
 The source gate strictly checks the aliases, top-level facade, retry policy,
 HTTP/2 frame values, HPACK header and Huffman codecs, and the ClientHello
 inspection schema.
-The strict set also includes request-default validation and merging, for eight
+The strict set also includes request-default validation and merging, for ten
 source modules. Query-pair types preserve existing text-key, byte-key and mixed
 list/tuple inputs, including homogeneous typed lists; string-only configured
 default pairs keep their separate contract. Installed consumers cover those
 query inputs across sync/async and buffered preparation, plus the concrete
 string/byte dictionary return types of the header helpers.
+Async phase-budget helpers and request exceptions are also strictly checked.
+The internal task factory preserves coroutine result types and accepts coroutine
+objects, matching `loop.create_task`; phase waits retain awaited result types.
+Exception keyword metadata remains dynamic for existing sync/async and custom
+request/response objects. The `phase` annotation describes the field attached
+by async phase helpers; it does not add a value to manually constructed or
+synchronous timeout exceptions. Internal helper examples verify these installed
+annotations without establishing a new public helper API.
 The protocol modules are an incremental internal migration, not a claim that
 the full connection and TLS implementation is type-clean. Installed consumers
 also check precise protocol-value return types and eleven invalid protocol uses.

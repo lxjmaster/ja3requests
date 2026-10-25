@@ -18,6 +18,7 @@ from ja3requests.protocol.h2.hpack import (
 )
 from ja3requests.protocol.h2.huffman import huffman_decode
 from ja3requests.protocol.tls.client_hello_info import inspect_client_hello
+from ja3requests._async_utils import owner_task, phase_wait
 
 
 async def async_bytes() -> AsyncIterator[bytes]:
@@ -88,6 +89,10 @@ def rejects_protocol_values(record: bytes) -> None:
 async def async_rejects(
     url: str, response: ja3requests.AsyncResponse, session: ja3requests.AsyncSession
 ) -> None:
+    owner_task(123)  # E: arg-type
+    await phase_wait(async_bytes(), 1, 'read')  # E: arg-type
+    await phase_wait(session.get(url), 'slow', 'read')  # E: arg-type
+    ja3requests.Timeout('manual').phase = 42  # E: assignment
     ja3requests.AsyncSession(pool=ConnectionPool())  # E: arg-type
     ja3requests.AsyncConnectionPool(max_pool_size='many')  # E: arg-type
     await session.get(42)  # E: arg-type

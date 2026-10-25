@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import math
-from typing import Any, Awaitable, Optional, Tuple, TypeVar
+from typing import Any, Awaitable, Coroutine, Optional, Tuple, TypeVar
 
 from ja3requests.exceptions import Timeout
 from ja3requests._typing import Timeout as TimeoutInput
@@ -47,7 +47,7 @@ async def phase_wait(
         raise failure from error
 
 
-def owner_task(coroutine: Any) -> asyncio.Task:
+def owner_task(coroutine: Coroutine[Any, Any, _T]) -> asyncio.Task[_T]:
     """Connection/cleanup tasks must not inherit request ContextVar state."""
     loop = asyncio.get_running_loop()
     return contextvars.Context().run(loop.create_task, coroutine)

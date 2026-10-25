@@ -138,6 +138,10 @@ and non-negative, or `None`; `None` means no deadline for that phase.
 
 Owned phase expiry raises `ja3requests.Timeout`. External
 `asyncio.CancelledError` remains cancellation and does not trigger a retry.
+Timeouts translated by the async phase helper carry a text `phase` attribute
+identifying the failed wait. Manually constructed and synchronous timeout
+exceptions may lack that attribute; use `getattr(error, 'phase', None)` when
+handling exceptions from mixed sources.
 Cancellation detaches the owned lease and finishes scoped cleanup. For an overall
 deadline, wrap the complete request and body operation in `asyncio.wait_for`;
 it also waits for cancellation cleanup, so the deadline is not an exact

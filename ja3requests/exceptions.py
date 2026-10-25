@@ -5,13 +5,15 @@ Ja3Requests.exceptions
 This module contains the set of Requests' exceptions.
 """
 
+from typing import Any
+
 
 class RequestException(IOError):
     """
     There was an ambiguous exception that occurred while handling your request.
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: object, **kwargs: Any) -> None:
         """
         Initialize RequestException with `request` and `response` objects.
         """
@@ -93,6 +95,9 @@ class ConnectionException(RequestException):
 
 class Timeout(RequestException):
     """The request timed out."""
+
+    # Attached by async phase helpers; manual/sync exceptions may lack it.
+    phase: str
 
 
 class StreamConsumedError(RequestException, RuntimeError):
