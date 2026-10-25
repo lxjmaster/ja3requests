@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add TLS session-cache entries and TLS 1.2/1.3 tickets to strict typing,
+  preserving distinct optional lookup results and existing metadata/expiry
+  contracts. Cache locking, eviction and resumption behavior are unchanged.
+
 - Add the shared utility module to strict typing. Describe optional header
   inputs, text-only Basic/proxy credentials, nullable Cookie values and generic
   legacy retry results without changing header generation or retry behavior.

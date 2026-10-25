@@ -18,6 +18,7 @@ from ja3requests.protocol.h2.hpack import (
 )
 from ja3requests.protocol.h2.huffman import huffman_decode
 from ja3requests.protocol.tls.client_hello_info import inspect_client_hello
+from ja3requests.protocol.tls.session_cache import TLS12Ticket, TLSSessionCache
 from ja3requests._async_utils import owner_task, phase_wait
 from ja3requests.utils import (
     Task,
@@ -38,6 +39,21 @@ def utility_rejects() -> None:
     dict_from_cookie_string(123)  # E: arg-type
     Task(lambda: 'done', 'three', ValueError)  # E: arg-type
     Task(lambda: 'done', 3, 'ValueError')  # E: arg-type
+
+
+def session_cache_rejects(cache: TLSSessionCache) -> None:
+    TLSSessionCache(max_size='many')  # E: arg-type
+    TLSSessionCache(ttl='forever')  # E: arg-type
+    cache.get(b'host', 443)  # E: arg-type
+    cache.get('host', '443')  # E: arg-type
+    cache.put('host', 443, 'id', b'secret', 0xC02F)  # E: arg-type
+    cache.put('host', 443, b'id', b'secret', 0xC02F, verified='yes')  # E: arg-type
+    cache.put('host', 443, b'id', b'secret', 0xC02F, tls_version=0x0303)  # E: arg-type
+    cache.put_tls13('host', 443, b'ticket', 'psk', 0x1301, 300, 5, None)  # E: arg-type
+    cache.remove_tls12_ticket('host', 443, 'ticket')  # E: arg-type
+    cache.remove_tls13('host', 443, 'ticket')  # E: arg-type
+    TLS12Ticket(b'ticket', b'secret', 0xC02F, 300, verified='yes')  # E: arg-type
+    TLS12Ticket(b'ticket', b'secret', 0xC02F, 300, unknown=True)  # E: call-arg
 
 
 async def async_bytes() -> AsyncIterator[bytes]:

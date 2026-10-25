@@ -6,9 +6,22 @@ Thread-safe TLS session cache for session resumption.
 Stores TLS 1.2 sessions and TLS 1.3 tickets keyed by (host, port).
 """
 
+from __future__ import annotations
+
 import threading
 import time
-from typing import Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, Mapping, Optional, Tuple
+
+if TYPE_CHECKING:
+    from typing_extensions import TypedDict, Unpack
+
+    class _TLS12Metadata(TypedDict, total=False):
+        tls_version: Optional[bytes]
+        extended_master_secret: bool
+        verified: bool
+        verified_hostname: Optional[str]
+        certificate_expires_at: Optional[float]
+        sni: Optional[str]
 
 
 class TLSSessionEntry:
@@ -16,18 +29,18 @@ class TLSSessionEntry:
 
     def __init__(
         self,
-        session_id,
-        master_secret,
-        cipher_suite,
-        tls_version=None,
+        session_id: bytes,
+        master_secret: bytes,
+        cipher_suite: int,
+        tls_version: Optional[bytes] = None,
         *,
-        extended_master_secret=False,
-        verified=False,
-        verified_hostname=None,
-        certificate_expires_at=None,
-        sni=None,
-        is_ticket=False,
-    ):
+        extended_master_secret: bool = False,
+        verified: bool = False,
+        verified_hostname: Optional[str] = None,
+        certificate_expires_at: Optional[float] = None,
+        sni: Optional[str] = None,
+        is_ticket: bool = False,
+    ) -> None:
         self.session_id = session_id
         self.master_secret = master_secret
         self.cipher_suite = cipher_suite
@@ -40,14 +53,14 @@ class TLSSessionEntry:
         self.is_ticket = is_ticket
         self.created_at = time.time()
 
-    def is_expired(self, ttl):
+    def is_expired(self, ttl: float) -> bool:
         """Check if this session entry has expired."""
         return (time.time() - self.created_at) > ttl or (
             self.certificate_expires_at is not None
             and time.time() >= self.certificate_expires_at
         )
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return (
             f"<TLSSessionEntry id={self.session_id[:8].hex()}... "
             f"cipher=0x{self.cipher_suite:04X}>"
@@ -57,13 +70,20 @@ class TLSSessionEntry:
 class TLS12Ticket(TLSSessionEntry):
     """TLS 1.2 ticket and the authenticated session state it resumes."""
 
-    def __init__(self, ticket, master_secret, cipher_suite, lifetime, **kwargs):
+    def __init__(
+        self,
+        ticket: bytes,
+        master_secret: bytes,
+        cipher_suite: int,
+        lifetime: float,
+        **kwargs: Unpack[_TLS12Metadata],
+    ) -> None:
         super().__init__(b"", master_secret, cipher_suite, is_ticket=True, **kwargs)
         self.ticket = ticket
         self.lifetime = lifetime
         self.received_at = time.monotonic()
 
-    def is_expired(self, ttl):
+    def is_expired(self, ttl: float) -> bool:
         return time.monotonic() - self.received_at >= min(
             self.lifetime, ttl
         ) or super().is_expired(ttl)
@@ -74,16 +94,16 @@ class TLS13Ticket:
 
     def __init__(
         self,
-        ticket,
-        psk,
-        cipher_suite,
-        lifetime,
-        age_add,
-        sni,
-        verified=False,
-        verified_hostname=None,
-        certificate_expires_at=None,
-    ):
+        ticket: bytes,
+        psk: bytes,
+        cipher_suite: int,
+        lifetime: float,
+        age_add: int,
+        sni: Optional[str],
+        verified: bool = False,
+        verified_hostname: Optional[str] = None,
+        certificate_expires_at: Optional[float] = None,
+    ) -> None:
         self.ticket = ticket
         self.psk = psk
         self.cipher_suite = cipher_suite
@@ -96,7 +116,7 @@ class TLS13Ticket:
         self.received_at = time.monotonic()
         self.created_at = time.time()
 
-    def is_expired(self, ttl):
+    def is_expired(self, ttl: float) -> bool:
         return time.monotonic() - self.received_at >= min(
             self.lifetime, ttl, 604800
         ) or (
@@ -104,7 +124,7 @@ class TLS13Ticket:
             and time.time() >= self.certificate_expires_at
         )
 
-    def obfuscated_age(self):
+    def obfuscated_age(self) -> int:
         age_ms = int((time.monotonic() - self.received_at) * 1000)
         return (age_ms + self.age_add) & 0xFFFFFFFF
 
@@ -116,7 +136,7 @@ class TLSSessionCache:
     Stores TLS 1.2 sessions and TLS 1.3 tickets for each (host, port).
     """
 
-    def __init__(self, max_size=100, ttl=3600.0):
+    def __init__(self, max_size: int = 100, ttl: float = 3600.0) -> None:
         """
         :param max_size: Maximum number of cached sessions.
         :param ttl: Time-to-live for each session entry in seconds (default: 1 hour).
@@ -128,7 +148,7 @@ class TLSSessionCache:
         self._max_size = max_size
         self._ttl = ttl
 
-    def get(self, host, port) -> Optional[TLSSessionEntry]:
+    def get(self, host: str, port: int) -> Optional[TLSSessionEntry]:
         """
         Retrieve a cached session for the given host and port.
         Returns None if no valid session is cached.
@@ -145,20 +165,20 @@ class TLSSessionCache:
 
     def put(
         self,
-        host,
-        port,
-        session_id,
-        master_secret,
-        cipher_suite,
-        tls_version=None,
+        host: str,
+        port: int,
+        session_id: Optional[bytes],
+        master_secret: bytes,
+        cipher_suite: int,
+        tls_version: Optional[bytes] = None,
         *,
-        extended_master_secret=False,
-        verified=False,
-        verified_hostname=None,
-        certificate_expires_at=None,
-        sni=None,
-        is_ticket=False,
-    ):
+        extended_master_secret: bool = False,
+        verified: bool = False,
+        verified_hostname: Optional[str] = None,
+        certificate_expires_at: Optional[float] = None,
+        sni: Optional[str] = None,
+        is_ticket: bool = False,
+    ) -> None:
         """
         Store a TLS session for later resumption.
         """
@@ -183,7 +203,9 @@ class TLSSessionCache:
             self._evict_if_full(self._cache, key)
             self._cache[key] = entry
 
-    def _evict_if_full(self, target, key):
+    def _evict_if_full(
+        self, target: Mapping[Tuple[str, int], object], key: Tuple[str, int]
+    ) -> None:
         """Evict the oldest entry across all session stores under the cache lock."""
         if (
             key in target
@@ -199,7 +221,7 @@ class TLSSessionCache:
         _, store, oldest_key = min(candidates, key=lambda candidate: candidate[0])
         del store[oldest_key]
 
-    def get_tls12_ticket(self, host, port) -> Optional[TLS12Ticket]:
+    def get_tls12_ticket(self, host: str, port: int) -> Optional[TLS12Ticket]:
         """Return a live TLS 1.2 ticket for this destination."""
         key = (host.lower(), port)
         with self._lock:
@@ -211,20 +233,20 @@ class TLSSessionCache:
 
     def put_tls12_ticket(
         self,
-        host,
-        port,
-        ticket,
-        master_secret,
-        cipher_suite,
-        lifetime,
+        host: str,
+        port: int,
+        ticket: Optional[bytes],
+        master_secret: Optional[bytes],
+        cipher_suite: int,
+        lifetime: float,
         *,
-        tls_version=None,
-        extended_master_secret=False,
-        verified=False,
-        verified_hostname=None,
-        certificate_expires_at=None,
-        sni=None,
-    ):
+        tls_version: Optional[bytes] = None,
+        extended_master_secret: bool = False,
+        verified: bool = False,
+        verified_hostname: Optional[str] = None,
+        certificate_expires_at: Optional[float] = None,
+        sni: Optional[str] = None,
+    ) -> None:
         """Store a TLS 1.2 ticket separately from its Session ID."""
         if not ticket or not master_secret or lifetime <= 0 or self._max_size <= 0:
             return
@@ -245,7 +267,9 @@ class TLSSessionCache:
             self._evict_if_full(self._tls12_tickets, key)
             self._tls12_tickets[key] = entry
 
-    def remove_tls12_ticket(self, host, port, ticket=None):
+    def remove_tls12_ticket(
+        self, host: str, port: int, ticket: Optional[bytes] = None
+    ) -> None:
         """Discard a particular TLS 1.2 ticket without touching Session IDs."""
         with self._lock:
             key = (host.lower(), port)
@@ -253,7 +277,7 @@ class TLSSessionCache:
             if entry is not None and (ticket is None or entry.ticket == ticket):
                 del self._tls12_tickets[key]
 
-    def get_tls13(self, host, port) -> Optional[TLS13Ticket]:
+    def get_tls13(self, host: str, port: int) -> Optional[TLS13Ticket]:
         """Return a live ticket for this destination, if one exists."""
         key = (host.lower(), port)
         with self._lock:
@@ -265,18 +289,18 @@ class TLSSessionCache:
 
     def put_tls13(
         self,
-        host,
-        port,
-        ticket,
-        psk,
-        cipher_suite,
-        lifetime,
-        age_add,
-        sni,
-        verified=False,
-        verified_hostname=None,
-        certificate_expires_at=None,
-    ):
+        host: str,
+        port: int,
+        ticket: Optional[bytes],
+        psk: Optional[bytes],
+        cipher_suite: int,
+        lifetime: float,
+        age_add: int,
+        sni: Optional[str],
+        verified: bool = False,
+        verified_hostname: Optional[str] = None,
+        certificate_expires_at: Optional[float] = None,
+    ) -> None:
         """Store the latest usable ticket independently of TLS 1.2 sessions."""
         if not ticket or not psk or not 0 < lifetime <= 604800 or self._max_size <= 0:
             return
@@ -296,7 +320,9 @@ class TLSSessionCache:
             self._evict_if_full(self._tls13_tickets, key)
             self._tls13_tickets[key] = entry
 
-    def remove_tls13(self, host, port, ticket=None):
+    def remove_tls13(
+        self, host: str, port: int, ticket: Optional[bytes] = None
+    ) -> None:
         """Discard an offered ticket after successful use."""
         with self._lock:
             key = (host.lower(), port)
@@ -304,7 +330,9 @@ class TLSSessionCache:
             if entry is not None and (ticket is None or entry.ticket == ticket):
                 del self._tls13_tickets[key]
 
-    def remove_tls12(self, host, port, session_id=None):
+    def remove_tls12(
+        self, host: str, port: int, session_id: Optional[bytes] = None
+    ) -> None:
         """Discard an offered TLS 1.2 session without affecting TLS 1.3 tickets."""
         with self._lock:
             key = (host.lower(), port)
@@ -314,7 +342,7 @@ class TLSSessionCache:
             ):
                 del self._cache[key]
 
-    def remove(self, host, port):
+    def remove(self, host: str, port: int) -> None:
         """Remove both TLS versions' cached state for this destination."""
         key = (host.lower(), port)
         with self._lock:
@@ -322,14 +350,14 @@ class TLSSessionCache:
             self._tls12_tickets.pop(key, None)
             self._tls13_tickets.pop(key, None)
 
-    def clear(self):
+    def clear(self) -> None:
         """Clear all cached sessions."""
         with self._lock:
             self._cache.clear()
             self._tls12_tickets.clear()
             self._tls13_tickets.clear()
 
-    def cleanup_expired(self):
+    def cleanup_expired(self) -> None:
         """Remove all expired entries."""
         with self._lock:
             expired = [k for k, v in self._cache.items() if v.is_expired(self._ttl)]
@@ -346,11 +374,11 @@ class TLSSessionCache:
             for k in expired:
                 del self._tls13_tickets[k]
 
-    def __len__(self):
+    def __len__(self) -> int:
         with self._lock:
             return (
                 len(self._cache) + len(self._tls12_tickets) + len(self._tls13_tickets)
             )
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<TLSSessionCache entries={len(self)} max={self._max_size} ttl={self._ttl}>"

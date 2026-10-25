@@ -45,7 +45,7 @@ including `assert_type` checks that catch an accidental `Any` return. Every
 `# E:` line in `invalid.py` must produce its specific diagnostic; wrong URLs,
 timeouts, streaming options, upload tuples, callback returns, TLS configuration,
 Cookie values, and response return types are covered. The current consumers
-include 98 negative markers: async additions reject synchronous pools, incorrect
+include 110 negative markers: async additions reject synchronous pools, incorrect
 awaited return types, invalid budgets/iterators, text files and unsupported file tuples.
 Synchronous upload calls reject async iterators; async calls accept byte iterators
 and async byte iterators. Async multipart paths include `PathLike[str]`.
@@ -67,7 +67,7 @@ while withholding diagnostics from implementation bodies. It does **not** use
 The source gate strictly checks the aliases, top-level facade, retry policy,
 HTTP/2 frame values, HPACK header and Huffman codecs, and the ClientHello
 inspection schema.
-The strict set also includes request-default validation and merging, for eleven
+The strict set also includes request-default validation and merging, for twelve
 source modules. Query-pair types preserve existing text-key, byte-key and mixed
 list/tuple inputs, including homogeneous typed lists; string-only configured
 default pairs keep their separate contract. Installed consumers cover those
@@ -89,6 +89,13 @@ This corrects their earlier `AnyStr` signatures without introducing coercion.
 Cookie conversions preserve nullable Cookie values and the supplied jar subtype.
 Legacy retry callbacks retain their result type together with the existing
 integer-zero failure sentinel; forwarded callback argument types are not checked.
+TLS session-cache entries and both ticket types are strictly checked. Cache
+lookups retain their distinct optional entry types, binary session/secret
+fields remain bytes, and expiry/age methods return bool/int. Empty or `None`
+identities rejected by existing cache insertion guards remain accepted inputs.
+TLS 1.2 ticket keyword metadata uses a checker-only schema; no optional typing
+dependency is imported at runtime. This migration does not add persistence or
+alter cache capacity, locking, expiry or authenticated resumption policy.
 The protocol modules are an incremental internal migration, not a claim that
 the full connection and TLS implementation is type-clean. Installed consumers
 also check precise protocol-value return types and eleven invalid protocol uses.

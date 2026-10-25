@@ -39,6 +39,12 @@ from ja3requests.protocol.h2.hpack import (
 )
 from ja3requests.protocol.h2.huffman import huffman_decode, huffman_encode
 from ja3requests.protocol.tls.client_hello_info import inspect_client_hello
+from ja3requests.protocol.tls.session_cache import (
+    TLS12Ticket,
+    TLS13Ticket,
+    TLSSessionCache,
+    TLSSessionEntry,
+)
 from ja3requests.requests.request import Request
 from ja3requests.utils import (
     Retry,
@@ -168,6 +174,56 @@ def utility_types(jar: Ja3RequestsCookieJar) -> None:
     assert_type(task, Task[str])
     assert_type(task.retry(), Union[str, int])
     assert_type(Retry().do(lambda: 'done', ValueError), Union[str, int])
+
+
+def session_cache_types(host: str, port: int) -> None:
+    cache = TLSSessionCache(max_size=10, ttl=3600)
+    cache.put(host, port, None, b'secret', 0xC02F)
+    cache.put(
+        host,
+        port,
+        b'id',
+        b'secret',
+        0xC02F,
+        tls_version=b'\x03\x03',
+        extended_master_secret=True,
+        verified=True,
+        verified_hostname=host,
+        certificate_expires_at=None,
+        sni=host,
+    )
+    assert_type(cache.get(host, port), Optional[TLSSessionEntry])
+    entry = cache.get(host, port)
+    if entry is not None:
+        assert_type(entry.session_id, bytes)
+        assert_type(entry.master_secret, bytes)
+        assert_type(entry.cipher_suite, int)
+        assert_type(entry.tls_version, Optional[bytes])
+        assert_type(entry.verified, bool)
+        assert_type(entry.is_expired(1), bool)
+    cache.put_tls12_ticket(host, port, b'ticket', b'secret', 0xC02F, 300)
+    cache.put_tls12_ticket(host, port, None, None, 0xC02F, 0)
+    assert_type(cache.get_tls12_ticket(host, port), Optional[TLS12Ticket])
+    ticket12 = TLS12Ticket(
+        b'ticket', b'secret', 0xC02F, 300, tls_version=None, verified=True
+    )
+    assert_type(ticket12.ticket, bytes)
+    assert_type(ticket12.lifetime, float)
+    assert_type(ticket12.is_expired(300), bool)
+    cache.put_tls13(host, port, b'ticket', b'psk', 0x1301, 300, 5, host)
+    cache.put_tls13(host, port, None, None, 0x1301, 0, 0, None)
+    assert_type(cache.get_tls13(host, port), Optional[TLS13Ticket])
+    ticket13 = TLS13Ticket(b'ticket', b'psk', 0x1301, 300, 5, None)
+    assert_type(ticket13.psk, bytes)
+    assert_type(ticket13.sni, Optional[str])
+    assert_type(ticket13.obfuscated_age(), int)
+    cache.remove_tls12(host, port, b'id')
+    cache.remove_tls12_ticket(host, port, None)
+    cache.remove_tls13(host, port, b'ticket')
+    cache.remove(host, port)
+    cache.cleanup_expired()
+    cache.clear()
+    assert_type(len(cache), int)
 
 
 async def async_helper_types() -> None:
