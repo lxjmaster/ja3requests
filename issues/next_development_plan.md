@@ -1,5 +1,69 @@
 # Next Development Plan
 
+## TLS crypto typing maintenance (2026-10-25)
+
+Status: **COMPLETE / UNREGISTERED**. Continue the internal-typing lane at
+the TLS crypto boundary, based on `56740582db751f080df8c6cb2682b3978edb29ec`.
+Full-package mypy reproduced **21 diagnostics** in `protocol/tls/crypto.py`
+and **3 diagnostics** in its direct logging dependency `protocol/tls/debug.py`.
+These are the only selected runtime modules.
+
+- [✅] Annotate crypto outputs, digest inputs, cipher metadata, EC/X25519 key
+  objects, optional parsed parameters and log returns; include both modules
+  in the strict gate, now fifteen modules, without ignores.
+- [✅] Verify unchanged executable AST, Python 3.7 grammar, formatting,
+  package-wide error-level lint and existing crypto/record/handshake tests.
+- [✅] Verify independent installed artifacts, positive consumers and 130
+  expected negative markers, full runtime tests and coverage.
+- [✅] Deliver scoped changes to existing master, read back the exact remote
+  commit and verify Tests, Coverage, Lint, Documentation and Public typing.
+
+Checker-only schemas describe cipher metadata and parsed ECDHE fields. Narrow
+casts describe existing RSA DER inputs and curve/key relationships without
+changing runtime checks, exceptions or algorithms. Preserve the existing PRF
+digest forms, binary secret outputs, optional non-named-curve parse result,
+key derivation defaults and CBC/GCM authentication behavior. Reuse existing
+runtime tests and add installed consumers for meaningful annotation boundaries.
+
+Use this workspace with serial edits and independent checks in parallel;
+no subagents or new workspace is needed. Preserve unrelated user files and
+all prior reports. The verifier owns and removes install/staging roots; retain
+`dist/post-2.6.0-tls-crypto-typing/acceptance-01` reports, manifest, logs and
+unpublished candidates as development evidence. No release, version, tag,
+deployment or Issue mutation is selected. Use configured Git identity and
+scoped staging; recover without rewriting history. Official plan-session
+binding remains unavailable from prior executions; keep UNREGISTERED without
+inventing a lifecycle transition or substitute identity.
+
+Local acceptance passed: fifteen strict modules; formatting for the four
+changed Python/consumer files; package-wide error-level Pylint; **305 crypto,
+record-layer and local TLS handshake tests**. Both executable ASTs match
+`5674058` after removing annotations, typing imports and checker-only
+schemas/casts; Python 3.7 grammar passed. The
+[independent artifact report](../dist/post-2.6.0-tls-crypto-typing/acceptance-01/verification.json)
+passed all ten commands: sdist-to-wheel, metadata/inventory, independent install,
+dependencies, smoke, installed consumers and **4,764 tests + 118 subtests**,
+with **92.7629% statement coverage**, zero failures/errors/skips and the one
+existing collection warning. All **130 negative type markers** passed. Current
+73 runtime module hashes and all seven implementation/consumer/configuration
+inputs match the accepted snapshot. Command temporary roots, top-level staging
+and task diagnostic logs were removed; retain reports, manifest, logs and
+both local candidates. The snapshot is based on `5674058` and retains
+development version 2.6.0; it is not a release.
+
+Source delivery completed as `b27805a97030d9d15e3996fdef90110e4e5f8899`;
+remote master readback matches. All five exact-commit workflows passed:
+[Tests](https://github.com/lxjmaster/ja3requests/actions/runs/40169075477),
+[Coverage](https://github.com/lxjmaster/ja3requests/actions/runs/40169075464),
+[Lint](https://github.com/lxjmaster/ja3requests/actions/runs/40169075469),
+[Documentation](https://github.com/lxjmaster/ja3requests/actions/runs/40169075476),
+[Public typing](https://github.com/lxjmaster/ja3requests/actions/runs/40169075454).
+Tests includes Python 3.7-3.13 and the wheel job, all successful. A subsequent
+record-only commit carries this completion evidence and is identified by Git
+history and its own workflows. No required implementation, verification or
+temporary-resource work remains; prior user files and reports are preserved.
+No release, tag, deployment or Issue mutation was performed.
+
 ## Cookie-file typing maintenance (2026-10-25)
 
 Status: **COMPLETE / UNREGISTERED**. Continue the existing internal-typing
