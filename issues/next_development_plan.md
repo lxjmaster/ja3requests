@@ -1,5 +1,69 @@
 # Next Development Plan
 
+## Async response typing maintenance (2026-10-25)
+
+Status: **COMPLETE / UNREGISTERED**. Continue the internal-typing lane at
+the async response boundary, based on
+`278acb58fd36f908e49044e2702bd5e8b8c73527`. Focused mypy reproduced **8
+diagnostics** in `async_response.py`. Include only the directly required Cookie
+extraction adapter signature from `cookies.py`; do not migrate that whole module.
+
+- [✅] Annotate pending reads, cleanup tasks, owned upload sources, text header
+  pairs and async generator returns; include AsyncResponse in the strict gate,
+  now seventeen modules, without casts or ignores.
+- [✅] Verify unchanged executable AST, Python 3.7 grammar, formatting,
+  package-wide error-level lint and existing async response/lifecycle/Cookie tests.
+- [✅] Verify independent installed artifacts, positive consumers and 144
+  expected negative markers, full runtime tests and coverage.
+- [✅] Deliver scoped changes to existing master, read back the exact remote
+  commit and verify Tests, Coverage, Lint, Documentation and Public typing.
+
+Pending reads use Future[bytes] because ensure_future also accepts existing
+futures; cleanup tasks return None. The existing byte-yielding async generators
+expose aclose() without changing their consumption or ownership semantics.
+Keep JSON, transport and request/response Cookie adapters dynamic. Preserve
+parsing, decoding, cancellation, upload ownership and release behavior. Reuse
+existing runtime tests and add installed consumers for meaningful type gaps.
+
+Use this workspace with serial edits and independent checks in parallel;
+no subagents or new workspace is needed. Preserve unrelated user files and
+all prior reports. The verifier owns and removes install/staging roots;
+retain `dist/post-2.6.0-async-response-typing/acceptance-01` reports, manifest,
+logs and unpublished candidates as development evidence. No release, version,
+tag, deployment or Issue mutation is selected. Use configured Git identity and
+scoped staging; recover without rewriting history. Official plan-session
+binding remains unavailable from prior executions; keep UNREGISTERED without
+inventing a lifecycle transition or substitute identity.
+
+Local acceptance passed: seventeen strict modules; formatting for the four
+changed Python/consumer files; package-wide error-level Pylint; **230 async
+response, streaming, lifecycle and Cookie tests**. Executable AST matches
+`278acb5` after removing annotations, typing imports and checker-only imports;
+Python 3.7 grammar passed. The
+[independent artifact report](../dist/post-2.6.0-async-response-typing/acceptance-01/verification.json)
+passed all ten commands: sdist-to-wheel, metadata/inventory, independent install,
+dependencies, smoke, installed consumers and **4,764 tests + 118 subtests**,
+with **92.7629% statement coverage**, zero failures/errors/skips and the one
+existing collection warning. All **144 negative type markers** passed. Current
+73 runtime module hashes and all eight implementation/consumer/configuration/
+guide inputs match the accepted snapshot. Command temporary roots and top-level
+staging were removed; retain reports, manifest, logs and both local candidates.
+The snapshot is based on `278acb5` and retains development version 2.6.0;
+it is not a release.
+
+Source delivery completed as `9386e90a7e24a76df677ec68b909f80b8c9480f6`;
+remote master readback matches. All five exact-commit workflows passed:
+[Tests](https://github.com/lxjmaster/ja3requests/actions/runs/40177173150),
+[Coverage](https://github.com/lxjmaster/ja3requests/actions/runs/40177173148),
+[Lint](https://github.com/lxjmaster/ja3requests/actions/runs/40177173128),
+[Documentation](https://github.com/lxjmaster/ja3requests/actions/runs/40177173184),
+[Public typing](https://github.com/lxjmaster/ja3requests/actions/runs/40177173144).
+Tests includes Python 3.7-3.13 and the wheel job, all successful. A subsequent
+record-only commit carries this completion evidence and is identified by Git
+history and its own workflows. No required implementation, verification or
+temporary-resource work remains; prior user files and reports are preserved.
+No release, tag, deployment or Issue mutation was performed.
+
 ## Async pool typing maintenance (2026-10-25)
 
 Status: **COMPLETE / UNREGISTERED**. Continue the internal-typing lane at
