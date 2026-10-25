@@ -5,9 +5,25 @@ Ja3Requests.utils
 This module provides utility functions.
 """
 
+from __future__ import annotations
+
 import platform
 from base64 import b64encode
-from typing import Union, AnyStr, Dict, List, Optional, Tuple
+from http.cookiejar import Cookie, CookieJar
+from typing import (
+    Callable,
+    Dict,
+    Generic,
+    Iterable,
+    List,
+    Mapping,
+    Optional,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+    overload,
+)
 from ._typing import Headers
 from .const import DEFAULT_MAX_RETRY_LIMIT
 from .exceptions import MaxRetriedException, NotAllowedRequestMethod
@@ -19,6 +35,9 @@ ACCEPT_ENCODING = "gzip,deflate"
 _HEADER_TOKEN = frozenset(
     "!#$%&'*+-.^_`|~0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 )
+_Result = TypeVar('_Result')
+_Jar = TypeVar('_Jar', bound=CookieJar)
+_RetryException = Union[Type[BaseException], Tuple[Type[BaseException], ...]]
 
 
 def _validated_request_method(method: str) -> str:
@@ -65,7 +84,7 @@ def _encode_http1_headers(
     return b'\r\n'.join(fields)
 
 
-def b(s: AnyStr):  # pylint: disable=C
+def b(s: str) -> bytes:  # pylint: disable=C
     """
     String encode latin1
     :param s:
@@ -74,7 +93,15 @@ def b(s: AnyStr):  # pylint: disable=C
     return s.encode("latin1")
 
 
-def default_user_agent(agent: AnyStr = "Ja3Requests") -> str:
+@overload
+def default_user_agent(agent: str = "Ja3Requests") -> str: ...
+
+
+@overload
+def default_user_agent(agent: bytes) -> str: ...
+
+
+def default_user_agent(agent: object = "Ja3Requests") -> str:
     """
     Return a string representing the default user agent.
     :param agent:
@@ -86,12 +113,12 @@ def default_user_agent(agent: AnyStr = "Ja3Requests") -> str:
 
 def make_headers(
     *,
-    keep_alive: bool = None,
-    accept_encoding: Union[AnyStr, List[AnyStr]] = None,
-    user_agent: AnyStr = None,
-    basic_auth: AnyStr = None,
-    proxy_basic_auth: AnyStr = None,
-    disable_cache: bool = None,
+    keep_alive: Optional[bool] = None,
+    accept_encoding: Optional[Union[str, bytes, List[str], bool]] = None,
+    user_agent: Optional[Union[str, bytes]] = None,
+    basic_auth: Optional[str] = None,
+    proxy_basic_auth: Optional[str] = None,
+    disable_cache: Optional[bool] = None,
 ) -> Dict[str, Union[str, bytes]]:
     """
     Shortcuts for generating request headers.
@@ -146,9 +173,9 @@ class SingletonMeta(type):
     SingletonMeta Class
     """
 
-    _instance = {}
+    _instance: Dict[type, object] = {}
 
-    def __call__(cls, *args, **kwargs):
+    def __call__(cls, *args: object, **kwargs: object) -> object:
         if cls not in cls._instance:
             cls._instance[cls] = super(SingletonMeta, cls).__call__(*args, **kwargs)
 
@@ -160,9 +187,15 @@ class Retry(metaclass=SingletonMeta):
     Retry Class
     """
 
-    _tasks = {}
+    _tasks: Dict[object, object] = {}
 
-    def do(self, obj, exception, *args, **kwargs):
+    def do(
+        self,
+        obj: Callable[..., _Result],
+        exception: _RetryException,
+        *args: object,
+        **kwargs: object,
+    ) -> Union[_Result, int]:
         """
         Method of run retry task
         :param obj:
@@ -184,19 +217,26 @@ class Retry(metaclass=SingletonMeta):
         raise MaxRetriedException(f"Max retries exceeded with {obj!r}")
 
 
-class Task:
+class Task(Generic[_Result]):
     """
     Retry Task
     """
 
-    def __init__(self, task, times, exception, *args, **kwargs):
+    def __init__(
+        self,
+        task: Callable[..., _Result],
+        times: int,
+        exception: _RetryException,
+        *args: object,
+        **kwargs: object,
+    ) -> None:
         self.task = task
         self.times = times
         self.exception = exception
         self.args = args
         self.kwargs = kwargs
 
-    def retry(self):
+    def retry(self) -> Union[_Result, int]:
         """
         retry method
         :return:
@@ -208,7 +248,7 @@ class Task:
             return 0
 
 
-def dict_from_cookie_string(cookie_string: AnyStr):
+def dict_from_cookie_string(cookie_string: Union[str, bytes]) -> Dict[str, str]:
     """Returns a key/value dictionary from a cookie string like name1=value1;name2=value2;...
 
     :param cookie_string:
@@ -224,7 +264,7 @@ def dict_from_cookie_string(cookie_string: AnyStr):
     return {name: morsel.value for name, morsel in parsed.items()}
 
 
-def dict_from_cookiejar(cj):
+def dict_from_cookiejar(cj: Iterable[Cookie]) -> Dict[str, Optional[str]]:
     """Returns a key/value dictionary from a CookieJar.
 
     :param cj: CookieJar object to extract cookies from.
@@ -239,7 +279,21 @@ def dict_from_cookiejar(cj):
     return cookie_dict
 
 
-def add_dict_to_cookiejar(cj, cookie_dict):
+@overload
+def add_dict_to_cookiejar(
+    cj: _Jar, cookie_dict: Optional[Mapping[str, str]]
+) -> _Jar: ...
+
+
+@overload
+def add_dict_to_cookiejar(
+    cj: None, cookie_dict: Optional[Mapping[str, str]]
+) -> CookieJar: ...
+
+
+def add_dict_to_cookiejar(
+    cj: Optional[CookieJar], cookie_dict: Optional[Mapping[str, str]]
+) -> CookieJar:
     """Returns a CookieJar from a key/value dictionary.
 
     :param cj: CookieJar to insert cookies into.

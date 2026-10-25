@@ -45,7 +45,7 @@ including `assert_type` checks that catch an accidental `Any` return. Every
 `# E:` line in `invalid.py` must produce its specific diagnostic; wrong URLs,
 timeouts, streaming options, upload tuples, callback returns, TLS configuration,
 Cookie values, and response return types are covered. The current consumers
-include 85 negative markers: async additions reject synchronous pools, incorrect
+include 98 negative markers: async additions reject synchronous pools, incorrect
 awaited return types, invalid budgets/iterators, text files and unsupported file tuples.
 Synchronous upload calls reject async iterators; async calls accept byte iterators
 and async byte iterators. Async multipart paths include `PathLike[str]`.
@@ -67,7 +67,7 @@ while withholding diagnostics from implementation bodies. It does **not** use
 The source gate strictly checks the aliases, top-level facade, retry policy,
 HTTP/2 frame values, HPACK header and Huffman codecs, and the ClientHello
 inspection schema.
-The strict set also includes request-default validation and merging, for ten
+The strict set also includes request-default validation and merging, for eleven
 source modules. Query-pair types preserve existing text-key, byte-key and mixed
 list/tuple inputs, including homogeneous typed lists; string-only configured
 default pairs keep their separate contract. Installed consumers cover those
@@ -81,6 +81,14 @@ request/response objects. The `phase` annotation describes the field attached
 by async phase helpers; it does not add a value to manually constructed or
 synchronous timeout exceptions. Internal helper examples verify these installed
 annotations without establishing a new public helper API.
+The utility module is now strictly checked too. Header helpers accept explicit
+`None` options and retain byte-valued User-Agent and encoding-fallback inputs.
+Basic/proxy credentials and encoding lists require text: nonempty byte
+credentials already fail when encoded, and byte lists already fail at joining.
+This corrects their earlier `AnyStr` signatures without introducing coercion.
+Cookie conversions preserve nullable Cookie values and the supplied jar subtype.
+Legacy retry callbacks retain their result type together with the existing
+integer-zero failure sentinel; forwarded callback argument types are not checked.
 The protocol modules are an incremental internal migration, not a claim that
 the full connection and TLS implementation is type-clean. Installed consumers
 also check precise protocol-value return types and eleven invalid protocol uses.

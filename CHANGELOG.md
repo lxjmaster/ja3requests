@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add the shared utility module to strict typing. Describe optional header
+  inputs, text-only Basic/proxy credentials, nullable Cookie values and generic
+  legacy retry results without changing header generation or retry behavior.
+
 - Strictly check async phase-budget helpers and request exceptions, preserving
   coroutine task result types and existing dynamic exception metadata. This
   adds annotations only; timeout translation, cancellation and task contexts

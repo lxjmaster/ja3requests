@@ -19,6 +19,25 @@ from ja3requests.protocol.h2.hpack import (
 from ja3requests.protocol.h2.huffman import huffman_decode
 from ja3requests.protocol.tls.client_hello_info import inspect_client_hello
 from ja3requests._async_utils import owner_task, phase_wait
+from ja3requests.utils import (
+    Task,
+    b,
+    default_user_agent,
+    dict_from_cookie_string,
+    make_headers,
+)
+
+
+def utility_rejects() -> None:
+    b(b'not text')  # E: arg-type
+    default_user_agent(123)  # E: call-overload
+    make_headers(basic_auth=b'user:pass')  # E: arg-type
+    make_headers(proxy_basic_auth=b'user:pass')  # E: arg-type
+    make_headers(accept_encoding=[b'gzip'])  # E: list-item
+    make_headers(keep_alive='yes')  # E: arg-type
+    dict_from_cookie_string(123)  # E: arg-type
+    Task(lambda: 'done', 'three', ValueError)  # E: arg-type
+    Task(lambda: 'done', 3, 'ValueError')  # E: arg-type
 
 
 async def async_bytes() -> AsyncIterator[bytes]:

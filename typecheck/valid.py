@@ -40,7 +40,18 @@ from ja3requests.protocol.h2.hpack import (
 from ja3requests.protocol.h2.huffman import huffman_decode, huffman_encode
 from ja3requests.protocol.tls.client_hello_info import inspect_client_hello
 from ja3requests.requests.request import Request
-from ja3requests.utils import default_headers, default_user_agent, make_headers
+from ja3requests.utils import (
+    Retry,
+    Task,
+    add_dict_to_cookiejar,
+    b,
+    default_headers,
+    default_user_agent,
+    dict_from_cookie_string,
+    dict_from_cookiejar,
+    make_headers,
+)
+from http.cookiejar import CookieJar
 from ja3requests._async_utils import owner_task, phase_wait
 
 if TYPE_CHECKING:
@@ -128,8 +139,35 @@ async def query_key_boundaries(
 
 def generated_header_types() -> None:
     assert_type(default_user_agent(), str)
+    assert_type(default_user_agent(b'custom'), str)
     assert_type(default_headers(), Dict[str, Union[str, bytes]])
     assert_type(make_headers(user_agent=b'custom'), Dict[str, Union[str, bytes]])
+    make_headers(user_agent=b'custom', basic_auth='user:pass')
+    make_headers(
+        keep_alive=None,
+        accept_encoding=None,
+        user_agent=None,
+        basic_auth=None,
+        proxy_basic_auth=None,
+        disable_cache=None,
+    )
+    make_headers(accept_encoding=b'gzip')
+    make_headers(accept_encoding=True)
+    make_headers(accept_encoding=['gzip', 'br'], basic_auth='user:pass')
+    assert_type(b('latin1'), bytes)
+
+
+def utility_types(jar: Ja3RequestsCookieJar) -> None:
+    assert_type(dict_from_cookie_string('name=value'), Dict[str, str])
+    assert_type(dict_from_cookie_string(b'name=value'), Dict[str, str])
+    assert_type(dict_from_cookiejar(jar), Dict[str, Optional[str]])
+    assert_type(dict_from_cookiejar(iter(jar)), Dict[str, Optional[str]])
+    assert_type(add_dict_to_cookiejar(jar, {'name': 'value'}), Ja3RequestsCookieJar)
+    assert_type(add_dict_to_cookiejar(None, None), CookieJar)
+    task = Task(lambda: 'done', 3, (ValueError, OSError))
+    assert_type(task, Task[str])
+    assert_type(task.retry(), Union[str, int])
+    assert_type(Retry().do(lambda: 'done', ValueError), Union[str, int])
 
 
 async def async_helper_types() -> None:
