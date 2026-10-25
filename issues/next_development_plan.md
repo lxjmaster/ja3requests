@@ -1,5 +1,69 @@
 # Next Development Plan
 
+## Async pool typing maintenance (2026-10-25)
+
+Status: **COMPLETE / UNREGISTERED**. Continue the internal-typing lane at
+the async connection-pool boundary, based on
+`09573085efcd5edc3a001a566ab8a2a83720e6b6`. Focused mypy reproduced **13
+diagnostics** in `async_pool.py`, the only selected runtime module.
+
+- [✅] Annotate entry/lease constructors, creation reservations, waiters,
+  cleanup/close tasks and coroutine factory results; add this module to the
+  strict gate, now sixteen modules, without casts or ignores.
+- [✅] Verify unchanged executable AST, Python 3.7 grammar, formatting,
+  package-wide error-level lint and existing async pool/lifecycle/network tests.
+- [✅] Verify independent installed artifacts, positive consumers and 138
+  expected negative markers, full runtime tests and coverage.
+- [✅] Deliver scoped changes to existing master, read back the exact remote
+  commit and verify Tests, Coverage, Lint, Documentation and Public typing.
+
+The existing owner_task implementation requires coroutines; correct the wider
+Awaitable factory annotation to match that behavior. Checker-only assertions
+describe the loop already established by _bind and add no runtime checks.
+Keep dynamic transport/H2 adapters and route-key components unchanged. Preserve
+admission limits, cancellation propagation, H2 sharing, lease transfer and
+shutdown ownership. Reuse existing runtime tests and add installed consumer
+cases for the newly precise internal lease/task boundaries.
+
+Use this workspace with serial edits and independent checks in parallel;
+no subagents or new workspace is needed. Preserve unrelated user files and
+all previous reports. The verifier owns and removes install/staging roots;
+retain `dist/post-2.6.0-async-pool-typing/acceptance-01` reports, manifest, logs
+and unpublished candidates as development evidence. No release, version, tag,
+deployment or Issue mutation is selected. Use configured Git identity and
+scoped staging; recover without rewriting history. Official plan-session
+binding remains unavailable from prior executions; keep UNREGISTERED without
+inventing a lifecycle transition or substitute identity.
+
+Local acceptance passed: sixteen strict modules; formatting for the three
+changed Python/consumer files; package-wide error-level Pylint; **138 async
+pool, lifecycle, session, H2 and local network tests**. Executable AST matches
+`0957308` after removing annotations, typing imports and checker-only loop
+assertions; Python 3.7 grammar passed. The
+[independent artifact report](../dist/post-2.6.0-async-pool-typing/acceptance-01/verification.json)
+passed all ten commands: sdist-to-wheel, metadata/inventory, independent install,
+dependencies, smoke, installed consumers and **4,764 tests + 118 subtests**,
+with **92.7706% statement coverage**, zero failures/errors/skips and the one
+existing collection warning. All **138 negative type markers** passed. Current
+73 runtime module hashes and all six implementation/consumer/configuration
+inputs match the accepted snapshot. Command temporary roots and top-level
+staging were removed; retain reports, manifest, logs and both local candidates.
+The snapshot is based on `0957308` and retains development version 2.6.0;
+it is not a release.
+
+Source delivery completed as `e39717c9e649279f7069b3ace3e7a1f734963c5a`;
+remote master readback matches. All five exact-commit workflows passed:
+[Tests](https://github.com/lxjmaster/ja3requests/actions/runs/40169577084),
+[Coverage](https://github.com/lxjmaster/ja3requests/actions/runs/40169577047),
+[Lint](https://github.com/lxjmaster/ja3requests/actions/runs/40169577196),
+[Documentation](https://github.com/lxjmaster/ja3requests/actions/runs/40169577003),
+[Public typing](https://github.com/lxjmaster/ja3requests/actions/runs/40169577111).
+Tests includes Python 3.7-3.13 and the wheel job, all successful. A subsequent
+record-only commit carries this completion evidence and is identified by Git
+history and its own workflows. No required implementation, verification or
+temporary-resource work remains; prior user files and reports are preserved.
+No release, tag, deployment or Issue mutation was performed.
+
 ## TLS crypto typing maintenance (2026-10-25)
 
 Status: **COMPLETE / UNREGISTERED**. Continue the internal-typing lane at
