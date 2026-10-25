@@ -13,7 +13,7 @@ import threading
 import time
 from collections import deque
 from types import TracebackType
-from typing import TYPE_CHECKING, Deque, Dict, List, Optional, Tuple, Any, Type
+from typing import TYPE_CHECKING, Deque, Dict, List, Optional, Set, Tuple, Any, Type
 
 from ja3requests.protocol.tls.debug import debug
 
@@ -48,7 +48,7 @@ class PooledConnection:
         self.created_at = created_at or time.time()
         self.last_used_at = self.created_at
         self.tls: Optional[TLS] = None  # TLS context for HTTPS connections
-        self._pool_generation = None
+        self._pool_generation: Optional[object] = None
         self.negotiated_protocol: Optional[str] = (
             None  # ALPN result ('h2', 'http/1.1', None)
         )
@@ -217,7 +217,7 @@ class ConnectionPool:
         self._max_pool_size = max_pool_size
         self._total_connections = 0
         self._generation = object()
-        self._h2_connecting = set()
+        self._h2_connecting: Set[ReservationKey] = set()
         self._h2_condition = threading.Condition(self._lock)
 
     def __repr__(self) -> str:
@@ -479,7 +479,7 @@ class ConnectionPool:
         """Close all connections that have exceeded idle timeout"""
         with self._lock:
             for key, pool in list(self._pools.items()):
-                active_conns = deque()
+                active_conns: Deque[PooledConnection] = deque()
 
                 while pool:
                     pooled_conn = pool.popleft()

@@ -13,6 +13,7 @@ files = [
     "ja3requests/_cookie_file.py",
     "ja3requests/async_pool.py",
     "ja3requests/async_response.py",
+    "ja3requests/pool.py",
     "ja3requests/exceptions.py",
     "ja3requests/utils.py",
     "ja3requests/__init__.py",

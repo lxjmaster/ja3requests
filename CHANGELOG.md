@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add the synchronous connection pool to strict typing, preserving H2 creation
+  reservations, optional generation tokens and idle-connection deque values.
+  Admission, locking and connection reuse behavior are unchanged.
+
 - Add AsyncResponse to strict typing, preserving byte-valued async generators
   and their close interface, pending reads, cleanup tasks, upload sources and
   text header pairs. Parsing, decoding and resource release are unchanged.

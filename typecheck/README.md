@@ -45,7 +45,7 @@ including `assert_type` checks that catch an accidental `Any` return. Every
 `# E:` line in `invalid.py` must produce its specific diagnostic; wrong URLs,
 timeouts, streaming options, upload tuples, callback returns, TLS configuration,
 Cookie values, and response return types are covered. The current consumers
-include 144 negative markers: async additions reject synchronous pools, incorrect
+include 146 negative markers: async additions reject synchronous pools, incorrect
 awaited return types, invalid budgets/iterators, text files and unsupported file tuples.
 Synchronous upload calls reject async iterators; async calls accept byte iterators
 and async byte iterators. Async multipart paths include `PathLike[str]`.
@@ -67,7 +67,7 @@ while withholding diagnostics from implementation bodies. It does **not** use
 The source gate strictly checks the aliases, top-level facade, retry policy,
 HTTP/2 frame values, HPACK header and Huffman codecs, and the ClientHello
 inspection schema.
-The strict set also includes request-default validation and merging, for seventeen
+The strict set also includes request-default validation and merging, for eighteen
 source modules. Query-pair types preserve existing text-key, byte-key and mixed
 list/tuple inputs, including homogeneous typed lists; string-only configured
 default pairs keep their separate contract. Installed consumers cover those
@@ -130,6 +130,11 @@ the rest of the Cookie module is outside this strict migration. JSON and
 transport adapters keep their existing dynamic boundaries. Six negative cases
 cover generator send values, read/cleanup ownership, upload sources and jars.
 Parsing, decoding, cancellation and resource release behavior are unchanged.
+The synchronous pool is strictly checked too. H2 creation reservations retain
+their route/policy tuple shape, pool generations remain optional opaque objects,
+and idle H1 connections retain their deque element type. Two installed negative
+cases reject malformed reservations. Locks, admission, reuse and generation
+isolation are unchanged; the internal checks do not establish a public API.
 The protocol modules are an incremental internal migration, not a claim that
 the full connection and TLS implementation is type-clean. Installed consumers
 also check precise protocol-value return types and eleven invalid protocol uses.

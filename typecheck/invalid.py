@@ -159,6 +159,11 @@ def rejects_protocol_values(record: bytes) -> None:
     HPACKDecoder().decode_headers('not bytes')  # E: arg-type
 
 
+def sync_pool_rejects(pool: ConnectionPool) -> None:
+    pool._h2_connecting.add(('host', 443, 'https'))  # E: arg-type
+    pool._h2_connecting.add((('host', '443', 'https'), None))  # E: arg-type
+
+
 async def pool_rejects(
     pool: ja3requests.AsyncConnectionPool,
     entry: _Entry,

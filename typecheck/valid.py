@@ -13,6 +13,7 @@ from typing import (
     List,
     Mapping,
     Optional,
+    Set,
     Tuple,
     Union,
 )
@@ -29,7 +30,7 @@ from ja3requests import (
 )
 from ja3requests.base import BaseRequest
 from ja3requests.cookies import Ja3RequestsCookieJar, extract_cookies_to_jar
-from ja3requests.pool import ConnectionPool
+from ja3requests.pool import ConnectionPool, PooledConnection, ReservationKey
 from ja3requests.protocol.h2.frame import H2Frame, build_settings_frame
 from ja3requests.protocol.h2.hpack import (
     HPACKDecoder,
@@ -438,6 +439,14 @@ def public_calls(url: str, cookie_path: Path) -> None:
 async def async_after(response: AsyncResponse) -> Optional[AsyncResponse]:
     assert_type(response.status_code, int)
     return response
+
+
+def sync_pool_types(pool: ConnectionPool, connection: PooledConnection) -> None:
+    assert_type(pool._h2_connecting, Set[ReservationKey])
+    assert_type(connection._pool_generation, Optional[object])
+    pool._h2_connecting.add((('host', 443, 'https'), ('policy',)))
+    connection._pool_generation = object()
+    connection._pool_generation = None
 
 
 async def pool_lease_types(pool: AsyncConnectionPool, entry: _Entry) -> None:
