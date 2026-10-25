@@ -75,6 +75,7 @@ from ja3requests.utils import (
 from http.cookiejar import CookieJar
 from ja3requests._async_utils import owner_task, phase_wait
 from ja3requests._cookie_file import load_cookie_file, save_cookie_file
+from ja3requests.async_pool import _Entry, _Lease
 
 if TYPE_CHECKING:
     from cryptography.hazmat.primitives.asymmetric import ec, x25519
@@ -436,6 +437,24 @@ def public_calls(url: str, cookie_path: Path) -> None:
 async def async_after(response: AsyncResponse) -> Optional[AsyncResponse]:
     assert_type(response.status_code, int)
     return response
+
+
+async def pool_lease_types(pool: AsyncConnectionPool, entry: _Entry) -> None:
+    async def create() -> _Entry:
+        return entry
+
+    lease = await pool._acquire(entry.key, create, share_h2=True)
+    assert_type(lease, _Lease)
+    assert_type(lease.entry, _Entry)
+    assert_type(lease.released, bool)
+    assert_type(lease.transfer(), None)
+    assert_type(await lease.release(True), None)
+    assert_type(pool._retire(entry), asyncio.Task[None])
+    for task in pool._creating:
+        assert_type(task, asyncio.Task[_Entry])
+    for waiter in pool._waiters:
+        assert_type(waiter, asyncio.Future[None])
+    assert_type(await pool.aclose(), None)
 
 
 async def native_async_calls(url: str) -> None:

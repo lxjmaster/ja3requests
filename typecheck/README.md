@@ -45,7 +45,7 @@ including `assert_type` checks that catch an accidental `Any` return. Every
 `# E:` line in `invalid.py` must produce its specific diagnostic; wrong URLs,
 timeouts, streaming options, upload tuples, callback returns, TLS configuration,
 Cookie values, and response return types are covered. The current consumers
-include 130 negative markers: async additions reject synchronous pools, incorrect
+include 138 negative markers: async additions reject synchronous pools, incorrect
 awaited return types, invalid budgets/iterators, text files and unsupported file tuples.
 Synchronous upload calls reject async iterators; async calls accept byte iterators
 and async byte iterators. Async multipart paths include `PathLike[str]`.
@@ -67,7 +67,7 @@ while withholding diagnostics from implementation bodies. It does **not** use
 The source gate strictly checks the aliases, top-level facade, retry policy,
 HTTP/2 frame values, HPACK header and Huffman codecs, and the ClientHello
 inspection schema.
-The strict set also includes request-default validation and merging, for fifteen
+The strict set also includes request-default validation and merging, for sixteen
 source modules. Query-pair types preserve existing text-key, byte-key and mixed
 list/tuple inputs, including homogeneous typed lists; string-only configured
 default pairs keep their separate contract. Installed consumers cover those
@@ -112,6 +112,15 @@ HMAC name, factory and module forms; selected suite hashes remain callable.
 Checker-only casts describe the existing RSA input and curve/key relationships;
 they add no runtime key validation or algorithm changes. Twelve negative
 consumer cases cover bytes, suite IDs, keys, parsed fields, digest and log inputs.
+The async pool is strictly checked, including entry-creation tasks, None-valued
+waiters/cleanup tasks and lease returns. Factory annotations require coroutine
+objects, matching the existing owner_task/loop.create_task implementation;
+arbitrary Awaitable factories were never supported by that runtime path.
+Checker-only assertions describe the loop established by _bind without adding
+runtime checks. Transport/H2 adapters and route-key components retain their
+existing dynamic annotations; this batch does not redesign those interfaces.
+Installed examples check internal lease/task types without making them public
+APIs. Eight negative cases cover factory results, options, leases and task sets.
 The protocol modules are an incremental internal migration, not a claim that
 the full connection and TLS implementation is type-clean. Installed consumers
 also check precise protocol-value return types and eleven invalid protocol uses.

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add the asynchronous connection pool to strict typing, preserving entry and
+  lease results, coroutine factories, waiters and cleanup tasks. Admission,
+  cancellation, H2 sharing and shutdown behavior are unchanged.
+
 - Add TLS crypto helpers and logging to strict typing, preserving binary
   secrets, EC/X25519 key objects, cipher metadata and optional parsed parameters.
   Cryptographic operations, validation and failure behavior are unchanged.

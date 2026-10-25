@@ -1,7 +1,8 @@
 """Every E marker must produce the listed mypy diagnostic; never execute."""
 
+import asyncio
 from io import BytesIO, StringIO
-from typing import AsyncIterator
+from typing import AsyncIterator, Awaitable, Callable
 
 import ja3requests
 from ja3requests import HTTPRetry, Response, Session, TlsConfig
@@ -28,6 +29,7 @@ from ja3requests.protocol.tls.debug import set_debug_level
 from ja3requests.protocol.tls.session_cache import TLS12Ticket, TLSSessionCache
 from ja3requests._async_utils import owner_task, phase_wait
 from ja3requests._cookie_file import load_cookie_file, save_cookie_file
+from ja3requests.async_pool import _Entry, _Lease
 from ja3requests.utils import (
     Task,
     b,
@@ -155,6 +157,28 @@ def rejects_protocol_values(record: bytes) -> None:
     HPACKEncoder().set_table_size('large')  # E: arg-type
     HPACKDecoder(max_header_list_size='unbounded')  # E: arg-type
     HPACKDecoder().decode_headers('not bytes')  # E: arg-type
+
+
+async def pool_rejects(
+    pool: ja3requests.AsyncConnectionPool,
+    entry: _Entry,
+    awaitable_factory: Callable[[], Awaitable[_Entry]],
+) -> None:
+    async def number() -> int:
+        return 1
+
+    async def create() -> _Entry:
+        return entry
+
+    await pool._acquire(entry.key, awaitable_factory)  # E: arg-type
+    await pool._acquire(entry.key, number)  # E: arg-type
+    await pool._acquire(entry.key, create, share_h2='yes')  # E: arg-type
+    _Lease(pool, object())  # E: arg-type
+    lease = _Lease(pool, entry)
+    await lease.release('yes')  # E: arg-type
+    pool._retire(object())  # E: arg-type
+    pool._waiters.add(asyncio.Future[int]())  # E: arg-type
+    pool._cleanup.add(asyncio.create_task(number()))  # E: arg-type
 
 
 async def async_rejects(

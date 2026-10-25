@@ -4,7 +4,17 @@ from __future__ import annotations
 
 import asyncio
 import math
-from typing import Any, Awaitable, Callable, List, Optional, Set, Tuple
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Coroutine,
+    Dict,
+    List,
+    Optional,
+    Set,
+    Tuple,
+)
 
 from ja3requests._async_utils import owner_task
 
@@ -16,7 +26,7 @@ class _Entry:
         transport: Any,
         h2: Any = None,
         reusable: bool = True,
-    ):
+    ) -> None:
         self.key = key
         self.transport = transport
         self.h2 = h2
@@ -45,7 +55,7 @@ class _Entry:
 
 
 class _Lease:
-    def __init__(self, pool: AsyncConnectionPool, entry: _Entry):
+    def __init__(self, pool: AsyncConnectionPool, entry: _Entry) -> None:
         self.pool = pool
         self.entry = entry
         self.released = False
@@ -93,13 +103,13 @@ class AsyncConnectionPool:
         self._idle_timeout = idle_timeout
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._entries: List[_Entry] = []
-        self._creating: dict = {}
-        self._waiters: Set[asyncio.Future] = set()
-        self._cleanup: Set[asyncio.Task] = set()
+        self._creating: Dict[asyncio.Task[_Entry], Tuple[Any, ...]] = {}
+        self._waiters: Set[asyncio.Future[None]] = set()
+        self._cleanup: Set[asyncio.Task[None]] = set()
         self._closed = False
         self._generation = object()
-        self._close_task: Optional[asyncio.Task] = None
-        self._session_close_task: Optional[asyncio.Task] = None
+        self._close_task: Optional[asyncio.Task[None]] = None
+        self._session_close_task: Optional[asyncio.Task[None]] = None
 
     def _bind(self) -> None:
         loop = asyncio.get_running_loop()
@@ -113,7 +123,7 @@ class AsyncConnectionPool:
             if not waiter.done():
                 waiter.set_result(None)
 
-    def _retire(self, entry: _Entry) -> asyncio.Task:
+    def _retire(self, entry: _Entry) -> asyncio.Task[None]:
         if entry in self._entries:
             self._entries.remove(entry)
         entry.retired = True
@@ -124,7 +134,7 @@ class AsyncConnectionPool:
         self._wake()
         return task
 
-    def _cleanup_done(self, task: asyncio.Task) -> None:
+    def _cleanup_done(self, task: asyncio.Task[None]) -> None:
         self._cleanup.discard(task)
         if not task.cancelled():
             task.exception()  # Observe background close failures.
@@ -140,11 +150,15 @@ class AsyncConnectionPool:
     async def _acquire(
         self,
         key: Tuple[Any, ...],
-        factory: Callable[[], Awaitable[_Entry]],
+        factory: Callable[[], Coroutine[Any, Any, _Entry]],
         *,
         share_h2: bool = True,
     ) -> _Lease:
         self._bind()
+        if TYPE_CHECKING:
+            # _bind establishes the loop or raises before admission starts.
+            assert self._loop is not None
+        entry: Optional[_Entry]
         while True:
             if self._closed:
                 raise RuntimeError('AsyncConnectionPool is closed')
@@ -228,6 +242,8 @@ class AsyncConnectionPool:
 
     async def _release(self, lease: _Lease, reusable: bool) -> None:
         self._bind()
+        if TYPE_CHECKING:
+            assert self._loop is not None
         entry = lease.entry
         if lease.generation is not self._generation or entry.retired:
             return
