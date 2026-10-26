@@ -2,7 +2,7 @@
 
 ## Shared response decoder typing (2026-10-26)
 
-Status: **LOCAL COMPLETE; SOURCE DELIVERY IN PROGRESS / UNREGISTERED**. The continuation request selected the
+Status: **SOURCE DELIVERY COMPLETE / UNREGISTERED**. The continuation request selected the
 bounded decoder/parser increment described by
 [the response compatibility inventory](response_typing_contract.md), based on
 `37ae49ef45c9b6e3d3ad020f8a5da6dd10bee4ba` after the email cleanup.
@@ -23,7 +23,7 @@ publication, tags, remote Issue changes and deployment remain unselected.
   compatibility, existing sync/async response regressions and installed types.
 - [✅] Freeze one independent artifact, verify source identity, record remaining
   response compatibility findings and remove task-owned temporary resources.
-- [ ] Deliver the scoped source and records to master, verify the exact commit's
+- [✅] Deliver the scoped source and records to master, verify the exact commit's
   Tests, Coverage, Lint, Documentation and Public typing, and close the record.
 
 Reuse the existing workspace and preserve unrelated files. The main agent owns
@@ -58,9 +58,8 @@ Both artifact hashes match their report; all build/install staging was removed.
 These are unpublished version-2.6.0 development artifacts, with local Python
 3.13.3 execution, not a new multi-version runtime CI result or a release.
 
-The selected local implementation and verification are complete. Source delivery
-is now selected; its actual commit and workflow results will supply the remote
-acceptance. Full response-hierarchy compatibility and the opt-in timeout
+The selected implementation, independent acceptance and source delivery are
+complete. Full response-hierarchy compatibility and the opt-in timeout
 policy remain separately selectable follow-ups. Existing user files and prior
 artifacts were preserved.
 
@@ -75,7 +74,23 @@ now passes: 23 HTML pages, 1,558 local links/assets, 26 API objects, 41 Python
 snippets and 12 pinned source paths, plus all four actual loopback examples.
 The temporary documentation site was removed. Correction commit `71c41c8`
 contains the three guide changes; the accepted response source and this record
-follow in a separate scoped commit.
+follow in source commit `f5129581d903b595be26e6d205ad49188b5d6057`.
+
+Both commits were pushed normally to master, with exact remote SHA readback and
+the previously confirmed GitHub privacy email in author and committer metadata.
+The five workflows for the actual source commit passed:
+[Tests](https://github.com/lxjmaster/ja3requests/actions/runs/40281014577),
+[Coverage](https://github.com/lxjmaster/ja3requests/actions/runs/40281014753),
+[Lint](https://github.com/lxjmaster/ja3requests/actions/runs/40281014557),
+[Documentation](https://github.com/lxjmaster/ja3requests/actions/runs/40281014896)
+and [Public typing](https://github.com/lxjmaster/ja3requests/actions/runs/40281014721).
+The independent final snapshot, both artifact hashes and actual temporary-root
+removal were rechecked before delivery; only this completion record changed
+after acceptance-02. This documentary closeout is a separate commit whose own
+remote readback and workflow results belong to the final delivery handoff;
+the source results above do not predeclare that later commit's CI outcome.
+Tracked changes are scoped to this batch. User debug scripts, IDE files,
+untracked release notes and historical evidence remain preserved.
 
 ## Ordered execution: N1 -> N2 -> N3 (2026-10-25)
 
