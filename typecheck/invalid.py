@@ -5,9 +5,11 @@ from io import BytesIO, StringIO
 from typing import AsyncIterator, Awaitable, Callable
 
 import ja3requests
+import brotli
 from ja3requests import HTTPRetry, Response, Session, TlsConfig
 from ja3requests.cookies import Ja3RequestsCookieJar, extract_cookies_to_jar
 from ja3requests.pool import ConnectionPool
+from ja3requests.response import HTTPResponse, _ContentDecoder
 from ja3requests.protocol.h2.frame import H2Frame
 from ja3requests.protocol.h2.hpack import (
     HPACKDecoder,
@@ -162,6 +164,30 @@ def rejects_protocol_values(record: bytes) -> None:
 def sync_pool_rejects(pool: ConnectionPool) -> None:
     pool._h2_connecting.add(('host', 443, 'https'))  # E: arg-type
     pool._h2_connecting.add((('host', '443', 'https'), None))  # E: arg-type
+
+
+def brotli_decoder_rejects() -> None:
+    brotli.Decompressor(1)  # E: call-arg
+    brotli.Decompressor().process('text')  # E: arg-type
+    brotli.Decompressor().process(b'', output_buffer_limit='1')  # E: arg-type
+    brotli.Decompressor().process(data=b'')  # E: call-arg
+    brotli.Decompressor().is_finished(1)  # E: call-arg
+    brotli.decompress(123)  # E: arg-type
+
+
+def sync_response_lifecycle_rejects(
+    response: Response, parser: HTTPResponse, decoder: _ContentDecoder
+) -> None:
+    decoder.feed('not bytes')  # E: arg-type
+    decoder.feed(b'compressed').send(1)  # E: arg-type
+    parser._iter_raw_body(1024).send(b'bad')  # E: arg-type
+    parser.iter_body(1024).send(b'bad')  # E: arg-type
+    response.iter_content().send(b'bad')  # E: arg-type
+    response.iter_lines().send('bad')  # E: arg-type
+    parser._remaining = 'unknown'  # E: assignment
+    response.headers = {}  # E: misc
+    response.status_code = 200  # E: misc
+    response.body = 'not bytes'  # E: assignment
 
 
 async def pool_rejects(

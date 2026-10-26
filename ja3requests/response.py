@@ -16,12 +16,13 @@ from typing import (
     Any,
     Callable,
     Dict,
+    Generator,
     Iterable,
-    Iterator,
     List,
     Optional,
     Tuple,
     Type,
+    Union,
 )
 import brotli
 from ja3requests.base import BaseResponse
@@ -37,6 +38,8 @@ from ja3requests.exceptions import (
 from ja3requests.protocol.tls.debug import debug
 
 if TYPE_CHECKING:
+    from typing import cast
+    from zlib import _Decompress
     from typing_extensions import Literal
     from ja3requests.base import BaseRequest
 
@@ -47,12 +50,12 @@ class _ContentDecoder:
     def __init__(self, encoding: Optional[bytes], chunk_size: int) -> None:
         self.encoding = encoding
         self.chunk_size = chunk_size
-        self.decoder = None
+        self.decoder: Optional[Union[brotli.Decompressor, _Decompress]] = None
         self.prefix = b""
         self.deflate_probe = b""
         self.can_fallback = False
 
-    def feed(self, data: bytes) -> Iterator[bytes]:
+    def feed(self, data: bytes) -> Generator[bytes, None, None]:
         """Drain bounded decoded blocks before the caller supplies more input."""
         if self.encoding not in (b"gzip", b"deflate", b"br"):
             yield data
@@ -61,6 +64,9 @@ class _ContentDecoder:
             if self.encoding == b"br":
                 if self.decoder is None:
                     self.decoder = brotli.Decompressor()
+                if TYPE_CHECKING:
+                    # The encoding is fixed for this response's decoder lifetime.
+                    self.decoder = cast(brotli.Decompressor, self.decoder)
                 # Stay below the native allocation quantum (32 KiB in 1.2).
                 while True:
                     output = self.decoder.process(data, output_buffer_limit=1)
@@ -71,6 +77,8 @@ class _ContentDecoder:
                         not output and self.decoder.can_accept_more_data()
                     ):
                         return
+            if TYPE_CHECKING:
+                self.decoder = cast(Optional[_Decompress], self.decoder)
             if self.can_fallback:
                 if len(self.deflate_probe) + len(data) <= 65536:
                     self.deflate_probe += data
@@ -126,11 +134,14 @@ class _ContentDecoder:
     def finish(self) -> None:
         """Reject an incomplete compressed stream after framing reaches EOF."""
         if self.decoder is not None:
-            complete = (
-                self.decoder.is_finished()
-                if self.encoding == b"br"
-                else self.decoder.eof
-            )
+            if self.encoding == b"br":
+                if TYPE_CHECKING:
+                    self.decoder = cast(brotli.Decompressor, self.decoder)
+                complete = self.decoder.is_finished()
+            else:
+                if TYPE_CHECKING:
+                    self.decoder = cast(_Decompress, self.decoder)
+                complete = self.decoder.eof
             if not complete:
                 raise ContentDecodingError("Truncated compressed response body")
         elif self.prefix:
@@ -153,8 +164,8 @@ class HTTPResponse(BaseResponse):
         self._method = method
         self._chunked = False
         self._content_encoding: Optional[bytes] = None
-        self._content_length = None
-        self._remaining = None
+        self._content_length: Optional[int] = None
+        self._remaining: Optional[int] = None
         self._chunk_remaining = 0
         self._chunk_crlf = False
         self._finished = False
@@ -302,7 +313,7 @@ class HTTPResponse(BaseResponse):
             self._read_headers()  # Consume bounded trailers before reusing HTTP/1.
             self._finish(self._reusable)
 
-    def _iter_raw_body(self, chunk_size: int) -> Iterator[bytes]:
+    def _iter_raw_body(self, chunk_size: int) -> Generator[bytes, None, None]:
         """Read at most one available transport block on each iteration."""
         try:
             while not self._finished:
@@ -340,7 +351,7 @@ class HTTPResponse(BaseResponse):
             if not self._finished:
                 self._finish(False)
 
-    def iter_body(self, chunk_size: int) -> Iterator[bytes]:
+    def iter_body(self, chunk_size: int) -> Generator[bytes, None, None]:
         """Incrementally decode without retaining a replay copy of the body."""
         raw = self._iter_raw_body(min(chunk_size, 65536))
         decoder = _ContentDecoder(self._content_encoding, chunk_size)
@@ -524,7 +535,7 @@ class Response(BaseResponse):
         """
         return self.body
 
-    def iter_content(self, chunk_size: int = 1024) -> Iterator[bytes]:
+    def iter_content(self, chunk_size: int = 1024) -> Generator[bytes, None, None]:
         """
         Yield response body in chunks.
 
@@ -555,7 +566,7 @@ class Response(BaseResponse):
 
     def iter_lines(
         self, chunk_size: int = 512, delimiter: Optional[bytes] = None
-    ) -> Iterator[bytes]:
+    ) -> Generator[bytes, None, None]:
         """
         Yield response body line by line.
 

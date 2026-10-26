@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Refine shared response decoder types, nullable parser lengths and synchronous
+  byte generators, including their close interface. Add a development-only
+  Brotli decoder stub; decoding and response ownership behavior are unchanged.
+  The full synchronous response module remains outside the strict typing gate
+  because of existing property/inheritance compatibility constraints.
+
 - Add the synchronous connection pool to strict typing, preserving H2 creation
   reservations, optional generation tokens and idle-connection deque values.
   Admission, locking and connection reuse behavior are unchanged.

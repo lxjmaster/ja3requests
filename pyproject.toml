@@ -6,6 +6,7 @@ skip-string-normalization = true
 # The remaining dynamic protocol internals are
 # separately inspectable with `mypy ja3requests`; they are not silently ignored.
 python_version = "3.9"
+mypy_path = "$MYPY_CONFIG_FILE_DIR/typecheck/stubs"
 files = [
     "ja3requests/_typing.py",
     "ja3requests/_request_defaults.py",

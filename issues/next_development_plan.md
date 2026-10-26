@@ -1,10 +1,88 @@
 # Next Development Plan
 
+## Shared response decoder typing (2026-10-26)
+
+Status: **LOCAL COMPLETE; SOURCE DELIVERY IN PROGRESS / UNREGISTERED**. The continuation request selected the
+bounded decoder/parser increment described by
+[the response compatibility inventory](response_typing_contract.md), based on
+`37ae49ef45c9b6e3d3ad020f8a5da6dd10bee4ba` after the email cleanup.
+Complete local implementation and independent installed-artifact acceptance.
+The full response module remains outside the strict gate: no base-class,
+property-setter, empty-response or timeout behavior redesign is selected.
+The subsequent continuation selects a scoped commit and normal push to existing
+master, remote readback and the five workflows for the delivered commit. Package
+publication, tags, remote Issue changes and deployment remain unselected.
+
+- [✅] Verify the actual Brotli 1.2 interface and provide a bounded development
+  stub, including bounded output and drain/completion methods. Check the stub
+  during source and independent installed-consumer acceptance.
+- [✅] Describe the decoder union and its encoding-dependent narrowing, actual
+  synchronous generator close interface and nullable parser lengths. Preserve
+  decoding operations, fallback/truncation behavior and cleanup ownership.
+- [✅] Check focused diagnostics, unchanged runtime operations, Python 3.7
+  compatibility, existing sync/async response regressions and installed types.
+- [✅] Freeze one independent artifact, verify source identity, record remaining
+  response compatibility findings and remove task-owned temporary resources.
+- [ ] Deliver the scoped source and records to master, verify the exact commit's
+  Tests, Coverage, Lint, Documentation and Public typing, and close the record.
+
+Reuse the existing workspace and preserve unrelated files. The main agent owns
+serial edits; one independent read-only lane verifies the Brotli interface and
+typing boundary. Retain the report, manifest, logs and unpublished artifacts
+under `dist/post-2.6.0-response-decoder-typing/acceptance-01` and `acceptance-02`;
+the verifier removes its temporary build/install roots. Recover with scoped edits, never a worktree
+reset. The plan CLI still lacks an official session binding; no registry
+transition is claimed.
+
+Local acceptance: the existing **18-module strict gate** passes, as do Black
+for all five changed Python/stub files, package-wide error-level Pylint and
+**170 focused response/streaming tests**. The response module's diagnostics
+decrease from 24 to **9**, with **13** still in the unchanged base class and
+none in `_ContentDecoder`. No whole-module strict migration is claimed.
+Runtime AST comparison passes after stripping typing/checker-only constructs
+and normalizing the single equivalent conditional-assignment expansion;
+Python 3.7 runtime-source grammar passes. Independent interface and diff review
+found no required correction. The response inventory records the two known
+stubtest limitations alongside passing actual C-extension interface probes.
+
+The [final independent artifact report](../dist/post-2.6.0-response-decoder-typing/acceptance-02/verification.json)
+passes all ten commands, installed consumers with **162 negative markers**,
+**4,764 tests + 118 subtests** and **92.7640% statement coverage**, with zero
+failures/errors/skips and one existing collection warning. The partial stub is
+included in the sdist's development inputs and absent from the runtime wheel.
+All source/configuration/consumer/guide bytes matched the accepted 341-file
+snapshot before this completion record was updated. The original acceptance-01
+remains retained with its 92.7717% coverage and pre-correction documentation;
+acceptance-02 includes the corrected source links and is the delivery candidate.
+Both artifact hashes match their report; all build/install staging was removed.
+These are unpublished version-2.6.0 development artifacts, with local Python
+3.13.3 execution, not a new multi-version runtime CI result or a release.
+
+The selected local implementation and verification are complete. Source delivery
+is now selected; its actual commit and workflow results will supply the remote
+acceptance. Full response-hierarchy compatibility and the opt-in timeout
+policy remain separately selectable follow-ups. Existing user files and prior
+artifacts were preserved.
+
+Delivery intake found the sanitized baseline's Documentation workflow failed:
+14 pinned links in three guides still used the pre-rewrite commit. Their
+replacement `90b2aaed8ff6550df57d15828e95038093155f23` is reachable from the
+sanitized branches, and all referenced file blobs are identical. Update only
+those URLs, retain historical prose and the existing verifier, and verify the
+strict docs build plus examples. This was a delivery-blocking consequence of the
+earlier privacy rewrite, not a response-runtime change. Documentation acceptance
+now passes: 23 HTML pages, 1,558 local links/assets, 26 API objects, 41 Python
+snippets and 12 pinned source paths, plus all four actual loopback examples.
+The temporary documentation site was removed. Correction commit `71c41c8`
+contains the three guide changes; the accepted response source and this record
+follow in a separate scoped commit.
+
 ## Ordered execution: N1 -> N2 -> N3 (2026-10-25)
 
 Status: **SOURCE AND DESIGN COMPLETE / UNREGISTERED**. The user selected the recommended
-sequence with "proceed in order". This is the current execution entry point;
-the forward plan below retains the preparation baseline. Execute N1, N2a,
+sequence with "proceed in order". This completed sequence precedes the bounded
+decoder follow-up above; the forward plan below retains its preparation baseline.
+The selected sequence was N1, N2a,
 N2b when representable without runtime compatibility changes, then N3's design
 deliverable. N4 and the conditional feature register remain proposals until the
 post-N2 checkpoint establishes an actual need. No timeout implementation,

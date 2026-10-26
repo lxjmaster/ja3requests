@@ -45,7 +45,7 @@ including `assert_type` checks that catch an accidental `Any` return. Every
 `# E:` line in `invalid.py` must produce its specific diagnostic; wrong URLs,
 timeouts, streaming options, upload tuples, callback returns, TLS configuration,
 Cookie values, and response return types are covered. The current consumers
-include 146 negative markers: async additions reject synchronous pools, incorrect
+include 162 negative markers: async additions reject synchronous pools, incorrect
 awaited return types, invalid budgets/iterators, text files and unsupported file tuples.
 Synchronous upload calls reject async iterators; async calls accept byte iterators
 and async byte iterators. Async multipart paths include `PathLike[str]`.
@@ -135,6 +135,30 @@ their route/policy tuple shape, pool generations remain optional opaque objects,
 and idle H1 connections retain their deque element type. Two installed negative
 cases reject malformed reservations. Locks, admission, reuse and generation
 isolation are unchanged; the internal checks do not establish a public API.
+The shared response decoder describes its Brotli/zlib union and narrows it only
+under `TYPE_CHECKING`, using the existing encoding/factory invariant. Synchronous
+raw, decoded, content and line iterators expose their actual
+`Generator[bytes, None, None]` interface, including `close()`. Parser lengths
+remain optional integers. Installed examples preserve getter-only headers/status
+and the nullable body setter, and reject non-byte input or invalid generator sends.
+This increment does not add `response.py` or its base class to the strict gate;
+their existing property overrides and dynamic-adapter diagnostics remain visible.
+
+`stubs/brotli.pyi` is a development-only view of the decoder operations actually
+used by the project, verified against Brotli 1.2.0. It is not a complete Brotli
+stub package or a runtime dependency. The source configuration points to it and
+the independent consumer checker copies it alongside the consumers, without
+copying library source or adding the repository to installed-package lookup.
+The sdist includes this checker input; it is not installed into the runtime wheel.
+Six negative cases cover constructor and processing arguments; positive cases
+check byte/bool results and both supported forms of the output-buffer option.
+The option is not a strict byte cap; draining preserves the current completion
+and input-credit conditions. Actual interface probes complement stub inspection:
+native constructor introspection exposes variadic parameters that the C parser
+rejects, and stubtest additionally requests a `disjoint_base` layout annotation.
+Those known stubtest findings are not reported as a passing stubtest result,
+nor worked around by widening the constructor or declaring the class final.
+
 The protocol modules are an incremental internal migration, not a claim that
 the full connection and TLS implementation is type-clean. Installed consumers
 also check precise protocol-value return types and eleven invalid protocol uses.

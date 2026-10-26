@@ -3,7 +3,52 @@
 Prepared: 2026-10-25. Status: **N2a COMPLETE; N2b CONDITIONAL ENTRY NOT MET**.
 Source baseline: `e28ee3302679455decd6348c89cf9f23b76fe2b0`.
 Selected sequence: [N1 -> N2 -> N3](next_development_plan.md).
-This is an analysis deliverable; no response implementation was changed.
+The original inventory was an analysis deliverable; the later selected
+implementation is recorded in the follow-up below.
+
+## Bounded decoder/parser follow-up (2026-10-26)
+
+The continuation request selected the smaller compatible increment from section
+5, based on the sanitized history at `37ae49ef45c9b6e3d3ad020f8a5da6dd10bee4ba`.
+The historical inventory below is unchanged. Current implementation acceptance
+belongs to [the active execution entry](next_development_plan.md).
+
+The decoder now declares its optional Brotli/zlib union and uses checker-only
+casts tied to the existing encoding/factory invariant. Its `finish` conditional
+expression is mechanically expanded into the same two branches for narrowing;
+no decoder operations or failure paths change. Runtime AST comparison removes
+annotations/typing imports/checker-only blocks and normalizes only conditional
+assignments. It passes; literal unnormalized AST identity is not claimed.
+Five byte generators expose their actual `Generator[bytes, None, None]` return
+type; parser content/remaining lengths are optional integers. Public inheritance,
+property mutability, empty responses and dynamic socket/file adapters retain
+their original behavior.
+
+A bounded development-only [Brotli stub](../typecheck/stubs/brotli.pyi) describes
+the operations verified against the installed 1.2.0 extension and
+[its official C implementation](https://github.com/google/brotli/blob/v1.2.0/python/_brotli.c).
+The isolated consumer checker copies it as a checker input; no runtime dependency
+or substitute response base is introduced. In-memory probes verify default and
+bounded process calls, both limit argument forms, repeated drains, byte/bool
+results, supported `decompress(string=...)`, rejected malformed arguments and
+the real exception type. A 262,144-byte payload drains completely with both
+limit forms. A limit of 1 can return 32,752 bytes; retaining the existing drain
+condition and output chunking is necessary.
+
+`mypy.stubtest brotli --mypy-config-file pyproject.toml --ignore-missing-stub`
+reports two known limitations: an absent `disjoint_base` layout declaration and
+a native `__init__` variadic introspection signature. Actual construction and
+the C parser reject arguments; the type is subclassable. Do not widen the
+constructor, mark the type final or claim this stubtest command passed. Source
+and installed-consumer checks plus actual calls establish the selected interface;
+unlisted Brotli APIs are outside this partial development stub.
+
+Focused checking now reports **9 response diagnostics and 13 base diagnostics**,
+with none in `_ContentDecoder`. Remaining findings are the two read-only
+overrides, untyped base calls, dynamic adapter return, nullable public parser
+access, one dictionary annotation and existing bytes-log formatting. No ignore
+directives or broad new Any types were added. Full-module N2b entry remains
+unmet; this smaller increment is not a claim of whole-response strict migration.
 
 ## 1. Verified contracts
 

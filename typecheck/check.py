@@ -97,6 +97,7 @@ def main() -> int:
 
         for filename in ('valid.py', 'invalid.py', 'consumer.ini'):
             shutil.copyfile(examples / filename, directory / filename)
+        shutil.copytree(examples / 'stubs', directory / 'stubs')
         command = [
             sys.executable,
             '-m',

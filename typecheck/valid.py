@@ -9,6 +9,7 @@ from typing import (
     AsyncGenerator,
     AsyncIterator,
     Dict,
+    Generator,
     Iterator,
     List,
     Mapping,
@@ -21,6 +22,7 @@ from typing import (
 from typing_extensions import assert_type
 
 import ja3requests
+import brotli
 from ja3requests import HTTPRetry, Response, Session, TlsConfig
 from ja3requests import (
     AsyncConnectionPool,
@@ -63,6 +65,7 @@ from ja3requests.protocol.tls.session_cache import (
     TLSSessionEntry,
 )
 from ja3requests.requests.request import Request
+from ja3requests.response import HTTPResponse, _ContentDecoder
 from ja3requests.utils import (
     Retry,
     Task,
@@ -389,8 +392,10 @@ def public_calls(url: str, cookie_path: Path) -> None:
                 hooks={'after_request': [after]},
             ) as response:
                 assert_type(response, Response)
-                assert_type(response.iter_content(8192), Iterator[bytes])
-                assert_type(response.iter_lines(delimiter=b'\n'), Iterator[bytes])
+                assert_type(response.iter_content(8192), Generator[bytes, None, None])
+                assert_type(
+                    response.iter_lines(delimiter=b'\n'), Generator[bytes, None, None]
+                )
                 assert_type(response.content, bytes)
                 assert_type(response.text, str)
                 assert_type(response.headers, Dict[str, str])
@@ -447,6 +452,48 @@ def sync_pool_types(pool: ConnectionPool, connection: PooledConnection) -> None:
     pool._h2_connecting.add((('host', 443, 'https'), ('policy',)))
     connection._pool_generation = object()
     connection._pool_generation = None
+
+
+def brotli_decoder_types() -> None:
+    decoder = brotli.Decompressor()
+    assert_type(decoder.process(b'compressed'), bytes)
+    assert_type(decoder.process(b'', 1), bytes)
+    assert_type(decoder.process(b'', output_buffer_limit=1), bytes)
+    assert_type(decoder.is_finished(), bool)
+    assert_type(decoder.can_accept_more_data(), bool)
+    assert_type(brotli.decompress(string=b'compressed'), bytes)
+    error: Exception = brotli.error('invalid')
+
+
+def sync_response_lifecycle_types(
+    response: Response, parser: HTTPResponse, decoder: _ContentDecoder
+) -> None:
+    decoded = decoder.feed(b'compressed')
+    raw = parser._iter_raw_body(1024)
+    body = parser.iter_body(1024)
+    chunks = response.iter_content(1024)
+    lines = response.iter_lines(delimiter=b'\n')
+    assert_type(decoded, Generator[bytes, None, None])
+    assert_type(raw, Generator[bytes, None, None])
+    assert_type(body, Generator[bytes, None, None])
+    assert_type(chunks, Generator[bytes, None, None])
+    assert_type(lines, Generator[bytes, None, None])
+    assert_type(next(decoded), bytes)
+    assert_type(next(raw), bytes)
+    assert_type(next(body), bytes)
+    assert_type(next(chunks), bytes)
+    assert_type(next(lines), bytes)
+    decoded.close()
+    raw.close()
+    body.close()
+    chunks.close()
+    lines.close()
+    assert_type(decoder.finish(), None)
+    assert_type(parser._content_length, Optional[int])
+    assert_type(parser._remaining, Optional[int])
+    response.body = b'cached'
+    response.body = None
+    assert_type(response.body, bytes)
 
 
 async def pool_lease_types(pool: AsyncConnectionPool, entry: _Entry) -> None:
