@@ -1,12 +1,12 @@
 # TLS Defaults Migration Guide
 
 This guide describes the breaking defaults migration released in 2.0.0 (T05 of
-[the development plan](https://github.com/lxjmaster/ja3requests/blob/a291ef30bb6ae53cf38b3d79604c8f34e1865547/issues/next_development_plan.md)) and retained in the
+[the development plan](https://github.com/lxjmaster/ja3requests/blob/90b2aaed8ff6550df57d15828e95038093155f23/issues/next_development_plan.md)) and retained in the
 published [2.0.1 release](https://github.com/lxjmaster/ja3requests/releases/tag/v2.0.1).
 `TlsConfig()` and implicit Session/module-level configurations select the secure profile and
 verify server certificates. `TlsConfig.legacy()` pins the 1.x behavior.
 
-The [interoperability matrix](https://github.com/lxjmaster/ja3requests/blob/a291ef30bb6ae53cf38b3d79604c8f34e1865547/test/secure_profile_matrix.md) records tested
+The [interoperability matrix](https://github.com/lxjmaster/ja3requests/blob/90b2aaed8ff6550df57d15828e95038093155f23/test/secure_profile_matrix.md) records tested
 combinations and peer capability limits, with dated historical evidence kept
 separate from the current release. The 2.0.1 release passed the configured
 Python 3.7–3.13 CI gates; older-peer skips remain explicit limitations. Installed
@@ -218,7 +218,7 @@ with Session(tls_config=config, pool=ConnectionPool()) as session:
 
 HTTP/2 is used when the peer negotiates `h2`; otherwise the implementation uses
 HTTP/1.1. HTTP/2 responses can share a pooled connection concurrently. The
-[matrix](https://github.com/lxjmaster/ja3requests/blob/a291ef30bb6ae53cf38b3d79604c8f34e1865547/test/secure_profile_matrix.md#explicit-http2-cases) records the
+[matrix](https://github.com/lxjmaster/ja3requests/blob/90b2aaed8ff6550df57d15828e95038093155f23/test/secure_profile_matrix.md#explicit-http2-cases) records the
 selected secure HTTP/2 combinations; it does not prove every possible cipher,
 certificate or group permutation. Server push remains disabled.
 In published 2.0.1, even `stream=True` buffered response bodies before
@@ -281,7 +281,7 @@ The published 2.0.0 release switched implicit configuration to the secure profil
 `legacy()` remains the compatibility entry point, `secure()` stays explicit,
 and request verification overrides keep their scope. Authentication rejection
 never silently retries with verification disabled. See
-[the release notes](https://github.com/lxjmaster/ja3requests/blob/a291ef30bb6ae53cf38b3d79604c8f34e1865547/CHANGELOG.md).
+[the release notes](https://github.com/lxjmaster/ja3requests/blob/90b2aaed8ff6550df57d15828e95038093155f23/CHANGELOG.md).
 
 The completed migration's acceptance criteria remain regression requirements:
 
@@ -312,16 +312,16 @@ fingerprint requirements against the recorded matrix. T03 provided the preparati
 
 ## Evidence and validation
 
-Behavior references: [profile and JA3 tests](https://github.com/lxjmaster/ja3requests/blob/a291ef30bb6ae53cf38b3d79604c8f34e1865547/test/test_tls_config.py),
-[request/redirect policy tests](https://github.com/lxjmaster/ja3requests/blob/a291ef30bb6ae53cf38b3d79604c8f34e1865547/test/test_verify_config.py),
-[certificate and proxy tests](https://github.com/lxjmaster/ja3requests/blob/a291ef30bb6ae53cf38b3d79604c8f34e1865547/test/integration/test_certificate_verification.py),
-and the [T02 matrix](https://github.com/lxjmaster/ja3requests/blob/a291ef30bb6ae53cf38b3d79604c8f34e1865547/test/secure_profile_matrix.md). The 2.0.1 release readback
+Behavior references: [profile and JA3 tests](https://github.com/lxjmaster/ja3requests/blob/90b2aaed8ff6550df57d15828e95038093155f23/test/test_tls_config.py),
+[request/redirect policy tests](https://github.com/lxjmaster/ja3requests/blob/90b2aaed8ff6550df57d15828e95038093155f23/test/test_verify_config.py),
+[certificate and proxy tests](https://github.com/lxjmaster/ja3requests/blob/90b2aaed8ff6550df57d15828e95038093155f23/test/integration/test_certificate_verification.py),
+and the [T02 matrix](https://github.com/lxjmaster/ja3requests/blob/90b2aaed8ff6550df57d15828e95038093155f23/test/secure_profile_matrix.md). The 2.0.1 release readback
 on 2026-10-04 confirmed merge/tag source `a291ef30bb6ae53cf38b3d79604c8f34e1865547`,
 ten successful CI checks, and matching published artifact hashes on
 [PyPI](https://pypi.org/project/ja3requests/2.0.1/) and
 [GitHub](https://github.com/lxjmaster/ja3requests/releases/tag/v2.0.1).
 Its installed-wheel selection passed 1517 tests and 112 subtests with 89.09%
-statement coverage; see [the test notes](https://github.com/lxjmaster/ja3requests/blob/a291ef30bb6ae53cf38b3d79604c8f34e1865547/test/README.md) for exclusions and
+statement coverage; see [the test notes](https://github.com/lxjmaster/ja3requests/blob/90b2aaed8ff6550df57d15828e95038093155f23/test/README.md) for exclusions and
 historical evidence. This is release evidence, not a test result for later changes.
 
 The T01 full run and T02 added cases provided the earlier protocol baseline used
