@@ -2,7 +2,7 @@
 
 ## Opt-in synchronous read timeout policy (2026-10-27)
 
-Status: **LOCAL ACCEPTANCE COMPLETE / DELIVERY IN PROGRESS / UNREGISTERED**. The continuation selects
+Status: **SOURCE DELIVERY COMPLETE / UNREGISTERED**. The continuation selects
 the existing [timeout design](timeout_consistency_design.md): add
 `Session.read_timeout_policy`, default `legacy`, with opt-in `phase` semantics
 for an unlimited read-side None budget. Preserve connect rules, low-level
@@ -19,7 +19,7 @@ deployment, history rewrite or remote Issue update is selected.
 - [✅] Verify finite/zero/None, mixed-policy reuse and concurrent H2 isolation,
   upload/early-response cleanup and unchanged connect/async behavior. Update
   public guides, installed typing consumers and independent artifact acceptance.
-- [ ] Reconcile independent review, commit/push with the confirmed privacy
+- [✅] Reconcile independent review, commit/push with the confirmed privacy
   identity, read back master, verify all five exact-commit workflows and close
   this record with cleanup or justified retention.
 
@@ -65,9 +65,28 @@ Refreshed documentation passes strict build and verification: **23 HTML pages,
 paths**, plus all four real loopback examples. Its task-owned site directory
 was removed; build and verification logs remain retained. Independent review
 found no remaining required correction after the framing acquisition and
-wait-reacquisition fixes. Source commit, normal push/readback and all five
-actual-commit workflows remain required; no successful remote result is
-predeclared here.
+wait-reacquisition fixes.
+
+Source commit `cdc38651fcec6873304593421b10d05180906e27` was committed and pushed
+normally to master, with exact remote SHA readback. Both author and committer
+use the previously confirmed GitHub privacy identity. Its five workflows pass:
+[Tests](https://github.com/lxjmaster/ja3requests/actions/runs/40447969208)
+(Python 3.7-3.13 and the wheel job),
+[Coverage](https://github.com/lxjmaster/ja3requests/actions/runs/40447969235),
+[Lint](https://github.com/lxjmaster/ja3requests/actions/runs/40447969214),
+[Documentation](https://github.com/lxjmaster/ja3requests/actions/runs/40447969274)
+and [Public typing](https://github.com/lxjmaster/ja3requests/actions/runs/40447969213).
+The retained `ci-source.json` records those exact-commit results. All 22
+recorded build/install command and top-level staging roots, plus the docs
+site, were read back as absent. Evidence and unpublished candidates remain
+retained for reproducibility; original user files and unrelated artifacts
+were preserved. No package publication, tag or deployment was performed.
+
+Implementation, independent acceptance and source delivery are complete.
+This documentary closeout is a separate commit; its own remote readback and
+workflow results are verified in the final handoff, not predeclared from the
+source commit's CI. No plan registry transition is claimed because official
+session binding remains unavailable.
 
 ## Shared response decoder typing (2026-10-26)
 
