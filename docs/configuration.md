@@ -13,6 +13,7 @@ documents its distinct timeout, pool ownership and response contracts.
 | Groups / initial shares | X25519 and P-256 | `supported_groups` and `key_share_groups` |
 | ALPN | `['http/1.1']` | `config.alpn_protocols = ['h2', 'http/1.1']` |
 | Timeout | `None` | Request scalar or `(connect, read)` tuple, in seconds |
+| Read timeout policy | `legacy` | Assign `session.read_timeout_policy = 'phase'` for unlimited read-side `None` |
 | Redirects | Enabled; HEAD helpers disable them | `allow_redirects=False`; current redirect limit is 8 |
 | Body loading | Eager (`stream=False`) | `stream=True` |
 | HTTP retry policy | None | `Session(retry=HTTPRetry(...))` |

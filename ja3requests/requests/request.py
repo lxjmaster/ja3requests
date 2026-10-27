@@ -28,6 +28,7 @@ from ja3requests._typing import (
 from ja3requests.requests.https import HttpsRequest
 from ja3requests.requests.http import HttpRequest
 from ja3requests._upload import is_upload
+from ja3requests._sync_timeout import normalize_read_policy, validate_read_timeout
 from ja3requests.protocol.h2.frame import normalize_headers_priority
 from ja3requests.sockets._upload import upload_length
 from ja3requests.utils import _validated_request_method
@@ -39,6 +40,7 @@ from ja3requests.exceptions import (
 )
 
 if TYPE_CHECKING:
+    from ja3requests._typing import ReadTimeoutPolicy
     from ja3requests.protocol.tls.config import TlsConfig
 
 
@@ -63,6 +65,7 @@ class Request:
         timeout: Timeout = None,
         tls_config: Optional[TlsConfig] = None,
         h2_headers_priority: Optional[H2HeadersPriority] = None,
+        read_timeout_policy: ReadTimeoutPolicy = 'legacy',
     ) -> None:
         self.method = method
         self.url = url
@@ -75,6 +78,7 @@ class Request:
         self.json = json
         self.proxies = proxies
         self.timeout = timeout
+        self.read_timeout_policy = normalize_read_policy(read_timeout_policy)
         self.tls_config = tls_config
         self.h2_headers_priority = normalize_headers_priority(h2_headers_priority)
 
@@ -86,6 +90,7 @@ class Request:
         Make a ready request to send.
         :return:
         """
+        validate_read_timeout(self.timeout, self.read_timeout_policy)
         method = self.__ready_method()
         schema, url = self.__ready_url()
         params = self.__ready_params()
@@ -112,6 +117,7 @@ class Request:
                 json=_json,
                 proxy=proxies,
                 timeout=self.timeout,
+                read_timeout_policy=self.read_timeout_policy,
                 tls_config=self.tls_config,
             )
             return req
@@ -131,6 +137,7 @@ class Request:
                 json=_json,
                 proxy=proxies,
                 timeout=self.timeout,
+                read_timeout_policy=self.read_timeout_policy,
                 tls_config=self.tls_config,
             )
             return req

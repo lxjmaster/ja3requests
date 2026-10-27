@@ -1,5 +1,74 @@
 # Next Development Plan
 
+## Opt-in synchronous read timeout policy (2026-10-27)
+
+Status: **LOCAL ACCEPTANCE COMPLETE / DELIVERY IN PROGRESS / UNREGISTERED**. The continuation selects
+the existing [timeout design](timeout_consistency_design.md): add
+`Session.read_timeout_policy`, default `legacy`, with opt-in `phase` semantics
+for an unlimited read-side None budget. Preserve connect rules, low-level
+legacy defaults, upload ownership and native async behavior. Complete normal
+source delivery to existing master and exact-commit CI; no release, tag,
+deployment, history rewrite or remote Issue update is selected.
+
+- [✅] Inspect preparation/send boundaries, HTTP1/proxy reuse and H2 per-stream
+  waits/writes; establish a per-call unlimited sentinel without changing control
+  frame defaults or upload-source None semantics.
+- [✅] Implement atomic policy validation, prepared-request snapshots, retry and
+  redirect propagation; reject invalid phase read budgets before source/network
+  work. Cover direct, tunneled, pooled and streaming paths.
+- [✅] Verify finite/zero/None, mixed-policy reuse and concurrent H2 isolation,
+  upload/early-response cleanup and unchanged connect/async behavior. Update
+  public guides, installed typing consumers and independent artifact acceptance.
+- [ ] Reconcile independent review, commit/push with the confirmed privacy
+  identity, read back master, verify all five exact-commit workflows and close
+  this record with cleanup or justified retention.
+
+Reuse this workspace and preserve unrelated user files. The main agent owns
+request/context/session propagation, timeout helpers, HTTPS and documentation.
+Independent implementation lanes own HTTP1 tests/socket and H2 multiplex/upload
+guard/tests; review reconciles all diffs before acceptance. Recovery uses scoped
+edits, never resets. Retain verifier evidence and unpublished artifacts under
+`dist/post-2.6.0-read-timeout-policy/`; remove task-created build/install/docs
+staging. The plan CLI reports no official session binding, so registration is
+unavailable and no registry transition is claimed.
+
+Independent review found a required new failure boundary: an unlimited H2 write
+could hold the framing lock beyond another request's finite budget, including
+Condition.wait's implicit lock reacquisition. The implementation now uses
+deadline-aware framing turns and independent waiter Events. Cancellation and
+upload errors remain independently visible and are applied under the original
+framing order; a waiting stream cannot interrupt another writer. Worker joins
+still protect borrowed sources. Shared-reader failure closes the transport
+before waiting to record failure. No HPACK/frame ordering redesign was added.
+
+Focused acceptance passes: 125 request-boundary/snapshot tests, 66 HTTP1 route/
+upload tests, 14 H2 budget tests, 18 lock-contention tests, 61 real H2 upload/
+mixed-policy/pool regressions and 491 protocol/streaming/failure regressions
+(these groups overlap). Strict mypy passes 19 source modules; changed Python
+files pass Black and package-wide error-level Pylint. Source consumers match
+all 166 negative markers.
+
+The [final independent artifact report](../dist/post-2.6.0-read-timeout-policy/acceptance-02/verification.json)
+passes all ten commands: **4,991 tests + 118 subtests**, **92.8822% statement
+coverage**, no failures/errors/skips, and the existing collection warning.
+All **347** snapshot files matched the working source before this delivery
+record update. Installed consumers match **166 negative markers**, the wheel
+retains Python >=3.7 syntax and runtime metadata, and all command staging and
+top-level build/install staging were verified removed. This local run uses
+Python 3.13.3; actual multi-version CI remains a delivery gate. Retain reports,
+logs, manifests and two unpublished version-2.6.0 artifacts in each acceptance
+directory. Acceptance-01 passed 4,989 tests before the last two independent
+failure-boundary tests; acceptance-02 contains the complete reviewed test set.
+
+Refreshed documentation passes strict build and verification: **23 HTML pages,
+1,561 local links/assets, 26 API objects, 42 Python snippets, 12 pinned source
+paths**, plus all four real loopback examples. Its task-owned site directory
+was removed; build and verification logs remain retained. Independent review
+found no remaining required correction after the framing acquisition and
+wait-reacquisition fixes. Source commit, normal push/readback and all five
+actual-commit workflows remain required; no successful remote result is
+predeclared here.
+
 ## Shared response decoder typing (2026-10-26)
 
 Status: **SOURCE DELIVERY COMPLETE / UNREGISTERED**. The continuation request selected the

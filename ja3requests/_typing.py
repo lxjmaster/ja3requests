@@ -56,7 +56,9 @@ ResponseHook = Callable[["Response"], Optional["Response"]]
 
 if TYPE_CHECKING:
     import os
-    from typing_extensions import TypedDict
+    from typing_extensions import Literal, TypedDict
+
+    ReadTimeoutPolicy = Literal['legacy', 'phase']
 
     from ja3requests.base import BaseRequest
     from ja3requests.pool import ConnectionPool

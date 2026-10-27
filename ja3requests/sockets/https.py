@@ -13,6 +13,7 @@ import socket
 import threading
 import time
 from ja3requests._upload import UploadSource
+from ja3requests._sync_timeout import application_read_timeout, read_deadline
 from ja3requests.exceptions import InvalidData, StreamConsumedError
 from ja3requests.sockets._upload import UploadExchange, _H2WriteGuard, upload_headers
 
@@ -408,7 +409,12 @@ class HttpsSocket(BaseSocket):
         """Send HTTP/1.1 request over TLS."""
         try:
             read_timeout = getattr(self.context, 'read_timeout', None)
-            self.conn.settimeout(read_timeout if read_timeout is not None else 15.0)
+            self.conn.settimeout(
+                read_timeout
+                if read_timeout is not None
+                or getattr(self.context, 'read_timeout_policy', 'legacy') == 'phase'
+                else 15.0
+            )
 
             if isinstance(self.context.data, UploadSource):
 
@@ -464,14 +470,17 @@ class HttpsSocket(BaseSocket):
         stream_id = None
         multiplexed = self._pool is not None
         try:
-            read_timeout = getattr(self.context, 'read_timeout', None)
+            read_timeout = application_read_timeout(
+                getattr(self.context, 'read_timeout', None),
+                getattr(self.context, 'read_timeout_policy', 'legacy'),
+            )
             # One reader drives the connection; timeouts belong to each stream.
             self.conn.settimeout(None)
 
             tls = self.tls
 
             def h2_send(data, timeout=None):
-                deadline = time.monotonic() + (15.0 if timeout is None else timeout)
+                deadline = read_deadline(timeout)
                 with self._h2_io_lock:
                     # HTTP/2 frames include a nine-byte header and may exceed
                     # one TLS plaintext record even at the default frame size.

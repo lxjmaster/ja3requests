@@ -1,9 +1,12 @@
 # Read timeout consistency: bounded compatibility design
 
-Prepared: 2026-10-25. Status: **N3 DESIGN COMPLETE / IMPLEMENTATION NOT SELECTED**.
+Prepared: 2026-10-25. Status: **N3 DESIGN COMPLETE / IMPLEMENTATION SELECTED 2026-10-27**.
 Source baseline: `e28ee3302679455decd6348c89cf9f23b76fe2b0`.
-This design follows [the ordered sequence](next_development_plan.md). It does
-not change the supported runtime behavior, public API or package version.
+This design follows [the ordered sequence](next_development_plan.md). The
+2026-10-27 continuation selected its implementation, tracked at the top of that
+plan. The proposal below records the original design boundary; current usage
+is documented in [the timeout guide](../docs/request_policy.md#opt-in-phase-read-budgets).
+No package version change or publication is selected.
 
 ## 1. Outcome and boundary
 
@@ -15,8 +18,8 @@ proxy grammar, retries, hooks and total-deadline APIs are separate work.
 
 The distinction matters for `timeout=(connect, None)`, not just timeout=None.
 Scalar and tuple input, buffered requests, prepared sends and streaming bodies
-must use the same selected read-side policy. No implementation is selected by
-this design; the proposed API below is not currently available.
+must use the same selected read-side policy. The original design did not select
+implementation; the later continuation now selects the API below.
 
 ## 2. Verified current matrix
 
@@ -67,7 +70,7 @@ be identical to the async overall connect phase.
 
 **Recommend the explicit read-side policy.** Proposed Session property:
 `read_timeout_policy`, with values `legacy` (default) and `phase` (opt-in).
-This is a proposed interface, not an implemented setting. AsyncSession already
+This interface is now selected for implementation. AsyncSession already
 has the target phase semantics and receives no new policy property in this
 increment. A future major-version default change would be a separate choice.
 

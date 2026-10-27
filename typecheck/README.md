@@ -45,7 +45,7 @@ including `assert_type` checks that catch an accidental `Any` return. Every
 `# E:` line in `invalid.py` must produce its specific diagnostic; wrong URLs,
 timeouts, streaming options, upload tuples, callback returns, TLS configuration,
 Cookie values, and response return types are covered. The current consumers
-include 162 negative markers: async additions reject synchronous pools, incorrect
+include 166 negative markers: async additions reject synchronous pools, incorrect
 awaited return types, invalid budgets/iterators, text files and unsupported file tuples.
 Synchronous upload calls reject async iterators; async calls accept byte iterators
 and async byte iterators. Async multipart paths include `PathLike[str]`.
@@ -67,12 +67,19 @@ while withholding diagnostics from implementation bodies. It does **not** use
 The source gate strictly checks the aliases, top-level facade, retry policy,
 HTTP/2 frame values, HPACK header and Huffman codecs, and the ClientHello
 inspection schema.
-The strict set also includes request-default validation and merging, for eighteen
+The strict set also includes request-default validation and merging, plus the
+synchronous read-policy/budget helper, for nineteen
 source modules. Query-pair types preserve existing text-key, byte-key and mixed
 list/tuple inputs, including homogeneous typed lists; string-only configured
 default pairs keep their separate contract. Installed consumers cover those
 query inputs across sync/async and buffered preparation, plus the concrete
 string/byte dictionary return types of the header helpers.
+Synchronous policy consumers preserve the `Literal['legacy', 'phase']` property
+on Session and prepared requests, including explicit standalone preparation.
+Four negative cases reject unknown/non-string policies at assignment and
+construction. Runtime phase validation remains responsible for bool, negative,
+non-finite and malformed read budgets, which the numeric timeout type cannot
+fully express. AsyncSession keeps its existing phase API.
 Async phase-budget helpers and request exceptions are also strictly checked.
 The internal task factory preserves coroutine result types and accepts coroutine
 objects, matching `loop.create_task`; phase waits retain awaited result types.

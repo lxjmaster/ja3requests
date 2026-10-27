@@ -20,12 +20,69 @@ read limits apply while waiting for the next network data; application processin
 between reads is not a total-response timer. A timeout can therefore occur
 inside `iter_content()` after the request call returned.
 
-`None` does not promise uniform unlimited waits across synchronous transports:
-the direct HTTPS HTTP/1 read path currently supplies a 15-second fallback when
-no read timeout is given. Async `None` has no phase deadline. Async also validates
-finite nonnegative values before network I/O; sync retains its existing
-transport-specific validation. Opt-in headers/params defaults do not change
-these timeout contracts.
+The default synchronous `read_timeout_policy = 'legacy'` preserves historical
+behavior. Direct HTTP/1 does not reset a socket's existing timeout for a read
+value of `None`; HTTPS HTTP/1 and H2 application waits/writes use a 15-second
+fallback. HTTP through CONNECT/SOCKS resets its read timeout to `None`.
+
+### Opt-in phase read budgets
+
+The development source adds this synchronous Session property; it is not part
+of the published 2.6.0 artifacts. Select it before preparing requests:
+
+```python
+from ja3requests import Session
+from ja3requests.requests.request import Request
+
+def fetch_without_read_deadline(url):
+    with Session(use_pooling=False) as session:
+        session.read_timeout_policy = 'phase'
+        # Connect keeps its existing limits; application reads/writes have none.
+        return session.get(url, timeout=(3, None))
+
+def send_prepared(session, url):
+    prepared = Request('GET', url, timeout=(3, None),
+                       read_timeout_policy='phase').request()
+    return session.send(prepared)
+```
+
+`phase` makes the read component `None` unlimited for HTTP/1, HTTPS, CONNECT/
+SOCKS tunnels and H2 application waits and writes, including uploads. A finite
+value bounds each existing progress wait; zero stays zero. This policy does
+not add a total request timer or change DNS, pool admission, TCP, proxy
+negotiation or TLS connect rules. H2's shared reader and control-frame limits
+remain independent. An expired partial TLS write can still close a shared
+transport; an ordinary stream read timeout cancels only that stream.
+Finite H2 application waits also bound time spent acquiring the framing lock.
+If another stream owns a blocked write, cancellation records the target stream
+immediately and sends its reset when the writer releases the framing turn;
+it does not interrupt that other writer. Cancelling the upload that owns an
+unlimited write still waits for its own worker to finish safely. A shared reader
+failure or transport close can terminate the blocked write for the whole connection.
+
+Only `'legacy'` and `'phase'` are accepted; invalid assignments raise
+`ValueError` and retain the old value. Under `phase`, the read component must
+be `None` or a finite nonnegative int/float, excluding bool; malformed tuple
+shapes are rejected. Validation runs before preparation reads files or sends
+network data, and again on the final request after `before_request` hooks.
+The connect component retains its existing transport validation.
+
+`Session.request()` captures the policy during preparation. Standalone
+`Request(...).request()` captures its explicit `read_timeout_policy` and
+defaults to `legacy`; sending it through another Session preserves that
+snapshot. Later Session assignments do not alter prepared/in-flight requests,
+retries or redirects. Hooks may explicitly edit the prepared request or return
+a replacement with its own policy. Reused HTTP/1 sockets reset their read
+timeout under `phase`, and H2 budgets belong to the current request/stream.
+
+Upload-source `None` remains unlimited under both policies. Finite upload
+budgets are progress limits, so waiting for response headers does not cap the
+whole upload duration. Early-response and borrowed-file cleanup rules still
+apply; an uncooperative blocking source must finish before its borrowed handle
+can safely return to the caller. See [streaming uploads](streaming.md).
+
+AsyncSession already gives `None` no phase deadline and receives no new policy
+property. Opt-in headers/params defaults do not change these timeout contracts.
 
 ## HTTP retries
 

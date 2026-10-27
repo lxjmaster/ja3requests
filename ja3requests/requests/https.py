@@ -78,6 +78,7 @@ class HttpsRequest(BaseRequest):
             files=self.files,
             headers=self.headers,
             timeout=self.timeout,
+            read_timeout_policy=self.read_timeout_policy,
             json=self.json,
             proxy=self.proxy,
             cookies=self.cookies,

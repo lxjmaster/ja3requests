@@ -7,6 +7,7 @@ Basic of Request.
 
 from __future__ import annotations
 from ja3requests._upload import UploadSource, is_upload
+from ja3requests._sync_timeout import normalize_read_policy, validate_read_timeout
 
 import os
 import copy
@@ -39,6 +40,7 @@ from ja3requests.utils import (
 from ja3requests.cookies import _copy_cookie_jar, _refresh_cookie_header
 
 if TYPE_CHECKING:
+    from ja3requests._typing import ReadTimeoutPolicy
     from ja3requests.protocol.tls.config import TlsConfig
     from ja3requests.response import HTTPResponse
 
@@ -68,6 +70,7 @@ class BaseRequest(ABC):
         self._proxy = None
         self._proxy_routes: Proxies = {}
         self._timeout = None
+        self._read_timeout_policy: ReadTimeoutPolicy = 'legacy'
         self._tls_config = None
         self._h2_headers_priority: Optional[H2HeadersPriority] = None
         self._redirect_body: Optional[bytes] = None
@@ -75,6 +78,7 @@ class BaseRequest(ABC):
 
     def _validate_send(self, scheme: Optional[str] = None) -> None:
         """Reject final edits that cannot be sent by this prepared transport."""
+        validate_read_timeout(self.timeout, self.read_timeout_policy)
         _validated_request_method(self.method)
         transport = scheme if scheme is not None else getattr(self, 'scheme', None)
         if self.schema != transport or urlparse(self.url).scheme != transport:
@@ -106,6 +110,15 @@ class BaseRequest(ABC):
         if self._redirect_body is not None:
             self._remove_inherited_length(len(self._redirect_body))
         self._redirect_body = None
+
+    @property
+    def read_timeout_policy(self) -> ReadTimeoutPolicy:
+        """The policy captured by this prepared request."""
+        return self._read_timeout_policy
+
+    @read_timeout_policy.setter
+    def read_timeout_policy(self, value: ReadTimeoutPolicy) -> None:
+        self._read_timeout_policy = normalize_read_policy(value)
 
     @property
     def h2_headers_priority(self) -> Optional[H2HeadersPriority]:

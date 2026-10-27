@@ -10,6 +10,7 @@ from ja3requests import HTTPRetry, Response, Session, TlsConfig
 from ja3requests.cookies import Ja3RequestsCookieJar, extract_cookies_to_jar
 from ja3requests.pool import ConnectionPool
 from ja3requests.response import HTTPResponse, _ContentDecoder
+from ja3requests.requests.request import Request
 from ja3requests.protocol.h2.frame import H2Frame
 from ja3requests.protocol.h2.hpack import (
     HPACKDecoder,
@@ -105,6 +106,11 @@ async def async_text() -> AsyncIterator[str]:
 
 
 def rejects(url: str, response: Response, session: Session) -> None:
+    session.read_timeout_policy = 'unknown'  # E: assignment
+    session.read_timeout_policy = None  # E: assignment
+    Request('GET', url, read_timeout_policy='unknown')  # E: arg-type
+    prepared_policy = Request('GET', url).request()
+    prepared_policy.read_timeout_policy = True  # E: assignment
     ja3requests.get(123)  # E: arg-type
     ja3requests.get(url, timeout='slow')  # E: arg-type
     ja3requests.get(url, timeout=(1, 2, 3))  # E: arg-type

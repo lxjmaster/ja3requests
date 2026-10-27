@@ -47,7 +47,10 @@ class HttpSocket(BaseSocket):
         :return:
         """
         read_timeout = getattr(self.context, 'read_timeout', None)
-        if read_timeout is not None:
+        if (
+            getattr(self.context, 'read_timeout_policy', 'legacy') == 'phase'
+            or read_timeout is not None
+        ):
             self.conn.settimeout(read_timeout)
         if isinstance(self.context.data, UploadSource):
             headers = upload_headers(self.context)

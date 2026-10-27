@@ -33,6 +33,7 @@ from ja3requests.protocol.tls.session_cache import TLSSessionCache
 from ja3requests.retry import HTTPRetry
 from ja3requests._cookie_file import load_cookie_file, save_cookie_file
 from ja3requests._upload import UploadSource, is_upload
+from ja3requests._sync_timeout import normalize_read_policy
 from ja3requests._request_defaults import (
     merge_default_headers,
     merge_default_params,
@@ -63,6 +64,7 @@ if TYPE_CHECKING:
         PostOptions,
         RequestDefaults,
         RequestOptions,
+        ReadTimeoutPolicy,
         SendOptions,
     )
 
@@ -92,6 +94,7 @@ class Session(BaseSession):
         super().__init__()
         self._request_local = threading.local()
         self._request_defaults: Optional[Dict[str, Any]] = None
+        self._read_timeout_policy: ReadTimeoutPolicy = 'legacy'
         self._cookie_lock = threading.RLock()
         self._cookie_view = None
         self._uploads = set()
@@ -141,6 +144,15 @@ class Session(BaseSession):
     def pool(self, pool: Optional[ConnectionPool]) -> None:
         """Set connection pool"""
         self._pool = pool
+
+    @property
+    def read_timeout_policy(self) -> ReadTimeoutPolicy:
+        """Read-side None semantics: legacy defaults or opt-in phase budgets."""
+        return self._read_timeout_policy
+
+    @read_timeout_policy.setter
+    def read_timeout_policy(self, value: ReadTimeoutPolicy) -> None:
+        self._read_timeout_policy = normalize_read_policy(value)
 
     @property
     def request_defaults(self) -> Optional[RequestDefaults]:
@@ -304,6 +316,7 @@ class Session(BaseSession):
             json=json,
             proxies=proxies,
             timeout=timeout,
+            read_timeout_policy=self.read_timeout_policy,
             tls_config=tls_config,
             h2_headers_priority=kwargs.pop('h2_headers_priority', None),
         )
@@ -756,6 +769,7 @@ class Session(BaseSession):
                     cookies=cookies,
                     proxies=request._proxy_routes,
                     timeout=request.timeout,
+                    read_timeout_policy=request.read_timeout_policy,
                     tls_config=request.tls_config,
                     h2_headers_priority=request.h2_headers_priority,
                 ).request()

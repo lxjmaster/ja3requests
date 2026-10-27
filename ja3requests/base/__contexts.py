@@ -15,8 +15,11 @@ from ja3requests.exceptions import InvalidData
 
 from urllib.parse import urlsplit, urlencode, parse_qsl
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 from ja3requests._typing import Data, HeaderValue, JsonBody, Timeout
+
+if TYPE_CHECKING:
+    from ja3requests._typing import ReadTimeoutPolicy
 from ja3requests.utils import _encode_http1_headers, _validated_header_items
 from json import dumps
 import mimetypes
@@ -47,6 +50,7 @@ class BaseContext(ABC):
         self._message = None
         self._source_address = None
         self._timeout = None
+        self.read_timeout_policy: ReadTimeoutPolicy = 'legacy'
         self._proxy = None
         self._cookies = None
 

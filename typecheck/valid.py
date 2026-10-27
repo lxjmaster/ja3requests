@@ -84,7 +84,19 @@ from ja3requests.async_pool import _Entry, _Lease
 
 if TYPE_CHECKING:
     from cryptography.hazmat.primitives.asymmetric import ec, x25519
-    from ja3requests._typing import RequestDefaults
+    from ja3requests._typing import ReadTimeoutPolicy, RequestDefaults
+
+
+def sync_read_policy(session: Session, url: str) -> None:
+    assert_type(session.read_timeout_policy, ReadTimeoutPolicy)
+    session.read_timeout_policy = 'phase'
+    session.get(url, timeout=(3, None))
+    prepared = Request(
+        'GET', url, timeout=(3, None), read_timeout_policy='phase'
+    ).request()
+    assert_type(prepared.read_timeout_policy, ReadTimeoutPolicy)
+    prepared.read_timeout_policy = 'legacy'
+    session.send(prepared)
 
 
 def before(request: BaseRequest) -> Optional[BaseRequest]:

@@ -2,6 +2,7 @@
 
 import threading
 import time
+from contextlib import contextmanager
 
 from ja3requests.protocol.h2.frame import (
     build_data_frame,
@@ -12,7 +13,17 @@ from ja3requests.protocol.h2.connection import H2GoAwayError
 from ja3requests.protocol.h2.hpack import HeaderLimitError
 from ja3requests.protocol.h2.frame import normalize_headers_priority
 from ja3requests._upload import UploadSource
+from ja3requests._sync_timeout import (
+    UNLIMITED_READ,
+    read_deadline,
+    read_remaining,
+    source_timeout,
+)
 from ja3requests.sockets._upload import read_upload_piece
+
+
+class _UploadStopped(Exception):
+    """An upload cancelled while waiting for another stream's framing turn."""
 
 
 class _UploadWorker:
@@ -88,6 +99,77 @@ class H2MultiplexConnection(H2StreamState):
         self._close_transport = close_transport
         self._send = self._send_checked
         self._uploads = {}
+        # Cancellation must remain visible while a different stream owns a
+        # blocking TLS write under the framing lock. Never hold this small
+        # bookkeeping lock while acquiring the framing lock or joining a worker.
+        self._cancel_lock = threading.Lock()
+        self._upload_workers = {}
+        self._deferred_cancels = set()
+        self._deferred_upload_errors = {}
+        self._waiters = set()
+
+    def _notify_all(self):
+        self._condition.notify_all()
+        with self._cancel_lock:
+            for waiter in self._waiters:
+                waiter.set()
+
+    def _wait_event(self, event, timeout):
+        event.wait(timeout)
+
+    @contextmanager
+    def _framing(self, timeout, stopped=None):
+        """Bound acquisition too, without interrupting another stream's write."""
+        deadline = read_deadline(timeout)
+        while True:
+            if stopped is not None and stopped.is_set():
+                raise _UploadStopped()
+            remaining = None if deadline is None else read_remaining(deadline)
+            if remaining is not None and remaining <= 0:
+                acquired = self._condition.acquire(False)
+            elif stopped is not None:
+                acquired = self._condition.acquire(
+                    timeout=0.05 if remaining is None else min(0.05, remaining)
+                )
+            elif remaining is None:
+                acquired = self._condition.acquire()
+            else:
+                acquired = self._condition.acquire(timeout=remaining)
+            if acquired:
+                break
+            if deadline is not None and read_remaining(deadline) <= 0:
+                raise TimeoutError('HTTP/2 stream timed out')
+        try:
+            self._drain_deferred()
+            if stopped is not None and stopped.is_set():
+                raise _UploadStopped()
+            yield
+        finally:
+            try:
+                self._drain_deferred()
+            finally:
+                self._condition.release()
+
+    def _drain_deferred(self):
+        """Apply queued changes only while the original framing lock is held."""
+        with self._cancel_lock:
+            cancelled = self._deferred_cancels
+            errors = self._deferred_upload_errors
+            self._deferred_cancels = set()
+            self._deferred_upload_errors = {}
+        for stream_id, error in errors.items():
+            stream = self._streams.get(stream_id)
+            if stream_id not in cancelled and stream is not None and not stream.done:
+                stream.error = error
+                if self._failed is None:
+                    try:
+                        self._send(build_rst_stream_frame(stream_id, 8).serialize())
+                    except OSError:
+                        pass
+        for stream_id in cancelled:
+            self._cancel_stream_locked(stream_id)
+        if errors or cancelled:
+            self._notify_all()
 
     def _send_checked(self, data, timeout=None):
         try:
@@ -99,7 +181,7 @@ class H2MultiplexConnection(H2StreamState):
             with self._condition:
                 if self._failed is None:
                     self._failed = error
-                self._condition.notify_all()
+                self._notify_all()
             raise
 
     @property
@@ -123,6 +205,7 @@ class H2MultiplexConnection(H2StreamState):
             while True:
                 frames = self._read_frames()
                 with self._condition:
+                    self._drain_deferred()
                     for frame in frames:
                         self._dispatch_frame(frame)
                     for stream_id, upload in self._uploads.items():
@@ -134,12 +217,16 @@ class H2MultiplexConnection(H2StreamState):
                                     build_rst_stream_frame(stream_id, 8).serialize()
                                 )
                                 stream.send_done = True
-                    self._condition.notify_all()
+                    self._notify_all()
         except Exception as error:  # pylint: disable=broad-exception-caught
+            # A failed shared reader owns transport shutdown. Interrupt an
+            # unlimited write before waiting to record failure under its lock.
+            if self._close_transport is not None:
+                self._close_transport()
             with self._condition:
                 if self._failed is None:
                     self._failed = error
-                self._condition.notify_all()
+                self._notify_all()
             if (
                 isinstance(error, (HeaderLimitError, H2GoAwayError))
                 and self._pooled_connection is not None
@@ -149,16 +236,33 @@ class H2MultiplexConnection(H2StreamState):
             if self._close_transport is not None:
                 self._close_transport()
 
-    def _wait_for(self, predicate, timeout):
-        deadline = time.monotonic() + (15.0 if timeout is None else timeout)
-        with self._condition:
-            while not predicate():
-                if self._failed is not None:
-                    raise ConnectionError("HTTP/2 connection failed") from self._failed
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    raise TimeoutError("HTTP/2 stream timed out")
-                self._condition.wait(remaining)
+    def _wait_for(self, predicate, timeout, stopped=None, lock_timeout=UNLIMITED_READ):
+        deadline = read_deadline(timeout)
+        waiter = threading.Event()
+        with self._cancel_lock:
+            self._waiters.add(waiter)
+        try:
+            while True:
+                # Event.wait does not reacquire the framing lock. Each return
+                # takes a bounded turn, even if another writer started meanwhile.
+                budget = read_remaining(deadline)
+                if deadline is None:
+                    budget = lock_timeout
+                with self._framing(budget, stopped):
+                    if predicate():
+                        return
+                    if self._failed is not None:
+                        raise ConnectionError(
+                            "HTTP/2 connection failed"
+                        ) from self._failed
+                    remaining = None if deadline is None else read_remaining(deadline)
+                    if remaining is not None and remaining <= 0:
+                        raise TimeoutError("HTTP/2 stream timed out")
+                    waiter.clear()
+                self._wait_event(waiter, remaining)
+        finally:
+            with self._cancel_lock:
+                self._waiters.discard(waiter)
 
     def _begin_request(
         self,
@@ -175,41 +279,44 @@ class H2MultiplexConnection(H2StreamState):
         h2_headers = self._prepare_request_headers(
             method, authority, path, headers, scheme
         )
-        deadline = time.monotonic() + (15.0 if timeout is None else timeout)
-        with self._condition:
-            while (
-                not self._peer_settings_received
-                or len(self._streams) >= self._peer_settings[3]
-            ) and not self._goaway_received:
+        deadline = read_deadline(timeout)
+        while True:
+            self._wait_for(
+                lambda: self._goaway_received
+                or (
+                    self._peer_settings_received
+                    and len(self._streams) < self._peer_settings[3]
+                ),
+                read_remaining(deadline),
+            )
+            with self._framing(read_remaining(deadline)):
                 if self._failed is not None:
                     raise ConnectionError("HTTP/2 connection failed") from self._failed
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    raise TimeoutError("HTTP/2 stream timed out")
-                self._condition.wait(remaining)
-            if self._failed is not None:
-                raise ConnectionError("HTTP/2 connection failed") from self._failed
-            if self._goaway_received:
-                raise ConnectionError("HTTP/2 connection received GOAWAY")
-            stream_id = self._next_stream_id
-            self._next_stream_id += 2
-            stream = _Stream(self._peer_settings[4], self._local_settings[4])
-            self._streams[stream_id] = stream
-            try:
-                block = self._encoder.encode_headers(h2_headers)
-                for frame in self._header_frames(
-                    stream_id,
-                    block,
-                    end_stream=not has_body,
-                    headers_priority=headers_priority,
-                ):
-                    self._send(frame.serialize(), timeout=timeout)
-                stream.send_done = not has_body
-            except Exception:
-                self._streams.pop(stream_id, None)
-                self._condition.notify_all()
-                raise
-        return stream_id, stream
+                if self._goaway_received:
+                    raise ConnectionError("HTTP/2 connection received GOAWAY")
+                # Another request may have consumed the available turn between
+                # the predicate and this reservation. Recheck under the lock.
+                if len(self._streams) >= self._peer_settings[3]:
+                    continue
+                stream_id = self._next_stream_id
+                self._next_stream_id += 2
+                stream = _Stream(self._peer_settings[4], self._local_settings[4])
+                self._streams[stream_id] = stream
+                try:
+                    block = self._encoder.encode_headers(h2_headers)
+                    for frame in self._header_frames(
+                        stream_id,
+                        block,
+                        end_stream=not has_body,
+                        headers_priority=headers_priority,
+                    ):
+                        self._send(frame.serialize(), timeout=timeout)
+                    stream.send_done = not has_body
+                except Exception:
+                    self._streams.pop(stream_id, None)
+                    self._notify_all()
+                    raise
+                return stream_id, stream
 
     def send_request(
         self,
@@ -238,7 +345,7 @@ class H2MultiplexConnection(H2StreamState):
         try:
             offset = 0
             while body and offset < len(body):
-                with self._condition:
+                with self._framing(timeout):
                     error = stream.error
                     if error is not None:
                         raise error
@@ -297,28 +404,36 @@ class H2MultiplexConnection(H2StreamState):
             method, authority, path, headers, True, scheme, timeout, headers_priority
         )
         upload = _UploadWorker(self, stream_id, body, timeout)
-        with self._condition:
-            self._uploads[stream_id] = upload
-            if register is not None:
-                upload.unregister = register(upload)
-            upload.thread.start()
+        try:
+            with self._framing(timeout):
+                self._uploads[stream_id] = upload
+                with self._cancel_lock:
+                    self._upload_workers[stream_id] = upload
+                if register is not None:
+                    upload.unregister = register(upload)
+                upload.thread.start()
+        except BaseException:
+            self.cancel_stream(stream_id)
+            raise
         return stream_id
 
     def _produce_upload(self, upload):
         stream_id = upload.stream_id
         try:
             while not upload.stopped.is_set():
-                with self._condition:
+                with self._framing(upload.timeout, upload.stopped):
                     stream = self._streams.get(stream_id)
                     if stream is None or stream.done or stream.send_done:
                         return
                     if stream.error is not None:
                         raise stream.error
                 # Never advance application code under framing or TLS locks.
-                piece = read_upload_piece(upload.source, upload.stopped, upload.timeout)
+                piece = read_upload_piece(
+                    upload.source, upload.stopped, source_timeout(upload.timeout)
+                )
                 offset = 0
                 while not upload.stopped.is_set():
-                    with self._condition:
+                    with self._framing(upload.timeout, upload.stopped):
                         stream = self._streams.get(stream_id)
                         if stream is None or stream.done or stream.send_done:
                             return
@@ -332,7 +447,7 @@ class H2MultiplexConnection(H2StreamState):
                                 timeout=upload.timeout,
                             )
                             stream.send_done = True
-                            self._condition.notify_all()
+                            self._notify_all()
                             return
                         size = min(
                             len(piece) - offset,
@@ -361,6 +476,7 @@ class H2MultiplexConnection(H2StreamState):
                                 and stream.send_window > 0
                             ),
                             upload.timeout,
+                            stopped=upload.stopped,
                         )
                     else:
                         # Release the send turn after each bounded DATA frame.
@@ -368,40 +484,41 @@ class H2MultiplexConnection(H2StreamState):
                     if offset == len(piece):
                         break
         except BaseException as error:
-            with self._condition:
-                stream = self._streams.get(stream_id)
-                if (
-                    not upload.stopped.is_set()
-                    and stream is not None
-                    and not stream.done
-                ):
-                    stream.error = error
-                    if self._failed is None:
-                        try:
-                            self._send(build_rst_stream_frame(stream_id, 8).serialize())
-                        except OSError:
-                            pass
-                self._condition.notify_all()
+            with self._cancel_lock:
+                if not upload.stopped.is_set():
+                    self._deferred_upload_errors[stream_id] = error
+                    for waiter in self._waiters:
+                        waiter.set()
+            if self._condition.acquire(False):
+                try:
+                    self._drain_deferred()
+                finally:
+                    self._condition.release()
 
     def receive_headers(self, stream_id, timeout=None):
         """Wait for final response headers without waiting for its DATA or EOF."""
         try:
-            with self._condition:
+            deadline = read_deadline(timeout)
+            with self._framing(read_remaining(deadline)):
                 stream = self._response_stream(stream_id)
-                if stream_id in self._uploads:
-                    # Source pulls, writes and credit waits have their own
-                    # progress budgets. A server may wait for END_STREAM before
-                    # replying, so response waiting must not cap upload length.
-                    while (
-                        stream.headers is None
-                        and not stream.error
-                        and not stream.send_done
-                    ):
-                        self._check_response_error(stream)
-                        self._condition.wait()
+                uploading = stream_id in self._uploads
+            if uploading:
+                # Upload duration is not capped by response waiting. Taking a
+                # framing turn still uses this request's own progress budget.
                 self._wait_for(
-                    lambda: stream.headers is not None or stream.error, timeout
+                    lambda: stream.headers is not None
+                    or stream.error
+                    or stream.send_done,
+                    UNLIMITED_READ,
+                    lock_timeout=timeout,
                 )
+                deadline = read_deadline(timeout)
+            self._wait_for(
+                lambda: stream.headers is not None or stream.error,
+                read_remaining(deadline),
+            )
+            with self._framing(read_remaining(deadline)):
+                stream = self._response_stream(stream_id)
                 self._check_response_error(stream)
                 return stream.headers
         except Exception:
@@ -420,22 +537,26 @@ class H2MultiplexConnection(H2StreamState):
         if size == 0:
             return b""
         try:
-            with self._condition:
+            deadline = read_deadline(timeout)
+            with self._framing(read_remaining(deadline)):
                 stream = self._response_stream(stream_id)
-                self._wait_for(
-                    lambda: stream.body or stream.done or stream.error, timeout
-                )
+            self._wait_for(
+                lambda: stream.body or stream.done or stream.error,
+                read_remaining(deadline),
+            )
+            with self._framing(read_remaining(deadline)):
+                stream = self._response_stream(stream_id)
                 self._check_response_error(stream)
                 if not stream.body:
                     self._streams.pop(stream_id, None)
-                    self._condition.notify_all()
+                    self._notify_all()
                     return b""
                 data = bytes(memoryview(stream.body)[:size])
                 del stream.body[: len(data)]
                 self._buffered_bytes -= len(data)
                 self._replenish_connection_window()
                 self._replenish_stream_window(stream_id, stream)
-                self._condition.notify_all()
+                self._notify_all()
                 return data
         except Exception:
             self.cancel_stream(stream_id)
@@ -443,15 +564,13 @@ class H2MultiplexConnection(H2StreamState):
 
     def receive_response(self, stream_id, timeout=None):
         """Compatibility collector over incremental reads, with one deadline."""
-        deadline = time.monotonic() + (15.0 if timeout is None else timeout)
+        deadline = read_deadline(timeout)
         chunks = []
         try:
-            headers = self.receive_headers(
-                stream_id, timeout=max(0, deadline - time.monotonic())
-            )
+            headers = self.receive_headers(stream_id, timeout=read_remaining(deadline))
             while True:
                 chunk = self.read_stream(
-                    stream_id, 65536, timeout=max(0, deadline - time.monotonic())
+                    stream_id, 65536, timeout=read_remaining(deadline)
                 )
                 if not chunk:
                     return headers, b"".join(chunks)
@@ -460,29 +579,42 @@ class H2MultiplexConnection(H2StreamState):
             self.cancel_stream(stream_id)
 
     def cancel_stream(self, stream_id):
-        with self._condition:
-            upload = self._uploads.pop(stream_id, None)
+        with self._cancel_lock:
+            upload = self._upload_workers.get(stream_id)
             if upload is not None:
                 upload.stopped.set()
-            stream = self._streams.pop(stream_id, None)
-            if stream is not None and stream.header_open:
-                self._ignored_header_block = stream.header_block
-            if (
-                stream is not None
-                and not (stream.done and stream.send_done)
-                and stream.error is None
-                and self._failed is None
-            ):
-                try:
-                    self._send(build_rst_stream_frame(stream_id, 8).serialize())
-                except OSError:
-                    pass
-            if stream is not None:
-                if not (stream.done and stream.send_done) and stream.error is None:
-                    stream.error = H2StreamError(
-                        f"HTTP/2 stream {stream_id} was cancelled"
-                    )
-                self._discard_body(stream)
-            self._condition.notify_all()
+            self._deferred_cancels.add(stream_id)
+            for waiter in self._waiters:
+                waiter.set()
+        if self._condition.acquire(False):
+            try:
+                self._drain_deferred()
+            finally:
+                self._condition.release()
         if upload is not None:
             upload.finish()
+
+    def _cancel_stream_locked(self, stream_id):
+        upload = self._uploads.pop(stream_id, None)
+        with self._cancel_lock:
+            self._upload_workers.pop(stream_id, None)
+        if upload is not None:
+            upload.stopped.set()
+        stream = self._streams.pop(stream_id, None)
+        if stream is not None and stream.header_open:
+            self._ignored_header_block = stream.header_block
+        if (
+            stream is not None
+            and not (stream.done and stream.send_done)
+            and stream.error is None
+            and self._failed is None
+        ):
+            try:
+                self._send(build_rst_stream_frame(stream_id, 8).serialize())
+            except OSError:
+                pass
+        if stream is not None:
+            if not (stream.done and stream.send_done) and stream.error is None:
+                stream.error = H2StreamError(f"HTTP/2 stream {stream_id} was cancelled")
+            self._discard_body(stream)
+        self._notify_all()

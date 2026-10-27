@@ -47,7 +47,7 @@ class _H2WriteGuard:
             self._shutdown()
 
     def sendall(self, data, deadline):
-        if time.monotonic() >= deadline:
+        if deadline is not None and time.monotonic() >= deadline:
             self._shutdown()
             raise TimeoutError('HTTP/2 write timed out')
         with self._condition:
@@ -67,7 +67,7 @@ class _H2WriteGuard:
             with self._condition:
                 self._deadline = None
                 self._condition.notify_all()
-        if self._expired or time.monotonic() >= deadline:
+        if self._expired or (deadline is not None and time.monotonic() >= deadline):
             self._shutdown()
             raise TimeoutError('HTTP/2 write timed out')
 
